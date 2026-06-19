@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gothic Survivors — Im Bann der Barriere</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas"></canvas>
+
+      <!-- Ladebildschirm -->
+      <div id="loading">DIE KOLONIE ERWACHT…</div>
+
+      <!-- Startmenü -->
+      <div id="start-screen" class="overlay hidden">
+        <div class="start-inner">
+          <h1 class="game-title">GOTHIC</h1>
+          <p class="game-subtitle">Survivors — Im Bann der Barriere</p>
+          <p id="menu-stats" class="game-edition">Gesammeltes Erz: 0</p>
+          <div class="menu-buttons">
+            <button id="resume-button" class="hidden">Run fortsetzen</button>
+            <button id="start-button">Neuer Run</button>
+            <button id="online-button" class="secondary">Online-Koop</button>
+            <button id="shop-button" class="secondary">Halle der Erzbarone</button>
+          </div>
+          <div class="controls-hint">
+            <h3>So funktioniert's</h3>
+            <ul>
+              <li><b>WASD</b> — Bewegen</li>
+              <li><b>Maus</b> — nur Menüs</li>
+              <li><b>Mausrad</b> — Zoom</li>
+              <li>Angriffe laufen <b>automatisch</b></li>
+              <li>Sammle <b>Edelsteine</b> für EP</li>
+              <li>Bei Stufenaufstieg <b>Upgrade wählen</b></li>
+              <li>Überlebe & sammle <b>Erz</b></li>
+              <li>Erz → permanente Upgrades</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Map- & Schwierigkeitswahl (Solo) -->
+      <div id="map-screen" class="overlay hidden">
+        <div class="start-inner">
+          <h1 class="game-title" style="font-size: 48px">LEVEL WÄHLEN</h1>
+          <div class="sel-label">Karte</div>
+          <div id="map-maps" class="sel-row"></div>
+          <div class="sel-label">Schwierigkeit</div>
+          <div id="map-diffs" class="sel-row"></div>
+          <p class="game-edition" style="margin-top:18px">Überlebe 3 Phasen, dann besiege den finalen Boss.</p>
+          <div class="menu-buttons">
+            <button id="map-start">Starten</button>
+            <button id="map-back" class="secondary">Zurück</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Online-Lobby -->
+      <div id="lobby" class="overlay hidden">
+        <div class="lobby-inner">
+          <h2>Online-Koop</h2>
+          <p class="lobby-sub">Erstelle eine Lobby und gib den Code weiter — oder tritt mit einem Code bei.</p>
+          <div class="lobby-row">
+            <button id="lobby-create">Lobby erstellen</button>
+          </div>
+          <div class="lobby-row">
+            <input id="lobby-code-input" maxlength="4" placeholder="CODE" />
+            <button id="lobby-join" class="secondary">Beitreten</button>
+          </div>
+          <div class="lobby-row lobby-adv">
+            <label>Server</label>
+            <input id="lobby-server" placeholder="ws://localhost:8080" />
+          </div>
+          <div class="sel-label">Karte (Host)</div>
+          <div id="lobby-maps" class="sel-row"></div>
+          <div class="sel-label">Schwierigkeit (Host)</div>
+          <div id="lobby-diffs" class="sel-row"></div>
+          <div id="lobby-code" class="hidden"></div>
+          <div id="lobby-status">Erstelle eine Lobby oder tritt mit einem Code bei.</div>
+          <div class="lobby-row lobby-actions">
+            <button id="lobby-start" class="hidden">Spiel starten</button>
+            <button id="lobby-back" class="secondary">Zurück</button>
+          </div>
+          <p class="lobby-hint">Hinweis: Der Relay-Server muss laufen (<code>npm run server</code>). Für Spiel über das Internet muss er erreichbar/gehostet sein.</p>
+        </div>
+      </div>
+
+      <!-- HUD -->
+      <div id="hud" class="hidden"></div>
+
+      <!-- Level-Up-Auswahl -->
+      <div id="levelup" class="overlay hidden"></div>
+
+      <!-- Shop (Meta) -->
+      <div id="shop" class="overlay hidden"></div>
+
+      <!-- Pause -->
+      <div id="pause-screen" class="overlay hidden">
+        <div class="start-inner">
+          <h1 class="game-title" style="font-size: 56px">PAUSE</h1>
+          <div class="menu-buttons">
+            <button id="pause-resume">Weiter</button>
+            <button id="pause-save" class="secondary">Speichern &amp; Beenden</button>
+            <button id="pause-menu" class="secondary">Hauptmenü</button>
+            <button id="pause-leave" class="secondary hidden">Spiel verlassen</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sieg / Level abgeschlossen -->
+      <div id="win-screen" class="overlay hidden">
+        <div class="start-inner win-inner">
+          <h1>LEVEL ABGESCHLOSSEN!</h1>
+          <div id="win-stats"></div>
+          <div class="menu-buttons">
+            <button id="win-endless">Endlos-Modus</button>
+            <button id="win-replay" class="secondary">Nochmal</button>
+            <button id="win-menu" class="secondary">Hauptmenü</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tod -->
+      <div id="death-screen" class="overlay hidden">
+        <div class="death-inner">
+          <h1>GEFALLEN</h1>
+          <div id="death-stats"></div>
+          <div class="menu-buttons">
+            <button id="retry-button">Neuer Run</button>
+            <button id="death-shop-button" class="secondary">Halle der Erzbarone</button>
+            <button id="death-menu" class="secondary">Hauptmenü</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

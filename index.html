@@ -25,13 +25,16 @@
             <button id="start-button">Neuer Run</button>
             <button id="online-button" class="secondary">Online-Koop</button>
             <button id="shop-button" class="secondary">Halle der Erzbarone</button>
+            <button id="combos-button" class="secondary">Kombinationen</button>
           </div>
           <div class="controls-hint">
             <h3>So funktioniert's</h3>
             <ul>
               <li><b>WASD</b> — Bewegen</li>
+              <li><b>Leertaste</b> — Ausweichen (2×)</li>
               <li><b>Maus</b> — nur Menüs</li>
               <li><b>Mausrad</b> — Zoom</li>
+              <li><b>M</b> — Ton an/aus</li>
               <li>Angriffe laufen <b>automatisch</b></li>
               <li>Sammle <b>Edelsteine</b> für EP</li>
               <li>Bei Stufenaufstieg <b>Upgrade wählen</b></li>
@@ -96,6 +99,18 @@
 
       <!-- Shop (Meta) -->
       <div id="shop" class="overlay hidden"></div>
+
+      <!-- Kombinationen-Übersicht -->
+      <div id="combos-screen" class="overlay hidden">
+        <div class="start-inner combos-inner">
+          <h1 class="game-title" style="font-size: 44px">KOMBINATIONEN</h1>
+          <p class="lvl-sub">Bring zwei Waffen auf Stufe 5, dann verschmelzen sie zu einer — ein Slot wird frei.</p>
+          <div id="combos-list"></div>
+          <div class="menu-buttons">
+            <button id="combos-back" class="secondary">Zurück</button>
+          </div>
+        </div>
+      </div>
 
       <!-- Pause -->
       <div id="pause-screen" class="overlay hidden">

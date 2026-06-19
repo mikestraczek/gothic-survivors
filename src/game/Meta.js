@@ -11,6 +11,7 @@ const META = [
   { id: 'pickup', name: 'Magnetismus', sub: '+0,5 Aufnahmeradius/Stufe', max: 4, cost: (l) => 40 + l * 40, apply: (p, l) => (p.pickupRadius += 0.5 * l) },
   { id: 'regen', name: 'Lebenskraft', sub: '+0,3 Regen/s/Stufe', max: 4, cost: (l) => 60 + l * 55, apply: (p, l) => (p.hpRegen += 0.3 * l) },
   { id: 'greed', name: 'Gier', sub: '+10% Erz/Stufe', max: 3, cost: (l) => 80 + l * 75, apply: (p, l) => (p.goldMult = (p.goldMult || 1) + 0.1 * l) },
+  { id: 'reroll', name: 'Würfelglück', sub: '+1 Neuwurf je Run/Stufe', max: 3, cost: (l) => 90 + l * 80, apply: (p, l) => (p.rerolls = (p.rerolls || 0) + l) },
 ];
 
 export class Meta {

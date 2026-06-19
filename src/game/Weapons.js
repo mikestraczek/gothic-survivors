@@ -5,13 +5,13 @@ export const WEAPON_DEFS = {
   whirl: {
     name: 'Klingenwirbel',
     desc: 'Schaden an allen Feinden in der Nähe',
-    maxLevel: 8,
+    maxLevel: 5,
     stats: (lv) => ({ damage: 7 + lv * 5, radius: 2.8 + lv * 0.5, cd: Math.max(0.5, 1.4 - lv * 0.08) }),
   },
   axe: {
     name: 'Wurfaxt',
     desc: 'Wirbelnde Äxte durchbohren Feinde',
-    maxLevel: 8,
+    maxLevel: 5,
     stats: (lv) => ({
       damage: 10 + lv * 6,
       count: 1 + Math.floor(lv / 2),
@@ -23,7 +23,7 @@ export const WEAPON_DEFS = {
   fireball: {
     name: 'Feuerball',
     desc: 'Explodiert mit Flächenschaden',
-    maxLevel: 8,
+    maxLevel: 5,
     stats: (lv) => ({
       damage: 16 + lv * 9,
       count: 1 + Math.floor((lv - 1) / 3),
@@ -35,53 +35,50 @@ export const WEAPON_DEFS = {
   orbit: {
     name: 'Wächtergeister',
     desc: 'Kreisende Geister verletzen bei Berührung',
-    maxLevel: 8,
+    maxLevel: 5,
     stats: (lv) => ({ damage: 6 + lv * 4, count: 2 + Math.floor(lv / 2), radius: 2.8 + lv * 0.3, speed: 2 + lv * 0.15 }),
   },
   lightning: {
     name: 'Blitzschlag',
     desc: 'Schlägt zufällige Feinde mit Wucht',
-    maxLevel: 8,
+    maxLevel: 5,
     stats: (lv) => ({ damage: 22 + lv * 12, count: 1 + Math.floor(lv / 2), cd: Math.max(1.0, 2.4 - lv * 0.1), range: 17, area: 2.2 }),
   },
   frost: {
     name: 'Frostbann',
     desc: 'Frostwelle: Schaden + verlangsamt Feinde',
-    maxLevel: 8,
+    maxLevel: 5,
     stats: (lv) => ({ damage: 8 + lv * 5, radius: 3.2 + lv * 0.5, cd: Math.max(0.7, 1.8 - lv * 0.1), slow: 1.4 }),
   },
   spear: {
     name: 'Knochenspeer',
     desc: 'Schneller Speer durchbohrt viele Feinde',
-    maxLevel: 8,
+    maxLevel: 5,
     stats: (lv) => ({ damage: 14 + lv * 8, count: 1 + Math.floor(lv / 3), pierce: 3 + lv, cd: Math.max(0.5, 1.5 - lv * 0.09), speed: 30 }),
   },
   poison: {
     name: 'Giftwolke',
     desc: 'Hinterlässt ätzende Wolken (Schaden über Zeit)',
-    maxLevel: 8,
+    maxLevel: 5,
     stats: (lv) => ({ damage: 5 + lv * 3, radius: 2.0 + lv * 0.25, life: 3 + lv * 0.3, cd: Math.max(0.9, 2.2 - lv * 0.1) }),
   },
   holy: {
     name: 'Weihrauch',
     desc: 'Heilige Aura schadet nahen Feinden ständig',
-    maxLevel: 8,
+    maxLevel: 5,
     stats: (lv) => ({ damage: 6 + lv * 4, radius: 2.0 + lv * 0.35, cd: 0.5 }),
   },
 };
 
 // Verschmelzungen: Waffe (max) + bestimmtes Passiv -> verstärkte Form
-export const EVOLUTIONS = {
-  whirl: { req: 'might', name: 'Klingensturm', desc: 'Gewaltiger, schnellerer Klingenwirbel' },
-  axe: { req: 'amount', name: 'Sturmäxte', desc: 'Äxte in alle Richtungen' },
-  fireball: { req: 'area', name: 'Höllensturm', desc: 'Größere, häufigere Explosionen' },
-  orbit: { req: 'cd', name: 'Geisterlegion', desc: 'Mehr & schnellere Geister' },
-  lightning: { req: 'might', name: 'Götterzorn', desc: 'Ein Hagel aus Blitzen' },
-  frost: { req: 'area', name: 'Ewiger Winter', desc: 'Riesiges, eisiges Frostfeld' },
-  spear: { req: 'amount', name: 'Knochenhagel', desc: 'Eine Salve aus Speeren' },
-  poison: { req: 'pickup', name: 'Pestschwade', desc: 'Größere, tödlichere Wolken' },
-  holy: { req: 'regen', name: 'Heiliger Zorn', desc: 'Weite, sengende Aura' },
-};
+// Kombinationen: ZWEI Waffen (beide auf Maxlevel) verschmelzen zu einer.
+// `base` wird zur verstärkten Waffe (evolved), `consume` wird entfernt -> ein Slot wird frei.
+export const COMBINATIONS = [
+  { base: 'whirl', consume: 'axe', name: 'Klingensturm', desc: 'Klingenwirbel + Wurfäxte zu einer verheerenden Waffe' },
+  { base: 'fireball', consume: 'lightning', name: 'Höllensturm', desc: 'Feuerbälle + Blitze zu einem Inferno' },
+  { base: 'frost', consume: 'orbit', name: 'Ewiger Winter', desc: 'Frostwelle + Wächtergeister zu eisiger Übermacht' },
+  { base: 'spear', consume: 'poison', name: 'Seuchenhagel', desc: 'Knochenspeere + Giftwolken zu tödlicher Salve' },
+];
 
 export class Weapons {
   constructor(scene) {
@@ -192,9 +189,25 @@ export class Weapons {
     if (id === 'whirl') this._rebuildWhirl();
     if (id === 'orbit') this._rebuildOrbs();
   }
-  canEvolve(id, player) {
-    const ev = EVOLUTIONS[id];
-    return ev && this.isMax(id) && !this.owned[id].evolved && player.passivesTaken.has(ev.req);
+
+  // Waffe entfernen (z. B. beim Kombinieren); persistente Visuals aufräumen.
+  remove(id) {
+    if (!this.owned[id]) return;
+    delete this.owned[id];
+    if (id === 'orbit') this._rebuildOrbs();
+    if (id === 'whirl') this._rebuildWhirl();
+    if (id === 'holy' && this.holyRing) this.holyRing.visible = false;
+  }
+
+  // Kombination möglich? Beide Waffen vorhanden & auf Maxlevel, base noch nicht verschmolzen.
+  canCombine(c) {
+    return this.has(c.base) && this.has(c.consume) && this.isMax(c.base) && this.isMax(c.consume) && !this.owned[c.base].evolved;
+  }
+  // Verschmelzen: consume entfernen, base verstärken -> ein Slot frei.
+  combine(c) {
+    if (!this.canCombine(c)) return;
+    this.remove(c.consume);
+    this.evolve(c.base);
   }
 
   // Schaden anwenden + der Waffe gutschreiben (für Endstatistik)

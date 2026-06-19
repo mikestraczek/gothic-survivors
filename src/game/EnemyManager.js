@@ -267,6 +267,10 @@ export class EnemyManager {
     this.phase = 0; // aktuelle Phase (Intensität)
     this.autoBoss = false; // periodische Bosse aus -> Game steuert finalen Boss
     this.spawnEnabled = true;
+    this.spawnScale = 1; // <1 während Bossfights, >1 im Endlos-Modus (mehr Adds)
+    this.maxAlive = HARD_CAP; // im Endlos-Modus angehoben
+    this.fx = null; // vom Game gesetzt (Boss-Telegraphen)
+    this._aoes = []; // telegrafierte Boss-AoE-Angriffe
   }
 
   reset() {
@@ -281,6 +285,9 @@ export class EnemyManager {
     this._ghosts.clear();
     this.phase = 0;
     this.spawnEnabled = true;
+    this.spawnScale = 1;
+    this.maxAlive = HARD_CAP;
+    this._aoes = [];
   }
   setDifficulty(d) {
     this.diff = d;
@@ -354,15 +361,22 @@ export class EnemyManager {
     return e;
   }
 
-  // Finaler Boss (verstärkt) — vom Game nach der letzten Phase gerufen
-  spawnFinalBoss(type, cx, cz, hpMult = 2.2) {
+  // Boss spawnen (Mini- oder Endboss). hpMult/sizeMult skalieren ihn; announceName zeigt das Banner.
+  spawnBoss(type, cx, cz, hpMult = 1, sizeMult = 1, announceName = null) {
     const e = this.spawnRing(type, cx, cz) || this.spawn(type, cx, cz);
     if (e) {
       e.maxHp = Math.round(e.maxHp * hpMult);
       e.hp = e.maxHp;
-      e.final = true;
+      e.scale *= sizeMult;
+      e.atk = 2.2;
     }
-    if (this.bossAnnounce) this.bossAnnounce(BOSS_NAMES[type] || 'BOSS');
+    if (announceName && this.bossAnnounce) this.bossAnnounce(announceName);
+    return e;
+  }
+  // Rückwärtskompatibel (Resume): finaler Boss
+  spawnFinalBoss(type, cx, cz, hpMult = 2.2) {
+    const e = this.spawnBoss(type, cx, cz, hpMult, 1.15, 'ENDBOSS');
+    if (e) e.final = true;
     return e;
   }
 
@@ -394,11 +408,17 @@ export class EnemyManager {
     const anyAlive = players.some((p) => p.alive && !p.dead);
 
     if (anyAlive && this.spawnEnabled) {
+      // Konstante Ziel-Population statt immer schnellerer Wellen -> Platz zum Ausweichen
+      const cap = this.maxAlive || HARD_CAP;
+      const target = Math.min(cap, Math.round((24 + this.phase * 9) * this.diff * this.spawnScale * (0.7 + 0.3 * players.length)));
       this.spawnTimer -= dt;
-      if (this.spawnTimer <= 0 && this.aliveCount < HARD_CAP) {
-        this.spawnTimer = Math.max(0.3, (1.1 - this.elapsed / 200) / this.diff);
-        const batch = Math.round(Math.min(8, 1 + Math.floor(this.elapsed / 40) + this.phase) * this.diff) * players.length;
-        for (let i = 0; i < batch && this.aliveCount < HARD_CAP; i++) this._spawnAround(centers);
+      if (this.spawnTimer <= 0) {
+        this.spawnTimer = 0.55;
+        let need = target - this.aliveCount;
+        if (need > 0) {
+          need = Math.min(need, 3 + this.phase); // sanft auffüllen
+          for (let i = 0; i < need; i++) this._spawnAround(centers);
+        }
       }
     }
     if (anyAlive && this.autoBoss) {
@@ -510,7 +530,89 @@ export class EnemyManager {
       if (target) {
         const distToP = Math.hypot(target.position.x - e.x, target.position.z - e.z);
         if (distToP < e.radius + target.radius + 0.2) target.takeDamage(e.dmg);
+
+        // ---- Boss-Fähigkeiten: telegrafierte AoE-Angriffe (Slam/Nova/Frontal) ----
+        if (e.def.boss) {
+          // Spezial (seltener): ganze Map gefährlich, nur wenige sichere Zonen
+          e.special = (e.special || 9) - dt;
+          if (e.special <= 0) {
+            e.special = 12 + this._rnd() * 5;
+            const spots = [];
+            const n = 2 + (this._rnd() < 0.5 ? 0 : 1);
+            for (let i = 0; i < n; i++) {
+              const ref = players[Math.floor(this._rnd() * players.length)] || target;
+              const ang = this._rnd() * Math.PI * 2;
+              const dist = 4 + this._rnd() * 9;
+              const sx = ref.position.x + Math.cos(ang) * dist;
+              const sz = ref.position.z + Math.sin(ang) * dist;
+              spots.push({ x: sx, z: sz, r: 3.2 });
+              if (this.fx) this.fx.telegraphSafe(sx, sz, 3.2, 2.4, this.world.getHeight(sx, sz));
+            }
+            this._aoes.push({ type: 'safe', spots, dmg: Math.round(e.dmg * 2.2), delay: 2.4 });
+          }
+          e.atk = (e.atk || 2) - dt;
+          if (e.atk <= 0) {
+            e.atk = 2.6 + this._rnd() * 1.6;
+            e._atkType = ((e._atkType || 0) + 1) % 3;
+            if (e._atkType === 1) {
+              // Nova um den Boss (weg vom Boss laufen)
+              const r = 6.5;
+              this._aoes.push({ type: 'circle', x: e.x, z: e.z, r, dmg: Math.round(e.dmg * 1.3), delay: 1.25 });
+              if (this.fx) this.fx.telegraph(e.x, e.z, r, 1.25, e.y);
+            } else if (e._atkType === 2) {
+              // Frontaler Kegel auf einen Spieler (seitlich ausweichen)
+              let dx = target.position.x - e.x, dz = target.position.z - e.z;
+              const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+              const range = 11;
+              this._aoes.push({ type: 'cone', x: e.x, z: e.z, dx, dz, range, half: 0.55, dmg: Math.round(e.dmg * 1.4), delay: 1.2 });
+              if (this.fx) this.fx.telegraphCone(e.x, e.z, dx, dz, range, 1.2, e.y);
+            } else {
+              // Einschlag auf die Position eines Spielers (rauslaufen)
+              const r = 3.8;
+              this._aoes.push({ type: 'circle', x: target.position.x, z: target.position.z, r, dmg: Math.round(e.dmg * 1.6), delay: 1.1 });
+              if (this.fx) this.fx.telegraph(target.position.x, target.position.z, r, 1.1, target.position.y);
+            }
+          }
+        }
       }
+    }
+
+    // ---- AoE-Einschläge abarbeiten ----
+    if (this._aoes.length) {
+      for (const a of this._aoes) {
+        a.delay -= dt;
+        if (a.delay > 0) continue;
+        if (a.type === 'safe') {
+          // alle außerhalb JEDER sicheren Zone werden getroffen
+          for (const p of players) {
+            if (!p.alive || p.dead) continue;
+            let safe = false;
+            for (const sp of a.spots) {
+              if (Math.hypot(p.position.x - sp.x, p.position.z - sp.z) < sp.r) { safe = true; break; }
+            }
+            if (!safe) {
+              p.takeDamage(a.dmg);
+              if (this.fx) this.fx.explosion(p.position.x, p.position.z, 3, 0xff3020);
+            }
+          }
+        } else if (a.type === 'cone') {
+          if (this.fx) this.fx.explosion(a.x + a.dx * a.range * 0.5, a.z + a.dz * a.range * 0.5, 3.6, 0xff5a3a);
+          for (const p of players) {
+            if (!p.alive || p.dead) continue;
+            const pdx = p.position.x - a.x, pdz = p.position.z - a.z;
+            const d = Math.hypot(pdx, pdz);
+            if (d < a.range && d > 0.001 && (pdx / d) * a.dx + (pdz / d) * a.dz > Math.cos(a.half)) p.takeDamage(a.dmg);
+          }
+        } else {
+          if (this.fx) this.fx.explosion(a.x, a.z, a.r, 0xff5a3a);
+          for (const p of players) {
+            if (!p.alive || p.dead) continue;
+            if (Math.hypot(p.position.x - a.x, p.position.z - a.z) < a.r) p.takeDamage(a.dmg);
+          }
+        }
+        a.done = true;
+      }
+      this._aoes = this._aoes.filter((a) => !a.done);
     }
 
     this._render();

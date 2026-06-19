@@ -42,6 +42,17 @@ export class Player {
     this.passivesTaken = new Set(); // für Waffen-Verschmelzungen
     this.passiveCounts = {}; // id -> Anzahl (für HUD)
 
+    // ---- Ausweichen (Dodge) ----
+    this.dodgeMax = 2;
+    this.dodgeCharges = 2;
+    this.dodgeRecharge = 5; // Sekunden je Ladung
+    this.dodgeTimer = 0;
+    this.dashTime = 0;
+    this.dashDir = { x: 0, z: 1 };
+    this._mvx = 0;
+    this._mvz = 1;
+    this.rerolls = 3; // Neuwürfe pro Run (Game setzt sie inkl. Meta)
+
     // ---- glTF-Modell ----
     this.group = hero.group;
     this.mixer = hero.mixer;
@@ -88,7 +99,21 @@ export class Player {
     this.hitFlash = 0;
     this.passivesTaken.clear();
     this.passiveCounts = {};
+    this.dodgeCharges = this.dodgeMax;
+    this.dodgeTimer = 0;
+    this.dashTime = 0;
+    this.rerolls = 3;
     this.group.position.copy(this.position);
+  }
+
+  // Ausweich-Sprung in Bewegungsrichtung (mit kurzen i-Frames)
+  dodge() {
+    if (this.dead || this.dodgeCharges <= 0 || this.dashTime > 0) return false;
+    this.dodgeCharges--;
+    this.dashTime = 0.18;
+    this.dashDir = { x: this._mvx, z: this._mvz };
+    this.iframe = Math.max(this.iframe, 0.32);
+    return true;
   }
 
   serialize() {
@@ -97,7 +122,7 @@ export class Player {
       maxHp: this.maxHp, hp: this.hp, moveSpeed: this.moveSpeed, might: this.might, area: this.area,
       cooldownMult: this.cooldownMult, projSpeedMult: this.projSpeedMult, pickupRadius: this.pickupRadius,
       armor: this.armor, amount: this.amount, hpRegen: this.hpRegen, goldMult: this.goldMult,
-      passives: [...this.passivesTaken], passiveCounts: { ...this.passiveCounts },
+      passives: [...this.passivesTaken], passiveCounts: { ...this.passiveCounts }, rerolls: this.rerolls,
     };
   }
 
@@ -110,6 +135,7 @@ export class Player {
     this.armor = d.armor; this.amount = d.amount; this.hpRegen = d.hpRegen; this.goldMult = d.goldMult;
     this.passivesTaken = new Set(d.passives || []);
     this.passiveCounts = { ...(d.passiveCounts || {}) };
+    if (d.rerolls != null) this.rerolls = d.rerolls;
   }
 
   _setupAnims() {
@@ -173,18 +199,44 @@ export class Player {
     if (this.hitFlash > 0) this.hitFlash -= dt;
     if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + this.hpRegen * dt);
 
+    // Dodge-Ladungen wieder aufladen
+    if (this.dodgeCharges < this.dodgeMax) {
+      this.dodgeTimer += dt;
+      if (this.dodgeTimer >= this.dodgeRecharge) {
+        this.dodgeTimer = 0;
+        this.dodgeCharges++;
+      }
+    }
+
     // Welt-achsen-Bewegung (Top-Down): W = -Z (oben am Bildschirm)
     const ax = input.axis();
     this.moving = ax.x !== 0 || ax.z !== 0;
+    let dx = 0;
+    let dz = 0;
     if (this.moving) {
-      let dx = ax.x;
-      let dz = ax.z;
+      dx = ax.x;
+      dz = ax.z;
       const len = Math.hypot(dx, dz) || 1;
       dx /= len;
       dz /= len;
+      this._mvx = dx;
+      this._mvz = dz;
+      this.yaw = Math.atan2(dx, dz);
+    }
+
+    // Dodge auslösen (Leertaste)
+    if (input.pressed && input.pressed('Space')) this.dodge();
+
+    // Dash überschreibt Bewegung kurzzeitig (schnell + i-Frames)
+    if (this.dashTime > 0) {
+      this.dashTime -= dt;
+      this.position.x += this.dashDir.x * this.moveSpeed * 4.2 * dt;
+      this.position.z += this.dashDir.z * this.moveSpeed * 4.2 * dt;
+      this.yaw = Math.atan2(this.dashDir.x, this.dashDir.z);
+      this.moving = true;
+    } else if (this.moving) {
       this.position.x += dx * this.moveSpeed * dt;
       this.position.z += dz * this.moveSpeed * dt;
-      this.yaw = Math.atan2(dx, dz);
     }
 
     // Gelände & Grenzen

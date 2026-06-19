@@ -92,9 +92,9 @@ button.secondary {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 50% 35%, rgba(40, 30, 18, 0.5), rgba(0, 0, 0, 0.95));
+  background: radial-gradient(circle at 50% 35%, rgba(18, 13, 8, 0.9), rgba(0, 0, 0, 0.98));
   z-index: 50;
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(4px);
 }
 
 .start-inner {
@@ -429,13 +429,136 @@ button.secondary {
   text-shadow: 0 2px 4px #000;
 }
 
+#dodge-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+}
+.dodge-icon {
+  color: var(--gold-bright);
+  font-size: 15px;
+  margin-right: 2px;
+}
+#dodge-row .pip {
+  position: relative;
+  width: 26px;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+#dodge-row .pip.full {
+  background: var(--gold-bright);
+  border-color: #7a5e2e;
+}
+#dodge-row .pip-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(201, 164, 92, 0.5);
+}
+
 #lowhp-vignette {
   position: absolute;
   inset: 0;
   pointer-events: none;
   opacity: 0;
-  box-shadow: inset 0 0 200px rgba(160, 20, 20, 0.85);
+  --lp: 0;
+  box-shadow: inset 0 0 220px 30px rgba(170, 16, 16, 0.9);
   transition: opacity 0.3s;
+}
+#dps-panel {
+  position: absolute;
+  right: 12px;
+  bottom: 192px;
+  width: 190px;
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 5px 7px;
+  font-size: 11px;
+  color: #d8c89a;
+}
+#dps-panel:empty {
+  display: none;
+}
+.dps-head {
+  display: flex;
+  justify-content: space-between;
+  color: var(--gold-bright);
+  font-weight: 700;
+  border-bottom: 1px solid var(--panel-border);
+  padding-bottom: 3px;
+  margin-bottom: 3px;
+}
+.dps-row {
+  display: grid;
+  grid-template-columns: 16px 1fr auto auto;
+  gap: 5px;
+  align-items: center;
+  line-height: 1.5;
+}
+.dps-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dps-tot {
+  color: #c8b888;
+  min-width: 34px;
+  text-align: right;
+}
+.dps-val {
+  color: #ff9a4a;
+  min-width: 38px;
+  text-align: right;
+  font-weight: 700;
+}
+#weapon-row, #passive-row {
+  pointer-events: auto;
+}
+#hud-tooltip {
+  position: fixed;
+  z-index: 120;
+  pointer-events: none;
+  max-width: 240px;
+  background: rgba(12, 9, 6, 0.96);
+  border: 1px solid var(--gold-bright);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: #e6dcc2;
+  line-height: 1.4;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+#hud-tooltip b {
+  color: var(--gold-bright);
+}
+
+#danger-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle at center, rgba(200, 30, 30, 0.18) 35%, rgba(190, 16, 16, 0.5) 100%);
+}
+#danger-overlay.on {
+  animation: danger-pulse 0.7s ease-in-out infinite;
+}
+@keyframes danger-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.85; }
+}
+#lowhp-vignette.pulsing {
+  animation: lowhp-pulse 0.8s ease-in-out infinite;
+}
+@keyframes lowhp-pulse {
+  0%, 100% { opacity: calc(var(--lp) * 0.28); }
+  50% { opacity: calc(var(--lp) * 0.85); }
 }
 
 #message-log {
@@ -495,6 +618,61 @@ button.secondary {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+#lvl-reroll {
+  display: inline-block;
+  margin-top: 24px;
+  padding: 10px 22px;
+  font-size: 15px;
+}
+.combo-card {
+  border-color: #c9a45c !important;
+  box-shadow: 0 0 18px rgba(201, 164, 92, 0.35);
+}
+.combo-merge {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #d8c89a;
+}
+.combo-plus, .combo-arrow {
+  color: #8a7a55;
+  margin: 0 3px;
+}
+.combo-res {
+  color: var(--gold-bright);
+  font-weight: 700;
+}
+.combos-inner {
+  max-width: 560px;
+}
+#combos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 18px 0;
+  text-align: left;
+}
+.combo-list-item {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 15px;
+}
+.combo-list-desc {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #8a7a55;
+}
+.combo-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 22px;
+}
+.combo-actions button {
+  padding: 12px 26px;
+  font-size: 16px;
 }
 .lvl-choice {
   display: flex;

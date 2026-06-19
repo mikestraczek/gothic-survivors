@@ -1,4 +1,4 @@
-import { WEAPON_DEFS, EVOLUTIONS } from './Weapons.js';
+import { WEAPON_DEFS, COMBINATIONS } from './Weapons.js';
 
 const MAX_WEAPONS = 4;
 
@@ -18,6 +18,9 @@ const PASSIVES = [
 const WEAPON_ICON = { whirl: '🌀', axe: '🪓', fireball: '🔥', orbit: '✦', lightning: '⚡', frost: '❄️', spear: '🦴', poison: '☠️', holy: '✝️' };
 const PASSIVE_ICON = { might: '💪', speed: '👟', hp: '❤', armor: '🛡', cd: '⏱', area: '💥', pickup: '🧲', regen: '✚', proj: '➹', amount: '✛' };
 
+// für HUD-Tooltips
+export const PASSIVE_INFO = Object.fromEntries(PASSIVES.map((p) => [p.id, { name: p.name, sub: p.sub, icon: PASSIVE_ICON[p.id] || '◆' }]));
+
 export class Upgrades {
   constructor(el, toast) {
     this.el = el;
@@ -27,20 +30,14 @@ export class Upgrades {
   // Kandidaten für ein bestimmtes Spieler/Waffen-Paar erzeugen (mit apply-Closures).
   generate(player, weapons, n = 3) {
     const out = [];
-    // Verschmelzungen (höchste Priorität)
-    for (const w of weapons.ownedList()) {
-      if (weapons.canEvolve(w.id, player)) {
-        const ev = EVOLUTIONS[w.id];
-        out.push({ weight: 40, icon: '✨', title: `Verschmelzung: ${ev.name}`, sub: ev.desc, apply: () => weapons.evolve(w.id) });
-      }
-    }
+    // Hinweis: Verschmelzungen laufen über das separate Kombinations-Popup (Game).
     // Waffen aufwerten
     for (const w of weapons.ownedList()) {
       if (weapons.isMax(w.id)) continue;
       const def = WEAPON_DEFS[w.id];
       out.push({ weight: 5, icon: WEAPON_ICON[w.id], title: `${def.name} → Stufe ${w.level + 1}`, sub: def.desc, apply: () => weapons.add(w.id) });
     }
-    // neue Waffen
+    // neue Waffen — Kombinieren entfernt eine Waffe, also wieder Platz
     if (weapons.ownedList().length < MAX_WEAPONS) {
       for (const id of Object.keys(WEAPON_DEFS)) {
         if (weapons.has(id)) continue;
@@ -81,8 +78,8 @@ export class Upgrades {
     return chosen;
   }
 
-  // Anzeige-Liste rendern; onPick(index) wird beim Klick aufgerufen (kein apply hier).
-  present(displayList, onPick, level, subtitle) {
+  // Anzeige-Liste rendern; onPick(index) beim Klick. rerolls/onReroll optional.
+  present(displayList, onPick, level, subtitle, rerolls = 0, onReroll = null) {
     let html = `<div class="lvl-inner">
       <h2>${level ? 'STUFE ' + level : 'STUFENAUFSTIEG'}</h2>
       <p class="lvl-sub">${subtitle || 'Wähle eine Belohnung'}</p>
@@ -93,12 +90,61 @@ export class Upgrades {
         <div class="lc-text"><div class="lc-title">${c.title}</div><div class="lc-sub">${c.sub}</div></div>
       </button>`;
     });
-    html += `</div></div>`;
+    html += `</div>`;
+    if (onReroll) {
+      html += `<button id="lvl-reroll" class="secondary" ${rerolls > 0 ? '' : 'disabled'}>🎲 Neu würfeln (${rerolls})</button>`;
+    }
+    html += `</div>`;
     this.el.innerHTML = html;
     this.el.classList.remove('hidden');
     this.el.querySelectorAll('.lvl-choice').forEach((btn) => {
       btn.addEventListener('click', () => onPick(parseInt(btn.getAttribute('data-i'), 10)));
     });
+    const rb = this.el.querySelector('#lvl-reroll');
+    if (rb && onReroll) rb.addEventListener('click', () => onReroll());
+  }
+
+  // Mögliche Waffen-Kombinationen (declined = überspringen, Key = base+consume).
+  availableCombos(player, weapons, declined) {
+    const out = [];
+    for (const c of COMBINATIONS) {
+      const key = c.base + '+' + c.consume;
+      if (declined && declined.has(key)) continue;
+      if (weapons.canCombine(c)) out.push({ key, base: c.base, consume: c.consume, name: c.name, desc: c.desc });
+    }
+    return out;
+  }
+
+  // "🌀 Klingenwirbel + 🪓 Wurfaxt → ✨ Klingensturm"
+  _comboLine(c) {
+    const wi = (id) => `${WEAPON_ICON[id] || '◆'} ${(WEAPON_DEFS[id] && WEAPON_DEFS[id].name) || id}`;
+    return `<span class="combo-src">${wi(c.base)}</span> <span class="combo-plus">+</span> <span class="combo-src">${wi(c.consume)}</span> <span class="combo-arrow">→</span> <span class="combo-res">✨ ${c.name}</span>`;
+  }
+
+  // Liste aller möglichen Kombinationen (für das Hauptmenü)
+  combosListHtml() {
+    return COMBINATIONS.map((c) => `<div class="combo-list-item">${this._comboLine(c)}<div class="combo-list-desc">${c.desc}</div></div>`).join('');
+  }
+
+  // Kombinations-Popup (Ja/Nein) — nutzt dasselbe Overlay wie der Stufenaufstieg.
+  presentCombo(combo, onYes, onNo) {
+    this.el.innerHTML = `<div class="lvl-inner">
+      <h2>✨ KOMBINATION MÖGLICH</h2>
+      <p class="lvl-sub">Verschmilz zwei Waffen zu einer stärkeren — danach wird ein Waffenslot frei.</p>
+      <div class="lvl-choices">
+        <div class="lvl-choice combo-card">
+          <div class="lc-icon">✨</div>
+          <div class="lc-text"><div class="lc-title">${combo.name}</div><div class="lc-sub">${combo.desc}</div><div class="combo-merge">${this._comboLine(combo)}</div></div>
+        </div>
+      </div>
+      <div class="combo-actions">
+        <button id="combo-yes">Kombinieren</button>
+        <button id="combo-no" class="secondary">Nicht jetzt</button>
+      </div>
+    </div>`;
+    this.el.classList.remove('hidden');
+    this.el.querySelector('#combo-yes').addEventListener('click', () => onYes());
+    this.el.querySelector('#combo-no').addEventListener('click', () => onNo());
   }
 
   close() {

@@ -23,7 +23,9 @@ import { Net } from '../net/Net.js';
 const SNAP_HZ = 20;
 const INPUT_HZ = 22;
 const PHASES = 3; // Phasen pro Level, dann finaler Boss
-const PHASE_DUR = 55; // Sekunden je Phase
+const KILLS_PER_PHASE = [55, 80, 110]; // Gegner pro Phase erlegen, dann Mini-Boss
+const MINI_BOSSES = ['boss', 'boss_bone', 'boss_demon']; // Phasen-Anführer
+const BASE_REROLLS = 3;
 const DIFFS = { normal: { mult: 1.0, name: 'Normal' }, hard: { mult: 1.65, name: 'Schwer' } };
 
 export class Game {
@@ -51,11 +53,13 @@ export class Game {
     this.mapKey = 'valley';
     this.difficulty = 'normal';
     this.phaseIndex = 0;
-    this.phaseTimer = PHASE_DUR;
+    this._phaseKills = 0;
     this.bossPhase = false;
+    this.phaseStage = 'horde'; // 'horde' | 'mini' | 'final'
     this.levelWon = false;
     this.endless = false;
     this._finalBoss = null;
+    this._miniBoss = null;
 
     this._initRenderer();
     this._initScene();
@@ -109,6 +113,7 @@ export class Game {
       this.audio.boss();
     };
     this.fx = new Effects(this.scene);
+    this.enemies.fx = this.fx; // Boss-Telegraphen
     this.weapons = new Weapons(this.scene);
     this.weapons.fx = this.fx;
     this.gems = new GemManager(this.scene, this.world);
@@ -171,6 +176,7 @@ export class Game {
   _makeOnKill(p) {
     return (e) => {
       p.kills++;
+      this._phaseKills++;
       this.audio.kill();
       p.gold += (e.def.gold || 0) * (p.goldMult || 1);
       this.fx.sparksBurst(e.x, e.y + 0.6, e.z, e.def.boss ? 0xff5a3a : 0xc89060, e.def.boss ? 26 : 7, e.def.boss ? 9 : 5);
@@ -284,7 +290,7 @@ export class Game {
   _onNetData(d) {
     if (!d) return;
     if (d.k === 'start' && this.net.role === 'client') this._beginClientRun(d);
-    else if (d.k === 'in' && this.role === 'host') { this.remoteInput._x = d.x; this.remoteInput._z = d.z; }
+    else if (d.k === 'in' && this.role === 'host') { this.remoteInput._x = d.x; this.remoteInput._z = d.z; if (d.dodge) this.remotePlayer.dodge(); }
     else if (d.k === 'snap' && this.role === 'client') this._applySnapshot(d);
     else if (d.k === 'won' && this.role === 'client') this._clientWin(d);
     else if (d.k === 'endless' && this.role === 'client') {
@@ -300,6 +306,24 @@ export class Game {
       this.hud.toast(d.on ? 'Mitspieler wählt ein Upgrade…' : 'Weiter geht’s!', 'gold');
     } else if (d.k === 'lvlup' && this.role === 'client') this._clientLevelUp(d);
     else if (d.k === 'pick' && this.role === 'host') this._hostApplyRemotePick(d.i);
+    else if (d.k === 'reroll' && this.role === 'host') this._hostRerollRemote();
+    else if (d.k === 'combo' && this.role === 'client') {
+      this.mode = 'levelup';
+      this.input.enabled = false;
+      this.upgrades.presentCombo(
+        { key: d.key, base: d.base, consume: d.consume, name: d.name, desc: d.desc },
+        () => { this.net.send({ k: 'comboPick', yes: 1 }); this.upgrades.close(); this.mode = 'play'; this.input.enabled = true; },
+        () => { this.net.send({ k: 'comboPick', yes: 0 }); this.upgrades.close(); this.mode = 'play'; this.input.enabled = true; }
+      );
+    } else if (d.k === 'comboPick' && this.role === 'host') {
+      const c = this._pendingRemoteCombo;
+      if (c) {
+        if (d.yes) this.weapons2.combine(c);
+        else this._declinedRemoteCombos.add(c.key);
+      }
+      this._pendingRemoteCombo = null;
+      this._endLevelUp();
+    } else if (d.k === 'dps' && this.role === 'client') this._clientDealt = d.d || {};
     else if (d.k === 'over' && this.role === 'client') this._clientGameOver(d);
   }
 
@@ -308,6 +332,15 @@ export class Game {
     document.getElementById('start-button').addEventListener('click', () => this._openMapSelect());
     document.getElementById('resume-button').addEventListener('click', () => this.resumeRun());
     document.getElementById('shop-button').addEventListener('click', () => this.openShop('menu'));
+    document.getElementById('combos-button').addEventListener('click', () => {
+      document.getElementById('combos-list').innerHTML = this.upgrades.combosListHtml();
+      document.getElementById('start-screen').classList.add('hidden');
+      document.getElementById('combos-screen').classList.remove('hidden');
+    });
+    document.getElementById('combos-back').addEventListener('click', () => {
+      document.getElementById('combos-screen').classList.add('hidden');
+      document.getElementById('start-screen').classList.remove('hidden');
+    });
     document.getElementById('online-button').addEventListener('click', () => this._openLobby());
     document.getElementById('map-start').addEventListener('click', () => { document.getElementById('map-screen').classList.add('hidden'); this.startRun(this._selMap, this._selDiff); });
     document.getElementById('map-back').addEventListener('click', () => { document.getElementById('map-screen').classList.add('hidden'); this._showMenu(); });
@@ -359,7 +392,7 @@ export class Game {
       const data = {
         v: 2, player: this.player.serialize(), weapons: this.weapons.serialize(),
         elapsed: this.runElapsed, enemyElapsed: this.enemies.elapsed,
-        map: this.mapKey, diff: this.difficulty, phaseIndex: this.phaseIndex, phaseTimer: this.phaseTimer, bossPhase: this.bossPhase, endless: this.endless,
+        map: this.mapKey, diff: this.difficulty, phaseIndex: this.phaseIndex, phaseKills: this._phaseKills, phaseStage: this.phaseStage, endless: this.endless,
       };
       localStorage.setItem('gothicSurvivorsRun', JSON.stringify(data));
     } catch (e) { /* ignore */ }
@@ -389,19 +422,26 @@ export class Game {
     this.runElapsed = data.elapsed || 0;
     this.enemies.elapsed = data.enemyElapsed || 0; // Schwierigkeit weiterführen
     this.phaseIndex = data.phaseIndex || 0;
-    this.phaseTimer = data.phaseTimer || PHASE_DUR;
+    this._phaseKills = data.phaseKills || 0;
     this.enemies.phase = this.phaseIndex;
     this.endless = !!data.endless;
+    this.phaseStage = data.phaseStage || 'horde';
+    const c = this.player.position;
     if (this.endless) {
       this.enemies.autoBoss = true;
       this.enemies.spawnEnabled = true;
       this.enemies.bossTimer = 60;
-    } else if (data.bossPhase) {
+      this.phaseStage = 'horde';
+    } else if (this.phaseStage === 'final') {
       this.bossPhase = true;
-      this.enemies.spawnEnabled = false;
-      const c = this.player.position;
+      this.enemies.spawnScale = 0.6;
       const bt = (this.world.theme && this.world.theme.finalBoss) || 'boss';
-      this._finalBoss = this.enemies.spawnFinalBoss(bt, c.x, c.z, 2.4 * this.enemies.diff);
+      this._finalBoss = this.enemies.spawnBoss(bt, c.x, c.z, 2.6 * this.enemies.diff, 1.25, 'ENDBOSS');
+    } else if (this.phaseStage === 'mini') {
+      this.bossPhase = true;
+      this.enemies.spawnScale = 0.55;
+      const type = MINI_BOSSES[this.phaseIndex % MINI_BOSSES.length];
+      this._miniBoss = this.enemies.spawnBoss(type, c.x, c.z, (0.4 + this.phaseIndex * 0.28) * this.enemies.diff, 0.75, 'ANFÜHRER');
     }
     this.pendingLevelUps = 0;
     this.pendingRemoteLevelUps = 0;
@@ -483,13 +523,16 @@ export class Game {
     this.enemies.setDifficulty(DIFFS[diff] ? DIFFS[diff].mult : 1);
     this.enemies.autoBoss = false;
     this.enemies.spawnEnabled = true;
+    this.enemies.spawnScale = 1;
     this.enemies.phase = 0;
     this.phaseIndex = 0;
-    this.phaseTimer = PHASE_DUR;
+    this._phaseKills = 0;
     this.bossPhase = false;
+    this.phaseStage = 'horde'; // 'horde' | 'mini' | 'final'
     this.levelWon = false;
     this.endless = false;
     this._finalBoss = null;
+    this._miniBoss = null;
   }
 
   _startEndless() {
@@ -499,8 +542,11 @@ export class Game {
     this.bossPhase = false;
     this._finalBoss = null;
     this.enemies.spawnEnabled = true;
+    this.enemies.spawnScale = 1;
     this.enemies.autoBoss = true; // wiederkehrende Bosse
     this.enemies.bossTimer = 60;
+    this._endlessTime = 0;
+    this._endlessRamp = 0;
     this.player.dead = false;
     this.player.hp = this.player.maxHp;
     this.player.group.rotation.z = 0;
@@ -520,38 +566,82 @@ export class Game {
   _phaseTick(dt) {
     if (this.endless) {
       this._endlessRamp = (this._endlessRamp || 0) + dt;
-      if (this._endlessRamp > 40) {
+      this._endlessTime = (this._endlessTime || 0) + dt;
+      if (this._endlessRamp > 18) {
         this._endlessRamp = 0;
-        this.enemies.phase++;
+        this.enemies.phase++; // zähere Gegner + mehr Spawns
       }
+      // immer mehr Gegner gleichzeitig, je länger man überlebt
+      this.enemies.spawnScale = 1 + this._endlessTime / 70;
+      this.enemies.maxAlive = 700;
       return;
     }
     if (this.levelWon) return;
-    if (!this.bossPhase) {
-      this.phaseTimer -= dt;
-      if (this.phaseTimer <= 0) {
+    const c = this.player.position;
+    if (this.phaseStage === 'horde') {
+      // Gegner-Quota erfüllt -> Mini-Boss (Anführer) der Phase
+      if (this._phaseKills >= this._phaseTarget()) {
+        this.phaseStage = 'mini';
+        this.bossPhase = true;
+        this.enemies.spawnScale = 0.55; // weniger Adds, aber es kommen welche nach
+        const type = MINI_BOSSES[this.phaseIndex % MINI_BOSSES.length];
+        const mult = (0.4 + this.phaseIndex * 0.28) * this.enemies.diff;
+        this._miniBoss = this.enemies.spawnBoss(type, c.x, c.z, mult, 0.75, 'ANFÜHRER');
+        this.hud.toast('Anführer der Phase erschienen — besiege ihn!', 'blood');
+      }
+    } else if (this.phaseStage === 'mini') {
+      if (this._miniBoss && !this._miniBoss.alive) {
         this.phaseIndex++;
+        this._phaseKills = 0;
+        this._miniBoss = null;
         if (this.phaseIndex >= PHASES) {
-          this.bossPhase = true;
-          this.enemies.spawnEnabled = false; // Fokus auf den Boss
-          const c = this.player.position;
+          this.phaseStage = 'final';
+          this.enemies.spawnScale = 0.6;
           const bt = (this.world.theme && this.world.theme.finalBoss) || 'boss';
-          this._finalBoss = this.enemies.spawnFinalBoss(bt, c.x, c.z, 2.4 * this.enemies.diff);
-          this.hud.toast('FINALER BOSS — besiege ihn, um das Level zu schaffen!', 'blood');
+          this._finalBoss = this.enemies.spawnBoss(bt, c.x, c.z, 2.6 * this.enemies.diff, 1.25, 'ENDBOSS');
+          this.hud.toast('DER ENDBOSS ERSCHEINT — schließe das Level ab!', 'blood');
         } else {
-          this.phaseTimer = PHASE_DUR;
+          this.phaseStage = 'horde';
+          this.bossPhase = false;
+          this.enemies.spawnScale = 1;
           this.enemies.phase = this.phaseIndex;
           this.hud.toast(`Phase ${this.phaseIndex + 1} von ${PHASES}`, 'gold');
         }
       }
-    } else if (this._finalBoss && !this._finalBoss.alive) {
-      this._winLevel();
+    } else if (this.phaseStage === 'final') {
+      if (this._finalBoss && !this._finalBoss.alive) this._winLevel();
     }
+  }
+
+  _phaseTarget() {
+    return KILLS_PER_PHASE[Math.min(this.phaseIndex, KILLS_PER_PHASE.length - 1)];
+  }
+
+  // Live-DPS: gleitender Mittelwert je Waffe aus dem kumulierten Schaden
+  _updateDps(dt, dealt) {
+    const tr = this._dps || (this._dps = { last: {}, ema: {}, acc: 0 });
+    tr.acc += dt;
+    if (tr.acc < 0.25) return;
+    const interval = tr.acc;
+    tr.acc = 0;
+    const entries = [];
+    for (const wid of Object.keys(dealt || {})) {
+      const cur = dealt[wid];
+      const rate = Math.max(0, cur - (tr.last[wid] || 0)) / interval;
+      tr.last[wid] = cur;
+      tr.ema[wid] = (tr.ema[wid] || 0) * 0.6 + rate * 0.4;
+      if (cur > 0) entries.push({ id: wid, total: cur, dps: tr.ema[wid] });
+    }
+    entries.sort((a, b) => b.total - a.total);
+    this.hud.setDps(entries);
   }
 
   _phaseText() {
     if (this.endless) return 'ENDLOS';
-    return this.bossPhase ? 'BOSS-PHASE' : `Phase ${Math.min(this.phaseIndex + 1, PHASES)}/${PHASES}`;
+    if (this.phaseStage === 'final') return 'ENDBOSS';
+    const ph = `Phase ${Math.min(this.phaseIndex + 1, PHASES)}/${PHASES}`;
+    if (this.phaseStage === 'mini') return `${ph} · ANFÜHRER`;
+    return `${ph} · ${this._phaseKills}/${this._phaseTarget()}`;
   }
 
   _winLevel() {
@@ -608,6 +698,10 @@ export class Game {
     this.pendingLevelUps = 0;
     this.pendingRemoteLevelUps = 0;
     this._leveling = false;
+    this._dps = null;
+    this._clientDealt = {};
+    this._dpsSendAcc = 0;
+    this.hud.setDps([]);
     this.hud.setSpectate(null);
   }
 
@@ -710,6 +804,11 @@ export class Game {
   // -------------------------------------------------- Level-Up (unabhängig je Spieler)
   _maybeLevelUp() {
     if (this._leveling) return;
+    if (this.pendingLevelUps > 0 || this.pendingRemoteLevelUps > 0) {
+      // abgelehnte Kombinationen je Level-Up-Sequenz zurücksetzen (später erneut anbieten)
+      this._declinedCombos = new Set();
+      this._declinedRemoteCombos = new Set();
+    }
     if (this.pendingLevelUps > 0) this._startLocalLevelUp();
     else if (this.pendingRemoteLevelUps > 0) this._startRemoteLevelUp();
   }
@@ -720,6 +819,10 @@ export class Game {
     this.mode = 'levelup';
     this.input.enabled = false;
     if (this.role === 'host') this.net.send({ k: 'pause', on: true });
+    this._presentLocal();
+  }
+
+  _presentLocal() {
     const cands = this.upgrades.generate(this.player, this.weapons);
     this.upgrades.present(
       cands.map((c) => ({ icon: c.icon, title: c.title, sub: c.sub })),
@@ -730,7 +833,14 @@ export class Game {
         this._endLevelUp();
       },
       this.player.level,
-      'Dein Stufenaufstieg'
+      'Dein Stufenaufstieg',
+      this.player.rerolls,
+      () => {
+        if (this.player.rerolls > 0) {
+          this.player.rerolls--;
+          this._presentLocal();
+        }
+      }
     );
   }
 
@@ -738,9 +848,20 @@ export class Game {
     this._leveling = true;
     this.mode = 'levelup';
     this.input.enabled = false;
-    this._remoteCands = this.upgrades.generate(this.remotePlayer, this.weapons2);
-    this.net.send({ k: 'lvlup', choices: this._remoteCands.map((c) => ({ icon: c.icon, title: c.title, sub: c.sub })), level: this.remotePlayer.level });
+    this._sendRemoteChoices();
     this.hud.toast('Mitspieler wählt ein Upgrade…', 'gold');
+  }
+
+  _sendRemoteChoices() {
+    this._remoteCands = this.upgrades.generate(this.remotePlayer, this.weapons2);
+    this.net.send({ k: 'lvlup', choices: this._remoteCands.map((c) => ({ icon: c.icon, title: c.title, sub: c.sub })), level: this.remotePlayer.level, rerolls: this.remotePlayer.rerolls });
+  }
+
+  _hostRerollRemote() {
+    if (this.remotePlayer.rerolls > 0) {
+      this.remotePlayer.rerolls--;
+      this._sendRemoteChoices();
+    }
   }
 
   _hostApplyRemotePick(i) {
@@ -753,10 +874,42 @@ export class Game {
   _endLevelUp() {
     if (this.pendingLevelUps > 0) return this._startLocalLevelUp();
     if (this.pendingRemoteLevelUps > 0) return this._startRemoteLevelUp();
+    if (this._resolveCombos()) return; // erst Kombinationen anbieten
+    this._finishLevelUp();
+  }
+
+  _finishLevelUp() {
     this._leveling = false;
     this.mode = 'play';
     this.input.enabled = true;
     if (this.role === 'host') this.net.send({ k: 'pause', on: false });
+  }
+
+  // Bietet anstehende Verschmelzungen an (eine nach der anderen). true = Popup gezeigt, Spiel bleibt pausiert.
+  _resolveCombos() {
+    const local = this.upgrades.availableCombos(this.player, this.weapons, this._declinedCombos);
+    if (local.length) {
+      const c = local[0];
+      this.mode = 'levelup';
+      this.input.enabled = false;
+      this.upgrades.presentCombo(
+        c,
+        () => { this.weapons.combine(c); this.audio.levelup(); this.hud.toast(`${c.name} — verschmolzen! Waffenslot frei.`, 'gold'); this.upgrades.close(); this._endLevelUp(); },
+        () => { this._declinedCombos.add(c.key); this.upgrades.close(); this._endLevelUp(); }
+      );
+      return true;
+    }
+    // Koop: Kombination des Gastes (Host erkennt sie über weapons2)
+    if (this.role === 'host') {
+      const rem = this.upgrades.availableCombos(this.remotePlayer, this.weapons2, this._declinedRemoteCombos);
+      if (rem.length) {
+        this._pendingRemoteCombo = rem[0];
+        this.net.send({ k: 'combo', key: rem[0].key, base: rem[0].base, consume: rem[0].consume, name: rem[0].name, desc: rem[0].desc });
+        this.hud.toast('Mitspieler entscheidet über eine Kombination…', 'gold');
+        return true;
+      }
+    }
+    return false;
   }
 
   // Client: eigener Stufenaufstieg (Auswahl lokal, Ergebnis an Host)
@@ -773,7 +926,9 @@ export class Game {
         this.input.enabled = true;
       },
       d.level,
-      'Dein Stufenaufstieg'
+      'Dein Stufenaufstieg',
+      d.rerolls || 0,
+      () => this.net.send({ k: 'reroll' })
     );
   }
 
@@ -864,7 +1019,10 @@ export class Game {
       ld2: ld(this.weapons2),
       pa2: this.remotePlayer.passiveCounts,
       ph: this.phaseIndex,
+      pk: this._phaseKills,
       bp: this.bossPhase ? 1 : 0,
+      st: this.phaseStage,
+      dg: this.enemies._aoes.some((a) => a.type === 'safe') ? 1 : 0,
       t: Math.round(this.runElapsed),
     });
   }
@@ -881,7 +1039,10 @@ export class Game {
     if (d.p1) { this.remotePlayer.level = d.p1[0]; this.remotePlayer.kills = d.p1[3]; }
     if (d.pa2) this.player.passiveCounts = d.pa2; // eigene Passive im HUD
     if (d.ph != null) this.phaseIndex = d.ph;
+    if (d.pk != null) this._phaseKills = d.pk;
     this.bossPhase = !!d.bp;
+    if (d.st) this.phaseStage = d.st;
+    this._clientDanger = !!d.dg;
     // eigene Waffen = ld2, Host-Waffen = ld1
     if (d.ld2) this.weapons.setLoadout(d.ld2.map((w) => ({ id: w.id, level: w.l, evolved: !!w.e })));
     if (d.ld1) this.weapons2.setLoadout(d.ld1.map((w) => ({ id: w.id, level: w.l, evolved: !!w.e })));
@@ -966,13 +1127,20 @@ export class Game {
         if (this.remotePlayer && this.remotePlayer.group.visible) this.remotePlayer.mixer.update(dt);
         this.camCtrl.update(dt, null, this._camTarget());
       }
+      this.hud.setDanger(false);
     }
 
-    // Verletzungs-Sound (Leben sinkt deutlich)
+    // Verletzungs-Sound + Dash-Feedback
     if (this.mode === 'play' && this.player) {
       if (this._lastHp == null) this._lastHp = this.player.hp;
       if (!this.player.dead && this.player.hp < this._lastHp - 2) this.audio.hurt();
       this._lastHp = this.player.hp;
+      const dashing = this.player.dashTime > 0;
+      if (dashing && !this._wasDash) {
+        this.fx.sparksBurst(this.player.position.x, 1.0, this.player.position.z, 0xcfe6ff, 8, 7);
+        this.audio.pickup();
+      }
+      this._wasDash = dashing;
     }
 
     this.input.endFrame();
@@ -999,6 +1167,13 @@ export class Game {
 
     this.hud.update(this.player, this.weapons, this.runElapsed, this.enemies.aliveCount);
     this.hud.setPhase(this._phaseText());
+    this.hud.setDodge(this.player.dodgeCharges, this.player.dodgeMax, this.player.dodgeTimer / this.player.dodgeRecharge);
+    this.hud.setDanger(this.enemies._aoes.some((a) => a.type === 'safe'));
+    this._updateDps(dt, this.weapons._dealt);
+    if (this.role === 'host') {
+      this._dpsSendAcc = (this._dpsSendAcc || 0) + dt;
+      if (this._dpsSendAcc >= 0.5) { this._dpsSendAcc = 0; this.net.send({ k: 'dps', d: this.weapons2._dealt }); }
+    }
     this._drawMinimap();
     this._drawCombatUI();
 
@@ -1058,14 +1233,19 @@ export class Game {
     this.camCtrl.update(dt, this.input, this._camTarget());
     this.hud.update(this.player, this.weapons, this.runElapsed, this.enemies.ghostCount);
     this.hud.setPhase(this._phaseText());
+    this.hud.setDodge(this.player.dodgeCharges, this.player.dodgeMax, this.player.dodgeTimer / this.player.dodgeRecharge);
+    this.hud.setDanger(!!this._clientDanger);
+    this._updateDps(dt, this._clientDealt || {});
     this._drawMinimap();
     this._drawCombatUI();
 
+    if (!this._clientPaused && !this.player.dead && this.input.pressed('Space')) this._pendingDodge = true;
     this._inAcc += dt;
     if (this._inAcc >= 1 / INPUT_HZ) {
       this._inAcc = 0;
       const ax = this._clientPaused || this.player.dead ? { x: 0, z: 0 } : this.input.axis();
-      this.net.send({ k: 'in', x: ax.x, z: ax.z });
+      this.net.send({ k: 'in', x: ax.x, z: ax.z, dodge: this._pendingDodge ? 1 : 0 });
+      this._pendingDodge = false;
     }
   }
 

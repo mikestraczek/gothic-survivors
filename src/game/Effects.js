@@ -41,6 +41,11 @@ export class Effects {
     this.boomGeo = new THREE.SphereGeometry(1, 18, 14);
     this.boltGeo = new THREE.CylinderGeometry(0.05, 0.32, 7.5, 6, 1, true);
     this.flashGeo = new THREE.SphereGeometry(0.7, 12, 10);
+    this.teleGeo = new THREE.CircleGeometry(1, 30);
+    this.teleRingGeo = new THREE.RingGeometry(0.88, 1.0, 40);
+    // Kegel-Sektor (Frontalangriff), Halbwinkel 0.55 rad, zeigt entlang +X; flach in XZ gedreht
+    this.coneGeo = new THREE.CircleGeometry(1, 26, -0.55, 1.1);
+    this.coneGeo.rotateX(-Math.PI / 2);
   }
 
   _getFx(kind, geo, color, blending = THREE.AdditiveBlending, side = THREE.DoubleSide) {
@@ -77,6 +82,9 @@ export class Effects {
       else if (e.k === 'bolt') this.bolt(e.x, e.z, e.b);
       else if (e.k === 'slash') this.slash(e.x, e.z, e.a, 0, e.b);
       else if (e.k === 'sparks') this.sparksBurst(e.x, 0.9, e.z, e.a, e.b, 5);
+      else if (e.k === 'tele') this.telegraph(e.x, e.z, e.a, e.b, e.c);
+      else if (e.k === 'safe') this.telegraphSafe(e.x, e.z, e.a, e.b, e.c);
+      else if (e.k === 'cone') this.telegraphCone(e.x, e.z, e.dx, e.dz, e.a, e.b, e.c);
     }
     this.record = was;
   }
@@ -174,6 +182,54 @@ export class Effects {
     this.record = wasB;
   }
 
+  // Warnzone am Boden (Boss-AoE): bleibt `dur` Sekunden, dann schlägt der Boss ein.
+  // y = Geländehöhe an der Stelle (sonst liegt der Kreis unter dem Boden).
+  telegraph(x, z, r, dur, y = 0.2) {
+    if (this.record) this.events.push({ k: 'tele', x, z, a: r, b: dur, c: y });
+    // gefüllte Gefahrenfläche
+    const e = this._getFx('tele', this.teleGeo, 0xff3014, THREE.NormalBlending);
+    e.mesh.rotation.x = -Math.PI / 2;
+    e.dur = dur;
+    e.maxR = r;
+    e.mesh.position.set(x, y + 0.08, z);
+    e.mesh.scale.setScalar(r);
+    // leuchtender Randring (additiv) für klare Sichtbarkeit
+    const rg = this._getFx('telering', this.teleRingGeo, 0xff6030, THREE.AdditiveBlending);
+    rg.mesh.rotation.x = -Math.PI / 2;
+    rg.dur = dur;
+    rg.maxR = r;
+    rg.mesh.position.set(x, y + 0.12, z);
+    rg.mesh.scale.setScalar(r);
+  }
+
+  // Sichere Zone (grün) — hier ist man beim Map-weiten Boss-Angriff geschützt
+  telegraphSafe(x, z, r, dur, y = 0.2) {
+    if (this.record) this.events.push({ k: 'safe', x, z, a: r, b: dur, c: y });
+    const e = this._getFx('tele', this.teleGeo, 0x2ad84a, THREE.NormalBlending);
+    e.mesh.rotation.x = -Math.PI / 2;
+    e.dur = dur;
+    e.maxR = r;
+    e.mesh.position.set(x, y + 0.08, z);
+    e.mesh.scale.setScalar(r);
+    const rg = this._getFx('telering', this.teleRingGeo, 0x66ff88, THREE.AdditiveBlending);
+    rg.mesh.rotation.x = -Math.PI / 2;
+    rg.dur = dur;
+    rg.maxR = r;
+    rg.mesh.position.set(x, y + 0.12, z);
+    rg.mesh.scale.setScalar(r);
+  }
+
+  // Frontaler Kegel-Warnbereich, zeigt in Richtung (dx,dz)
+  telegraphCone(x, z, dx, dz, range, dur, y = 0.2) {
+    if (this.record) this.events.push({ k: 'cone', x, z, dx, dz, a: range, b: dur, c: y });
+    const e = this._getFx('cone', this.coneGeo, 0xff4018, THREE.NormalBlending);
+    e.mesh.rotation.set(0, Math.atan2(-dz, dx), 0); // +X-Sektor in Zielrichtung drehen
+    e.dur = dur;
+    e.maxR = range;
+    e.mesh.position.set(x, y + 0.1, z);
+    e.mesh.scale.setScalar(range);
+  }
+
   // ---------- Update ----------
   update(dt) {
     // Funken
@@ -236,6 +292,12 @@ export class Effects {
       } else if (e.kind === 'flash') {
         e.mesh.scale.setScalar(1.2 + k * 2.5);
         mat.opacity = 1 - k;
+      } else if (e.kind === 'tele' || e.kind === 'cone') {
+        // pulsierende Gefahrenfläche; zum Ende hin schneller/heller
+        mat.opacity = k > 0.7 ? 0.5 + 0.28 * Math.sin(e.t * 30) : 0.34 + 0.18 * Math.sin(e.t * 13);
+      } else if (e.kind === 'telering') {
+        e.mesh.scale.setScalar(e.maxR); // fester Radius (Grenze der Gefahrenzone)
+        mat.opacity = k > 0.7 ? 0.85 + 0.15 * Math.sin(e.t * 34) : 0.7;
       }
     }
   }

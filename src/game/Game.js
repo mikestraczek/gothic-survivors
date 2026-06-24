@@ -3,6 +3,22 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+
+// Pixel-Art / HD-2D-Look: rastert das fertige Bild auf ein Pixelgitter + leichte Farbquantisierung.
+const PixelArtShader = {
+  uniforms: { tDiffuse: { value: null }, resolution: { value: new THREE.Vector2(1, 1) }, pixelSize: { value: 4 }, levels: { value: 32 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform vec2 resolution; uniform float pixelSize; uniform float levels; varying vec2 vUv;
+    void main(){
+      vec2 dxy = pixelSize / resolution;
+      vec2 coord = dxy * (floor(vUv / dxy) + 0.5);
+      vec3 c = texture2D(tDiffuse, coord).rgb;
+      c = floor(c * levels + 0.5) / levels; // sanfte Farbquantisierung (Retro-Look)
+      gl_FragColor = vec4(c, 1.0);
+    }`,
+};
 
 import { Input } from './Input.js';
 import { World, MAP_LIST } from './World.js';
@@ -18,6 +34,7 @@ import { Upgrades } from './Upgrades.js';
 import { Meta } from './Meta.js';
 import { HUD } from './HUD.js';
 import { GameAudio } from './Audio.js';
+import { spriteQuad, spriteMaterial, SPRITE_FRAMES, loadSprites } from './spriteart.js';
 import { Net } from '../net/Net.js';
 
 const SNAP_HZ = 20;
@@ -86,19 +103,86 @@ export class Game {
     this.camCtrl = new SurvivorsCamera(this.camera);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.62, 0.7, 0.62);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.32, 0.5, 0.82);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    // Pixel-Art-Look als letzter Pass
+    this.pixelPass = new ShaderPass(PixelArtShader);
+    this.pixelPass.uniforms.pixelSize.value = 4;
+    this.pixelPass.enabled = false; // HD-2D: 3D-Welt scharf, Pixel-Look kommt von den Sprites
+    this.composer.addPass(this.pixelPass);
+    this._syncPixelResolution();
+  }
+
+  _syncPixelResolution() {
+    if (!this.pixelPass) return;
+    const v = new THREE.Vector2();
+    this.renderer.getDrawingBufferSize(v);
+    this.pixelPass.uniforms.resolution.value.copy(v);
+    // konstante Pixelgröße in CSS-Pixeln (über Pixelverhältnis skaliert) — kleiner = schärfer
+    this.pixelPass.uniforms.pixelSize.value = Math.max(2, Math.round(3 * this.renderer.getPixelRatio()));
+  }
+
+  _makeSprite(key) {
+    const im = new THREE.InstancedMesh(spriteQuad(1), spriteMaterial(key), 1);
+    im.count = 1;
+    im.frustumCulled = false;
+    im.setColorAt(0, new THREE.Color(1, 1, 1));
+    this.scene.add(im);
+    return im;
+  }
+
+  // Kamera-Rechtsachse (x,z) -> bestimmt links/rechts für Sprite-Spiegelung
+  _updateCamRight() {
+    this.camera.updateMatrixWorld();
+    const e = this.camera.matrixWorld.elements;
+    let rx = e[0], rz = e[2];
+    const l = Math.hypot(rx, rz) || 1;
+    this._camRX = rx / l;
+    this._camRZ = rz / l;
+    if (this.enemies) { this.enemies.camRightX = this._camRX; this.enemies.camRightZ = this._camRZ; }
+  }
+
+  _placeSprite(im, p, scale, frame, flip) {
+    if (!this._spq) { this._spq = new THREE.Quaternion(); this._spv = new THREE.Vector3(); this._sps = new THREE.Vector3(); this._spm = new THREE.Matrix4(); }
+    this._spv.set(p.x, p.y, p.z);
+    this._sps.set(scale, scale, scale);
+    this._spm.compose(this._spv, this._spq, this._sps);
+    im.setMatrixAt(0, this._spm);
+    im.instanceMatrix.needsUpdate = true;
+    const af = im.geometry.getAttribute('aFrame'); af.setX(0, frame); af.needsUpdate = true;
+    const fl = im.geometry.getAttribute('aFlip'); fl.setX(0, flip); fl.needsUpdate = true;
+  }
+
+  // Blickrichtung eines Spielers aus seiner Bewegung (auf Kamera-Rechtsachse projiziert)
+  _heroFlip(pl, key) {
+    const dir = (pl._mvx || 0) * (this._camRX ?? 1) + (pl._mvz || 0) * (this._camRZ ?? 0);
+    if (dir > 0.05) this[key] = 1; else if (dir < -0.05) this[key] = -1;
+    return this[key] || 1;
+  }
+
+  _updateHeroSprites() {
+    const fr = Math.floor(this.runElapsed * 7) % SPRITE_FRAMES;
+    this.playerSprite.visible = true;
+    this._placeSprite(this.playerSprite, this.player.position, 2.9, fr, this._heroFlip(this.player, '_pFlip'));
+    this.remoteSprite.visible = !!this.role && this.remotePlayer && this.remotePlayer.group.visible;
+    if (this.remoteSprite.visible) this._placeSprite(this.remoteSprite, this.remotePlayer.position, 2.9, fr, this._heroFlip(this.remotePlayer, '_rFlip'));
   }
 
   async _preload() {
     this.assets = new Assets();
     try {
       await this.assets.loadAll();
+      await loadSprites(); // echte Pixel-Art-Sprites (Gegner + Held)
     } catch (e) {
       console.error('Asset-Ladefehler:', e);
     }
     this.player = new Player(this.scene, this.world, this.assets.createHero(1.9));
+    // HD-2D: Spieler als Pixel-Sprite statt 3D-Modell
+    this.player.group.visible = false;
+    this.playerSprite = this._makeSprite('player');
+    this.remoteSprite = this._makeSprite('player');
+    this.remoteSprite.visible = false;
 
     this.playerLight = new THREE.PointLight(0xffe2b0, 10, 26, 1.4);
     this.scene.add(this.playerLight);
@@ -107,12 +191,15 @@ export class Game {
     this.scene.add(this.playerFill.target);
 
     this.enemies = new EnemyManager(this.scene, this.world);
+    await this.enemies.loadModels(); // echte animierte Modelle (VAT) backen
     this.enemies.bossAnnounce = (name) => {
       this.hud.bossBanner(`${name} ERSCHEINT`);
       this.hud.toast(`⚠ ${name} ERSCHEINT!`, 'blood');
       this.audio.boss();
     };
+    this.enemies.onSafeZones = () => this._warnSafeZones();
     this.fx = new Effects(this.scene);
+    this.fx.heightAt = (x, z) => this.world.getHeight(x, z); // Boden-Zonen folgen dem Gelände
     this.enemies.fx = this.fx; // Boss-Telegraphen
     this.weapons = new Weapons(this.scene);
     this.weapons.fx = this.fx;
@@ -636,6 +723,12 @@ export class Game {
     this.hud.setDps(entries);
   }
 
+  _warnSafeZones() {
+    this.hud.bossBanner('IN DIE GRÜNEN ZONEN!');
+    this.hud.toast('⚠ Grüne Fläche = sicher — sofort reinlaufen!', 'gold');
+    this.audio.boss();
+  }
+
   _phaseText() {
     if (this.endless) return 'ENDLOS';
     if (this.phaseStage === 'final') return 'ENDBOSS';
@@ -953,10 +1046,12 @@ export class Game {
     this.meta.addGold(earned);
     const m = Math.floor(this.runElapsed / 60);
     const s = Math.floor(this.runElapsed % 60);
+    const killer = this.enemies.displayName(this.player.lastHitBy);
     let rows = `<div>Du — Stufe <b>${this.player.level}</b>, ${this.player.kills} Kills</div>`;
     if (this.role) rows += `<div>Mitspieler — Stufe <b>${this.remotePlayer.level}</b>, ${this.remotePlayer.kills} Kills</div>`;
     document.getElementById('death-stats').innerHTML = `
       <div>Überlebt: <b>${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}</b></div>
+      <div class="death-killer">☠ Gefallen durch <b>${killer}</b></div>
       ${rows}
       <div class="death-gold">⛏ ${earned} Erz verdient &nbsp;·&nbsp; Gesamt: ${this.meta.gold}</div>
       <div class="dmg-breakdown">${this._dmgRowsHtml(this.weapons._dealt)}</div>`;
@@ -964,7 +1059,7 @@ export class Game {
     document.getElementById('death-shop-button').classList.toggle('hidden', !!this.role);
     document.getElementById('death-screen').classList.remove('hidden');
     if (this.role === 'host') {
-      this.net.send({ k: 'over', t: this.runElapsed, host: { lv: this.player.level, ki: this.player.kills }, guest: { lv: this.remotePlayer.level, ki: this.remotePlayer.kills }, dmg: this.weapons2._dealt });
+      this.net.send({ k: 'over', t: this.runElapsed, host: { lv: this.player.level, ki: this.player.kills }, guest: { lv: this.remotePlayer.level, ki: this.remotePlayer.kills }, dmg: this.weapons2._dealt, gk: this.enemies.displayName(this.remotePlayer.lastHitBy) });
     }
   }
 
@@ -978,6 +1073,7 @@ export class Game {
     const s = Math.floor((d.t || 0) % 60);
     document.getElementById('death-stats').innerHTML = `
       <div>Überlebt: <b>${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}</b></div>
+      <div class="death-killer">☠ Gefallen durch <b>${d.gk || 'einem Gegner'}</b></div>
       <div>Du — Stufe <b>${d.guest.lv}</b>, ${d.guest.ki} Kills</div>
       <div>Mitspieler — Stufe <b>${d.host.lv}</b>, ${d.host.ki} Kills</div>
       <div class="death-gold">⛏ ${earned} Erz verdient &nbsp;·&nbsp; Gesamt: ${this.meta.gold}</div>
@@ -1153,6 +1249,7 @@ export class Game {
     this.player.update(dt, this.input);
     if (co) this.remotePlayer.update(dt, this.remoteInput);
     this.camCtrl.update(dt, this.input, this._camTarget());
+    this._updateCamRight();
 
     const ps = this._players();
     this.enemies.update(dt, ps, null);
@@ -1169,6 +1266,7 @@ export class Game {
     this.hud.setPhase(this._phaseText());
     this.hud.setDodge(this.player.dodgeCharges, this.player.dodgeMax, this.player.dodgeTimer / this.player.dodgeRecharge);
     this.hud.setDanger(this.enemies._aoes.some((a) => a.type === 'safe'));
+    this._updateHeroSprites();
     this._updateDps(dt, this.weapons._dealt);
     if (this.role === 'host') {
       this._dpsSendAcc = (this._dpsSendAcc || 0) + dt;
@@ -1224,6 +1322,7 @@ export class Game {
     }
 
     // Gegner flüssig interpolieren + Waffen-Visuals beider Spieler
+    this._updateCamRight();
     this.enemies.clientRender(dt);
     this.weapons.renderVisualsOnly(dt, this.player);
     this.weapons2.renderVisualsOnly(dt, this.remotePlayer);
@@ -1235,6 +1334,9 @@ export class Game {
     this.hud.setPhase(this._phaseText());
     this.hud.setDodge(this.player.dodgeCharges, this.player.dodgeMax, this.player.dodgeTimer / this.player.dodgeRecharge);
     this.hud.setDanger(!!this._clientDanger);
+    this._updateHeroSprites();
+    if (this._clientDanger && !this._prevClientDanger) this._warnSafeZones();
+    this._prevClientDanger = this._clientDanger;
     this._updateDps(dt, this._clientDealt || {});
     this._drawMinimap();
     this._drawCombatUI();
@@ -1262,6 +1364,7 @@ export class Game {
     this.renderer.setSize(w, h);
     this.composer.setSize(w, h);
     if (this.bloom) this.bloom.setSize(w, h);
+    this._syncPixelResolution();
     if (this.hud) this.hud.resize(w, h);
   }
 }

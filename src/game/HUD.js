@@ -1,7 +1,7 @@
 import { WEAPON_DEFS } from './Weapons.js';
 import { PASSIVE_INFO } from './Upgrades.js';
 
-const WICON = { whirl: '🌀', axe: '🪓', fireball: '🔥', orbit: '✦', lightning: '⚡', frost: '❄️', spear: '🦴', poison: '☠️', holy: '✝️' };
+const WICON = { whirl: '🌀', axe: '🪓', fireball: '🔥', orbit: '✦', lightning: '⚡', frost: '❄️', spear: '🦴', poison: '☠️', holy: '✝️', daggers: '🗡️', meteor: '☄️' };
 const PICON = { might: '💪', speed: '👟', hp: '❤', armor: '🛡', cd: '⏱', area: '💥', pickup: '🧲', regen: '✚', proj: '➹', amount: '✛' };
 
 // kompakte Zahl (1234 -> 1,2k)

@@ -15,7 +15,7 @@ const PASSIVES = [
   { id: 'amount', name: 'Vielzahl', sub: '+1 Projektil', rare: true, apply: (p) => (p.amount += 1) },
 ];
 
-const WEAPON_ICON = { whirl: '🌀', axe: '🪓', fireball: '🔥', orbit: '✦', lightning: '⚡', frost: '❄️', spear: '🦴', poison: '☠️', holy: '✝️' };
+const WEAPON_ICON = { whirl: '🌀', axe: '🪓', fireball: '🔥', orbit: '✦', lightning: '⚡', frost: '❄️', spear: '🦴', poison: '☠️', holy: '✝️', daggers: '🗡️', meteor: '☄️' };
 const PASSIVE_ICON = { might: '💪', speed: '👟', hp: '❤', armor: '🛡', cd: '⏱', area: '💥', pickup: '🧲', regen: '✚', proj: '➹', amount: '✛' };
 
 // für HUD-Tooltips

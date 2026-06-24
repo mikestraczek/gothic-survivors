@@ -19,6 +19,10 @@ export class Effects {
     this.record = false;
     this.events = [];
 
+    // Boden-Warnzonen (folgen dem Gelände, normaler Tiefentest -> Held verdeckt sie)
+    this.heightAt = null; // vom Game gesetzt: (x,z) => Geländehöhe
+    this.zones = [];
+
     // ---- Funken (InstancedMesh) ----
     this.sparks = [];
     const sparkGeo = new THREE.TetrahedronGeometry(0.13, 0);
@@ -182,56 +186,74 @@ export class Effects {
     this.record = wasB;
   }
 
-  // Warnzone am Boden (Boss-AoE): bleibt `dur` Sekunden, dann schlägt der Boss ein.
-  // y = Geländehöhe an der Stelle (sonst liegt der Kreis unter dem Boden).
+  // Geländeangepasste Boden-Zone (Fan): Mitte dim, Rand hell. Normaler Tiefentest -> Held verdeckt sie.
+  _spawnZone(cx, cz, r, dur, fill, rim, a0, a1) {
+    const segs = Math.max(8, Math.round(((a1 - a0) / (Math.PI * 2)) * 44));
+    const h = this.heightAt || (() => 0);
+    const n = segs + 2; // Rand (segs+1) + Mittelpunkt
+    const pos = new Float32Array(n * 3);
+    const col = new Float32Array(n * 3);
+    const cf = new THREE.Color(fill), cr = new THREE.Color(rim);
+    pos[0] = cx; pos[1] = h(cx, cz) + 0.06; pos[2] = cz;
+    col[0] = cf.r; col[1] = cf.g; col[2] = cf.b;
+    for (let i = 0; i <= segs; i++) {
+      const a = a0 + (a1 - a0) * (i / segs);
+      const vx = cx + Math.cos(a) * r, vz = cz + Math.sin(a) * r;
+      const o = (i + 1) * 3;
+      pos[o] = vx; pos[o + 1] = h(vx, vz) + 0.06; pos[o + 2] = vz;
+      col[o] = cr.r; col[o + 1] = cr.g; col[o + 2] = cr.b;
+    }
+    const idx = [];
+    for (let i = 1; i <= segs; i++) idx.push(0, i, i + 1);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.setIndex(idx);
+    const mat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.renderOrder = 2;
+    this.group.add(mesh);
+    this.zones.push({ mesh, t: 0, dur });
+  }
+
+  // Warnzone (rot, Vollkreis)
   telegraph(x, z, r, dur, y = 0.2) {
     if (this.record) this.events.push({ k: 'tele', x, z, a: r, b: dur, c: y });
-    // gefüllte Gefahrenfläche
-    const e = this._getFx('tele', this.teleGeo, 0xff3014, THREE.NormalBlending);
-    e.mesh.rotation.x = -Math.PI / 2;
-    e.dur = dur;
-    e.maxR = r;
-    e.mesh.position.set(x, y + 0.08, z);
-    e.mesh.scale.setScalar(r);
-    // leuchtender Randring (additiv) für klare Sichtbarkeit
-    const rg = this._getFx('telering', this.teleRingGeo, 0xff6030, THREE.AdditiveBlending);
-    rg.mesh.rotation.x = -Math.PI / 2;
-    rg.dur = dur;
-    rg.maxR = r;
-    rg.mesh.position.set(x, y + 0.12, z);
-    rg.mesh.scale.setScalar(r);
+    this._spawnZone(x, z, r, dur, 0xa01010, 0xff5a28, 0, Math.PI * 2);
   }
 
-  // Sichere Zone (grün) — hier ist man beim Map-weiten Boss-Angriff geschützt
+  // Sichere Zone (grün, Vollkreis)
   telegraphSafe(x, z, r, dur, y = 0.2) {
     if (this.record) this.events.push({ k: 'safe', x, z, a: r, b: dur, c: y });
-    const e = this._getFx('tele', this.teleGeo, 0x2ad84a, THREE.NormalBlending);
-    e.mesh.rotation.x = -Math.PI / 2;
-    e.dur = dur;
-    e.maxR = r;
-    e.mesh.position.set(x, y + 0.08, z);
-    e.mesh.scale.setScalar(r);
-    const rg = this._getFx('telering', this.teleRingGeo, 0x66ff88, THREE.AdditiveBlending);
-    rg.mesh.rotation.x = -Math.PI / 2;
-    rg.dur = dur;
-    rg.maxR = r;
-    rg.mesh.position.set(x, y + 0.12, z);
-    rg.mesh.scale.setScalar(r);
+    this._spawnZone(x, z, r, dur, 0x16a836, 0x6cff8c, 0, Math.PI * 2);
   }
 
-  // Frontaler Kegel-Warnbereich, zeigt in Richtung (dx,dz)
+  // Frontaler Kegel-Warnbereich in Richtung (dx,dz)
   telegraphCone(x, z, dx, dz, range, dur, y = 0.2) {
     if (this.record) this.events.push({ k: 'cone', x, z, dx, dz, a: range, b: dur, c: y });
-    const e = this._getFx('cone', this.coneGeo, 0xff4018, THREE.NormalBlending);
-    e.mesh.rotation.set(0, Math.atan2(-dz, dx), 0); // +X-Sektor in Zielrichtung drehen
-    e.dur = dur;
-    e.maxR = range;
-    e.mesh.position.set(x, y + 0.1, z);
-    e.mesh.scale.setScalar(range);
+    const ang = Math.atan2(dz, dx);
+    this._spawnZone(x, z, range, dur, 0xa01010, 0xff5a28, ang - 0.55, ang + 0.55);
   }
 
   // ---------- Update ----------
   update(dt) {
+    // Boden-Warnzonen: pulsieren, zum Ende heller/schneller, dann entfernen
+    if (this.zones.length) {
+      for (let i = this.zones.length - 1; i >= 0; i--) {
+        const zn = this.zones[i];
+        zn.t += dt;
+        const k = zn.t / zn.dur;
+        if (k >= 1) {
+          this.group.remove(zn.mesh);
+          zn.mesh.geometry.dispose();
+          zn.mesh.material.dispose();
+          this.zones.splice(i, 1);
+          continue;
+        }
+        zn.mesh.material.opacity = k > 0.7 ? 0.5 + 0.3 * Math.sin(zn.t * 30) : 0.34 + 0.16 * Math.sin(zn.t * 12);
+      }
+    }
+
     // Funken
     let idx = 0;
     for (const s of this.sparks) {

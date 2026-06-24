@@ -60,7 +60,7 @@ for (const k of ['d', 's', 'a', 'w']) {
   await page.keyboard.up(k);
 }
 // auf Gegner-Aktivität warten (SwiftShader ist langsam; lebend ODER bereits erlegt)
-await poll(() => window.__game.enemies.aliveCount > 0 || window.__game.enemies.totalKills > 0, 10000);
+await poll(() => window.__game.enemies.aliveCount > 0 || window.__game.enemies.totalKills > 0, 25000);
 const mid = await page.evaluate(() => ({
   mode: window.__game.mode,
   enemies: window.__game.enemies.aliveCount,

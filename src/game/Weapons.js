@@ -68,6 +68,18 @@ export const WEAPON_DEFS = {
     maxLevel: 5,
     stats: (lv) => ({ damage: 6 + lv * 4, radius: 2.0 + lv * 0.35, cd: 0.5 }),
   },
+  daggers: {
+    name: 'Schattendolche',
+    desc: 'Fächer schneller, durchbohrender Dolche',
+    maxLevel: 5,
+    stats: (lv) => ({ damage: 7 + lv * 4, count: 3 + lv, pierce: 2 + Math.floor(lv / 2), cd: Math.max(0.4, 1.1 - lv * 0.07), speed: 26 }),
+  },
+  meteor: {
+    name: 'Meteor',
+    desc: 'Einschläge mit Flächenschaden auf Feinde',
+    maxLevel: 5,
+    stats: (lv) => ({ damage: 20 + lv * 12, count: 1 + Math.floor(lv / 2), area: 2.6 + lv * 0.35, cd: Math.max(0.9, 2.2 - lv * 0.1), range: 22 }),
+  },
 };
 
 // Verschmelzungen: Waffe (max) + bestimmtes Passiv -> verstärkte Form
@@ -78,6 +90,10 @@ export const COMBINATIONS = [
   { base: 'fireball', consume: 'lightning', name: 'Höllensturm', desc: 'Feuerbälle + Blitze zu einem Inferno' },
   { base: 'frost', consume: 'orbit', name: 'Ewiger Winter', desc: 'Frostwelle + Wächtergeister zu eisiger Übermacht' },
   { base: 'spear', consume: 'poison', name: 'Seuchenhagel', desc: 'Knochenspeere + Giftwolken zu tödlicher Salve' },
+  { base: 'daggers', consume: 'meteor', name: 'Sternenregen', desc: 'Schattendolche + Meteore — ein Regen aus glühenden Klingen' },
+  { base: 'holy', consume: 'daggers', name: 'Geweihte Klingen', desc: 'Weihrauch + Schattendolche — heilige, durchbohrende Aura' },
+  { base: 'meteor', consume: 'fireball', name: 'Kataklysmus', desc: 'Meteor + Feuerball — verheerender Flächeneinschlag' },
+  { base: 'holy', consume: 'lightning', name: 'Göttlicher Zorn', desc: 'Weihrauch + Blitze — strafende heilige Energie' },
 ];
 
 export class Weapons {
@@ -457,6 +473,26 @@ export class Weapons {
         const r = s.radius * areaMult;
         for (const e of enemies.inRadius(player.position.x, player.position.z, r)) {
           this._dmg(enemies, e, s.damage * might, null, onKill, 'holy');
+        }
+      } else if (w.id === 'daggers') {
+        const count = s.count + extra;
+        const target = enemies.nearest(player.position.x, player.position.z);
+        const baseAng = target ? Math.atan2(target.x - player.position.x, target.z - player.position.z) : player.yaw;
+        const sp = s.speed * player.projSpeedMult;
+        for (let i = 0; i < count; i++) {
+          const a = baseAng + (i - (count - 1) / 2) * 0.16;
+          const p = this._spawnProjectile('axe', player.position.x, player.position.z, Math.sin(a) * sp, Math.cos(a) * sp, s.damage * might, s.pierce, 0.5 * areaMult, 1.3);
+          p.wid = 'daggers';
+        }
+      } else if (w.id === 'meteor') {
+        const count = s.count + extra;
+        const candidates = enemies.inRadius(player.position.x, player.position.z, s.range);
+        for (let i = 0; i < count && candidates.length; i++) {
+          const e = candidates[Math.floor(Math.random() * candidates.length)];
+          if (!e.alive) continue;
+          const ar = s.area * areaMult;
+          for (const t of enemies.inRadius(e.x, e.z, ar)) this._dmg(enemies, t, s.damage * might, { x: t.x - e.x, z: t.z - e.z }, onKill, 'meteor');
+          if (this.fx) this.fx.explosion(e.x, e.z, ar, 0xff8a30);
         }
       }
     }

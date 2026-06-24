@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { grungeTexture, bumpTexture } from './textures.js';
+import { spriteQuad, spriteMaterial, SPRITE_FRAMES } from './spriteart.js';
 
 const MAX_PER_TYPE = 340;
 const HARD_CAP = 320; // mehr Gegner gleichzeitig
@@ -205,23 +207,43 @@ export const ETYPE_KEYS = [
 // Bosse, die in Abständen rotierend erscheinen
 const BOSS_TYPES = ['boss', 'boss_bone', 'boss_demon'];
 const BOSS_NAMES = { boss: 'SCHATTENLÄUFER', boss_bone: 'KNOCHENKÖNIG', boss_demon: 'ERZDÄMON' };
+const ENEMY_NAMES = {
+  scavenger: 'Aasfresser', bloodfly: 'Blutfliege', wolf: 'Wolf', molerat: 'Maulwurfsratte',
+  skeleton: 'Skelett', ghoul: 'Ghul', gargoyle: 'Gargyle', demon: 'Dämon', troll: 'Troll',
+  boss: 'Schattenläufer', boss_bone: 'Knochenkönig', boss_demon: 'Erzdämon',
+};
 
 const ETYPES = {
-  scavenger: { proc: geoScavenger, hp: 9, speed: 2.6, dmg: 6, radius: 0.55, scale: 1.05, xp: 1, gold: 0.05 },
-  bloodfly: { proc: geoBloodfly, hp: 7, speed: 3.0, dmg: 7, radius: 0.5, scale: 0.95, xp: 2, gold: 0.07, fly: true },
-  wolf: { proc: geoWolf, hp: 20, speed: 3.5, dmg: 9, radius: 0.6, scale: 1.15, xp: 3, gold: 0.09 },
-  molerat: { proc: geoMolerat, hp: 32, speed: 2.2, dmg: 11, radius: 0.8, scale: 1.1, xp: 4, gold: 0.1 },
-  skeleton: { proc: geoSkeleton, hp: 46, speed: 2.5, dmg: 12, radius: 0.6, scale: 1.15, xp: 6, gold: 0.14 },
-  ghoul: { proc: geoGhoul, hp: 64, speed: 2.3, dmg: 15, radius: 0.7, scale: 1.2, xp: 9, gold: 0.18 },
+  scavenger: { proc: geoScavenger, hp: 9, speed: 2.6, dmg: 6, radius: 0.55, scale: 1.05, xp: 1, gold: 0.05, glow: 0x86b03a },
+  bloodfly: { proc: geoBloodfly, hp: 7, speed: 3.0, dmg: 7, radius: 0.5, scale: 0.95, xp: 2, gold: 0.07, fly: true, glow: 0xd02828 },
+  wolf: { proc: geoWolf, hp: 20, speed: 3.5, dmg: 9, radius: 0.6, scale: 1.15, xp: 3, gold: 0.09, glow: 0xe08018 },
+  molerat: { proc: geoMolerat, hp: 32, speed: 2.2, dmg: 11, radius: 0.8, scale: 1.1, xp: 4, gold: 0.1, glow: 0xc89838 },
+  skeleton: { proc: geoSkeleton, hp: 46, speed: 2.5, dmg: 12, radius: 0.6, scale: 1.15, xp: 6, gold: 0.14, glow: 0x9fd8e6 },
+  ghoul: { proc: geoGhoul, hp: 64, speed: 2.3, dmg: 15, radius: 0.7, scale: 1.2, xp: 9, gold: 0.18, glow: 0x7ec24a },
   // Spät-Gegner (tankiger, mehr XP)
-  gargoyle: { proc: geoGargoyle, hp: 85, speed: 2.7, dmg: 15, radius: 0.7, scale: 1.3, xp: 9, gold: 0.22, fly: true },
-  demon: { proc: geoDemon, hp: 110, speed: 3.1, dmg: 18, radius: 0.7, scale: 1.5, xp: 13, gold: 0.28 },
-  troll: { proc: geoTroll, hp: 190, speed: 1.8, dmg: 24, radius: 1.1, scale: 1.9, xp: 18, gold: 0.45 },
+  gargoyle: { proc: geoGargoyle, hp: 85, speed: 2.7, dmg: 15, radius: 0.7, scale: 1.3, xp: 9, gold: 0.22, fly: true, glow: 0x7aa0d0 },
+  demon: { proc: geoDemon, hp: 110, speed: 3.1, dmg: 18, radius: 0.7, scale: 1.5, xp: 13, gold: 0.28, glow: 0xe85018 },
+  troll: { proc: geoTroll, hp: 190, speed: 1.8, dmg: 24, radius: 1.1, scale: 1.9, xp: 18, gold: 0.45, glow: 0x58a838 },
   // Bosse
-  boss: { proc: geoShadowbeast, hp: 1300, speed: 2.0, dmg: 26, radius: 2.0, scale: 1.0, xp: 60, gold: 5, boss: true },
-  boss_bone: { proc: geoSkeleton, hp: 1600, speed: 2.2, dmg: 28, radius: 1.8, scale: 3.4, xp: 75, gold: 6, boss: true },
-  boss_demon: { proc: geoDemon, hp: 2000, speed: 2.4, dmg: 32, radius: 1.9, scale: 3.0, xp: 90, gold: 7, boss: true },
+  boss: { proc: geoShadowbeast, hp: 1300, speed: 2.0, dmg: 26, radius: 2.0, scale: 2.6, xp: 60, gold: 5, boss: true, glow: 0xb030e0, abilities: ['slam', 'frontal'] },
+  boss_bone: { proc: geoSkeleton, hp: 1600, speed: 2.2, dmg: 28, radius: 1.8, scale: 1.8, xp: 75, gold: 6, boss: true, glow: 0xdce6f0, abilities: ['nova', 'safe'] },
+  boss_demon: { proc: geoDemon, hp: 2000, speed: 2.4, dmg: 32, radius: 1.9, scale: 2.0, xp: 90, gold: 7, boss: true, glow: 0xff3a14, abilities: ['slam', 'nova', 'frontal', 'safe'] },
 };
+
+// Fresnel-Randglühen in der Typ-Farbe per Shader-Injektion.
+function addRimGlow(mat, color, strength) {
+  const r = (color.r * strength).toFixed(3);
+  const g = (color.g * strength).toFixed(3);
+  const b = (color.b * strength).toFixed(3);
+  mat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace(
+      '#include <dithering_fragment>',
+      `float _rim = pow(1.0 - clamp(dot(normalize(vNormal), normalize(vViewPosition)), 0.0, 1.0), 2.5);
+       gl_FragColor.rgb += vec3(${r}, ${g}, ${b}) * _rim;
+       #include <dithering_fragment>`
+    );
+  };
+}
 
 export class EnemyManager {
   constructor(scene, world) {
@@ -236,22 +258,8 @@ export class EnemyManager {
     this._flash = new THREE.Color(2.6, 0.6, 0.6);
     this._col = { x: 0, z: 0 };
 
-    for (const key of ETYPE_KEYS) {
-      const def = ETYPES[key];
-      const geo = def.proc();
-      geo.computeVertexNormals();
-      const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0.0 });
-      const cap = def.boss ? 8 : MAX_PER_TYPE;
-      const im = new THREE.InstancedMesh(geo, mat, cap);
-      im.castShadow = true;
-      im.count = 0;
-      im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      im.frustumCulled = false;
-      im.setColorAt(0, this._white);
-      im.instanceColor.setUsage(THREE.DynamicDrawUsage);
-      scene.add(im);
-      this.meshes[key] = im;
-    }
+    // HD-2D: jeder Gegner ist ein Billboard-Pixel-Sprite (InstancedMesh je Typ).
+    this._buildSpriteMeshes();
 
     this.spawnTimer = 1.0;
     this.bossTimer = 90;
@@ -260,6 +268,7 @@ export class EnemyManager {
     this._seed = 24680;
     this._bossIndex = 0;
     this.bossAnnounce = null; // vom Game gesetzt (Toast)
+    this.onSafeZones = null; // vom Game gesetzt (Safezone-Warnung)
     this._nextId = 1; // stabile IDs für Multiplayer-Interpolation
     this._ghosts = new Map(); // Client: id -> interpolierter Gegner
     this._ghostGen = 0;
@@ -272,6 +281,27 @@ export class EnemyManager {
     this.fx = null; // vom Game gesetzt (Boss-Telegraphen)
     this._aoes = []; // telegrafierte Boss-AoE-Angriffe
   }
+
+  // HD-2D: Billboard-Pixel-Sprite je Gegnertyp (InstancedMesh)
+  _buildSpriteMeshes() {
+    for (const key of ETYPE_KEYS) {
+      const def = ETYPES[key];
+      const cap = def.boss ? 8 : MAX_PER_TYPE;
+      const geo = spriteQuad(cap);
+      const mat = spriteMaterial(key);
+      const im = new THREE.InstancedMesh(geo, mat, cap);
+      im.count = 0;
+      im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      im.frustumCulled = false;
+      im.setColorAt(0, this._white);
+      im.instanceColor.setUsage(THREE.DynamicDrawUsage);
+      this.scene.add(im);
+      this.meshes[key] = im;
+    }
+  }
+
+  // (Sprites werden bereits im Konstruktor gebaut — kein Modell-Laden nötig)
+  async loadModels() {}
 
   reset() {
     for (const e of this.enemies) e.alive = false;
@@ -291,6 +321,9 @@ export class EnemyManager {
   }
   setDifficulty(d) {
     this.diff = d;
+  }
+  displayName(type) {
+    return ENEMY_NAMES[type] || 'einem Gegner';
   }
 
   _rnd() {
@@ -529,48 +562,40 @@ export class EnemyManager {
       // Kontaktschaden am nächsten Spieler
       if (target) {
         const distToP = Math.hypot(target.position.x - e.x, target.position.z - e.z);
-        if (distToP < e.radius + target.radius + 0.2) target.takeDamage(e.dmg);
+        if (distToP < e.radius + target.radius + 0.2) target.takeDamage(e.dmg, e.type);
 
-        // ---- Boss-Fähigkeiten: telegrafierte AoE-Angriffe (Slam/Nova/Frontal) ----
+        // ---- Boss-Fähigkeiten: jeder Boss hat NUR seine eigenen (def.abilities) ----
         if (e.def.boss) {
-          // Spezial (seltener): ganze Map gefährlich, nur wenige sichere Zonen
-          e.special = (e.special || 9) - dt;
-          if (e.special <= 0) {
-            e.special = 12 + this._rnd() * 5;
-            const spots = [];
-            const n = 2 + (this._rnd() < 0.5 ? 0 : 1);
-            for (let i = 0; i < n; i++) {
-              const ref = players[Math.floor(this._rnd() * players.length)] || target;
-              const ang = this._rnd() * Math.PI * 2;
-              const dist = 4 + this._rnd() * 9;
-              const sx = ref.position.x + Math.cos(ang) * dist;
-              const sz = ref.position.z + Math.sin(ang) * dist;
-              spots.push({ x: sx, z: sz, r: 3.2 });
-              if (this.fx) this.fx.telegraphSafe(sx, sz, 3.2, 2.4, this.world.getHeight(sx, sz));
+          const ab = e.def.abilities || ['slam', 'nova', 'frontal', 'safe'];
+          // Spezial: sichere Zonen (nur wenn der Boss sie hat)
+          if (ab.includes('safe')) {
+            e.special = (e.special || 9) - dt;
+            if (e.special <= 0) {
+              e.special = 12 + this._rnd() * 5;
+              const dur = 3.2;
+              const spots = [];
+              const n = 2 + (this._rnd() < 0.5 ? 0 : 1);
+              for (let i = 0; i < n; i++) {
+                const ref = players[Math.floor(this._rnd() * players.length)] || target;
+                const ang = this._rnd() * Math.PI * 2;
+                const dist = 4 + this._rnd() * 8;
+                const sx = ref.position.x + Math.cos(ang) * dist;
+                const sz = ref.position.z + Math.sin(ang) * dist;
+                spots.push({ x: sx, z: sz, r: 3.6 });
+                if (this.fx) this.fx.telegraphSafe(sx, sz, 3.6, dur, this.world.getHeight(sx, sz));
+              }
+              this._aoes.push({ type: 'safe', spots, dmg: Math.round(e.dmg * 2.2), delay: dur, src: e.type });
+              if (this.onSafeZones) this.onSafeZones();
             }
-            this._aoes.push({ type: 'safe', spots, dmg: Math.round(e.dmg * 2.2), delay: 2.4 });
           }
-          e.atk = (e.atk || 2) - dt;
-          if (e.atk <= 0) {
-            e.atk = 2.6 + this._rnd() * 1.6;
-            e._atkType = ((e._atkType || 0) + 1) % 3;
-            if (e._atkType === 1) {
-              // Nova um den Boss (weg vom Boss laufen)
-              const r = 6.5;
-              this._aoes.push({ type: 'circle', x: e.x, z: e.z, r, dmg: Math.round(e.dmg * 1.3), delay: 1.25 });
-              if (this.fx) this.fx.telegraph(e.x, e.z, r, 1.25, e.y);
-            } else if (e._atkType === 2) {
-              // Frontaler Kegel auf einen Spieler (seitlich ausweichen)
-              let dx = target.position.x - e.x, dz = target.position.z - e.z;
-              const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
-              const range = 11;
-              this._aoes.push({ type: 'cone', x: e.x, z: e.z, dx, dz, range, half: 0.55, dmg: Math.round(e.dmg * 1.4), delay: 1.2 });
-              if (this.fx) this.fx.telegraphCone(e.x, e.z, dx, dz, range, 1.2, e.y);
-            } else {
-              // Einschlag auf die Position eines Spielers (rauslaufen)
-              const r = 3.8;
-              this._aoes.push({ type: 'circle', x: target.position.x, z: target.position.z, r, dmg: Math.round(e.dmg * 1.6), delay: 1.1 });
-              if (this.fx) this.fx.telegraph(target.position.x, target.position.z, r, 1.1, target.position.y);
+          // reguläre Angriffe zyklisch aus dem eigenen Set (ohne 'safe')
+          const cyc = e._cyc || (e._cyc = ab.filter((a) => a !== 'safe'));
+          if (cyc.length) {
+            e.atk = (e.atk || 2) - dt;
+            if (e.atk <= 0) {
+              e.atk = 2.6 + this._rnd() * 1.6;
+              e._ci = ((e._ci == null ? -1 : e._ci) + 1) % cyc.length;
+              this._bossAttack(e, cyc[e._ci], target);
             }
           }
         }
@@ -591,7 +616,7 @@ export class EnemyManager {
               if (Math.hypot(p.position.x - sp.x, p.position.z - sp.z) < sp.r) { safe = true; break; }
             }
             if (!safe) {
-              p.takeDamage(a.dmg);
+              p.takeDamage(a.dmg, a.src);
               if (this.fx) this.fx.explosion(p.position.x, p.position.z, 3, 0xff3020);
             }
           }
@@ -601,13 +626,13 @@ export class EnemyManager {
             if (!p.alive || p.dead) continue;
             const pdx = p.position.x - a.x, pdz = p.position.z - a.z;
             const d = Math.hypot(pdx, pdz);
-            if (d < a.range && d > 0.001 && (pdx / d) * a.dx + (pdz / d) * a.dz > Math.cos(a.half)) p.takeDamage(a.dmg);
+            if (d < a.range && d > 0.001 && (pdx / d) * a.dx + (pdz / d) * a.dz > Math.cos(a.half)) p.takeDamage(a.dmg, a.src);
           }
         } else {
           if (this.fx) this.fx.explosion(a.x, a.z, a.r, 0xff5a3a);
           for (const p of players) {
             if (!p.alive || p.dead) continue;
-            if (Math.hypot(p.position.x - a.x, p.position.z - a.z) < a.r) p.takeDamage(a.dmg);
+            if (Math.hypot(p.position.x - a.x, p.position.z - a.z) < a.r) p.takeDamage(a.dmg, a.src);
           }
         }
         a.done = true;
@@ -618,6 +643,26 @@ export class EnemyManager {
     this._render();
   }
 
+  // Einzelner Boss-Angriff (telegrafiert)
+  _bossAttack(e, kind, target) {
+    if (kind === 'nova') {
+      const r = 6.5;
+      this._aoes.push({ type: 'circle', x: e.x, z: e.z, r, dmg: Math.round(e.dmg * 1.3), delay: 1.25, src: e.type });
+      if (this.fx) this.fx.telegraph(e.x, e.z, r, 1.25, e.y);
+    } else if (kind === 'frontal') {
+      let dx = target.position.x - e.x, dz = target.position.z - e.z;
+      const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+      const range = 11;
+      this._aoes.push({ type: 'cone', x: e.x, z: e.z, dx, dz, range, half: 0.55, dmg: Math.round(e.dmg * 1.4), delay: 1.2, src: e.type });
+      if (this.fx) this.fx.telegraphCone(e.x, e.z, dx, dz, range, 1.2, e.y);
+    } else {
+      // slam: Einschlag auf Spielerposition
+      const r = 3.8;
+      this._aoes.push({ type: 'circle', x: target.position.x, z: target.position.z, r, dmg: Math.round(e.dmg * 1.6), delay: 1.1, src: e.type });
+      if (this.fx) this.fx.telegraph(target.position.x, target.position.z, r, 1.1, target.position.y);
+    }
+  }
+
   _render() {
     this._renderList(this.enemies, true);
   }
@@ -625,6 +670,9 @@ export class EnemyManager {
   _renderList(list, needAlive) {
     const counters = {};
     for (const key of ETYPE_KEYS) counters[key] = 0;
+    const _q = this._tmpQ.identity();
+    const _p = this._p || (this._p = { x: 0, y: 0, z: 0 });
+    const _s = this._sv || (this._sv = { x: 1, y: 1, z: 1 });
 
     for (const e of list) {
       if (needAlive && !e.alive) continue;
@@ -632,25 +680,22 @@ export class EnemyManager {
       const idx = counters[e.type];
       if (idx >= mesh.instanceMatrix.count) continue;
       const def = e.def;
-      const ph = this.elapsed * (def.fly ? 16 : 8) + e.phase;
+      // Sprite-Höhe in Welt-Einheiten; Füße auf dem Boden (Billboard verankert unten)
+      const sc = e.scale * 3.1;
       let y = e.y;
-      let pitch = 0;
-      let roll = 0;
-      let squash = 1;
-      if (def.fly) {
-        y += 1.5 + Math.sin(ph) * 0.25;
-        roll = Math.sin(ph * 0.5) * 0.16;
-      } else {
-        const b = Math.sin(ph);
-        y += Math.abs(b) * 0.1 * e.scale;
-        pitch = b * 0.06;
-        squash = 1 + Math.sin(ph * 2) * 0.03;
-      }
-      this._tmpE.set(pitch, Math.atan2(e._dx, e._dz), roll);
-      this._tmpQ.setFromEuler(this._tmpE);
-      this._tmpM.compose({ x: e.x, y, z: e.z }, this._tmpQ, { x: e.scale, y: e.scale * squash, z: e.scale });
+      if (def.fly) y += 1.4 + Math.sin(this.elapsed * 6 + e.phase) * 0.25; // Schweben
+      _p.x = e.x; _p.y = y; _p.z = e.z;
+      _s.x = sc; _s.y = sc; _s.z = sc;
+      this._tmpM.compose(_p, _q, _s); // nur Position+Skalierung; Billboard im Shader
       mesh.setMatrixAt(idx, this._tmpM);
       mesh.setColorAt(idx, e.flash > 0 ? this._flash : this._white);
+      // Lauf-/Flatter-Frame
+      const frame = Math.floor(this.elapsed * (def.fly ? 12 : 6) + e.phase) % SPRITE_FRAMES;
+      mesh.geometry.getAttribute('aFrame').setX(idx, frame);
+      // Blickrichtung: Bewegung auf die Kamera-Rechtsachse projizieren -> links/rechts spiegeln
+      const screenDir = e._dx * (this.camRightX ?? 1) + e._dz * (this.camRightZ ?? 0);
+      if (screenDir > 0.05) e._flip = 1; else if (screenDir < -0.05) e._flip = -1;
+      mesh.geometry.getAttribute('aFlip').setX(idx, e._flip || 1);
       counters[e.type] = idx + 1;
     }
 
@@ -659,6 +704,8 @@ export class EnemyManager {
       mesh.count = counters[key];
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.geometry.getAttribute('aFrame').needsUpdate = true;
+      mesh.geometry.getAttribute('aFlip').needsUpdate = true;
     }
   }
 

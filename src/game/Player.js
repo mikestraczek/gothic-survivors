@@ -103,6 +103,7 @@ export class Player {
     this.dodgeTimer = 0;
     this.dashTime = 0;
     this.rerolls = 3;
+    this.lastHitBy = null;
     this.group.position.copy(this.position);
   }
 
@@ -145,6 +146,10 @@ export class Player {
     this.runAction = find('Run', 'Running', 'run');
     this.walkAction = find('Walk', 'walk');
     this.current = null;
+    // YXZ -> rotation.x wirkt als Vorwärts-Neigung NACH der Drehung (yaw)
+    this.group.rotation.order = 'YXZ';
+    this._lean = 0;
+    this._bobT = 0;
     this._play(this.idleAction);
   }
 
@@ -155,12 +160,13 @@ export class Player {
     this.current = action;
   }
 
-  takeDamage(amount) {
+  takeDamage(amount, srcType) {
     if (this.dead || this.iframe > 0) return 0;
     const dmg = Math.max(1, Math.round(amount - this.armor));
     this.hp = Math.max(0, this.hp - dmg);
     this.iframe = 0.45;
     this.hitFlash = 0.2;
+    if (srcType) this.lastHitBy = srcType; // für „Gefallen durch …"
     if (this.hp <= 0) this.dead = true;
     return dmg;
   }
@@ -244,11 +250,20 @@ export class Player {
     this.world.resolve(this.position, this.radius);
     this.position.y = this.world.getHeight(this.position.x, this.position.z);
 
-    // Modell aktualisieren
-    this.group.position.copy(this.position);
+    // Modell aktualisieren — mit Lauf-Neigung & leichtem Auf-und-Ab
+    const dashing = this.dashTime > 0;
+    const curSpeed = dashing ? this.moveSpeed * 4.2 : this.moveSpeed;
+    const leanTarget = dashing ? 0.42 : this.moving ? 0.16 : 0;
+    this._lean += (leanTarget - this._lean) * Math.min(1, dt * 10);
+    this._bobT += dt * (this.moving ? curSpeed * 1.6 : 0);
+    const bob = this.moving ? Math.abs(Math.sin(this._bobT)) * 0.07 : 0;
+    this.group.position.set(this.position.x, this.position.y + bob, this.position.z);
     this.group.rotation.y = this.yaw + this.modelYawOffset;
+    this.group.rotation.x = this._lean;
 
-    // Animation
-    this._play(this.moving ? this.runAction || this.walkAction || this.idleAction : this.idleAction);
+    // Animation — Lauftempo an Geschwindigkeit koppeln (Beine passen zur Bewegung)
+    const run = this.runAction || this.walkAction || this.idleAction;
+    this._play(this.moving ? run : this.idleAction);
+    if (run && run.setEffectiveTimeScale) run.setEffectiveTimeScale(Math.max(0.9, Math.min(2.2, curSpeed / 6.5)));
   }
 }

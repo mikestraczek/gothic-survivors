@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { bumpTexture, groundBumpTexture } from './textures.js';
+import { propMaterial, spriteQuad, groundTexture } from './spriteart.js';
 
 // ---- Terrain-Höhe (deterministisch; variantenabhängig pro Karte) ----
 let _variant = 'valley';
@@ -38,10 +40,10 @@ const BARRIER_RADIUS = 138;
 export const THEMES = {
   valley: {
     name: 'Tal der Kolonie',
-    fog: 0x1a2030, fogD: 0.0052,
-    sky: [0x10131f, 0x1d2436, 0x2a2418],
-    hemiSky: 0x7888b0, hemiGround: 0x32301f, hemiI: 1.15,
-    ambient: 0x44506a, ambientI: 0.62, moonCol: 0xb8c4e0, moonI: 1.2,
+    fog: 0x121826, fogD: 0.0064,
+    sky: [0x0c0f18, 0x161c2c, 0x231f16],
+    hemiSky: 0x6a7aa4, hemiGround: 0x2a281a, hemiI: 1.05,
+    ambient: 0x3a4660, ambientI: 0.55, moonCol: 0xc0ccea, moonI: 1.25,
     grass: 0x3c4a2a, grass2: 0x2d3a22, dirt: 0x5a4a30, rock: 0x47433c,
     barrierA: 0x6a2fa0, barrierB: 0x2f7aa0,
     trunk: 0x3a2a1a, foliage: 0x24341c, rockMat: 0x575250, grassMat: 0x4a5a30, stone: 0x6b6358,
@@ -90,6 +92,45 @@ export class World {
     this._buildBarrier();
     this._buildCamp();
     this._buildVegetation();
+    this._buildGraveyard();
+  }
+
+  // Pixel-Billboard-Feld (Bäume/Felsen/Grabsteine), Füße am Boden, zufällige Spiegelung/Größe.
+  _propField(key, count, smin, smax, dmin, dmax, colliderR, rnd) {
+    const geo = spriteQuad(count);
+    const mat = propMaterial(key);
+    const im = new THREE.InstancedMesh(geo, mat, count);
+    im.frustumCulled = false;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+    const aFrame = geo.getAttribute('aFrame'), aFlip = geo.getAttribute('aFlip');
+    let placed = 0;
+    for (let i = 0; i < count; i++) {
+      const a = rnd() * Math.PI * 2;
+      const dist = dmin + rnd() * (dmax - dmin);
+      const x = Math.cos(a) * dist, z = Math.sin(a) * dist;
+      if (Math.hypot(x, z) > BARRIER_RADIUS - 6) continue;
+      const y = terrainHeight(x, z);
+      const sc = smin + rnd() * (smax - smin);
+      p.set(x, y, z); s.set(sc, sc, sc); m.compose(p, q, s);
+      im.setMatrixAt(placed, m);
+      aFrame.setX(placed, 0);
+      aFlip.setX(placed, rnd() < 0.5 ? -1 : 1);
+      if (colliderR) this.colliders.push({ x, z, r: colliderR });
+      placed++;
+    }
+    im.count = placed;
+    aFrame.needsUpdate = true;
+    aFlip.needsUpdate = true;
+    this.group.add(im);
+    return im;
+  }
+
+  // Gotischer Friedhof: Grabsteine + Steinkreuze als Pixel-Billboards.
+  _buildGraveyard() {
+    let seed = 1337;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    this._propField('grave', 60, 1.6, 2.4, 16, 112, 0.5, rnd);
+    this._propField('cross', 16, 2.0, 3.0, 20, 108, 0.5, rnd);
   }
 
   // Karte wechseln: alte Welt entsorgen und mit neuem Theme neu aufbauen
@@ -239,9 +280,10 @@ export class World {
 
     const mat = new THREE.MeshStandardMaterial({
       vertexColors: true,
-      roughness: 0.95,
+      roughness: 1.0,
       metalness: 0.0,
       flatShading: false,
+      map: groundTexture(), // Pixel-Körnung passend zu den Sprites
     });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
@@ -326,7 +368,7 @@ export class World {
 
   // Tal: Stein-Ruinen & Monolithen
   _ruinFeatures() {
-    const stone = new THREE.MeshStandardMaterial({ color: this.theme.stone, roughness: 0.95 });
+    const stone = new THREE.MeshStandardMaterial({ color: this.theme.stone, roughness: 1.0, bumpMap: bumpTexture(), bumpScale: 0.5 });
     const ruins = [
       [-22, 10, 0.5, 6], [18, 16, 1.2, 5], [-30, -14, 0.3, 7], [26, -10, 2.0, 6],
       [8, -28, 0.8, 5], [-14, 30, 1.6, 5], [34, 20, 0.4, 6], [-36, 22, 1.1, 5],
@@ -352,8 +394,8 @@ export class World {
 
   // Sumpf: Wassertümpel, Holzpfähle, versunkene Steinblöcke
   _bogFeatures() {
-    const wood = new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 1 });
-    const stone = new THREE.MeshStandardMaterial({ color: this.theme.stone, roughness: 1 });
+    const wood = new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 1, bumpMap: bumpTexture(), bumpScale: 0.4 });
+    const stone = new THREE.MeshStandardMaterial({ color: this.theme.stone, roughness: 1, bumpMap: bumpTexture(), bumpScale: 0.5 });
     const water = new THREE.MeshStandardMaterial({ color: this.theme.waterColor || 0x16321f, roughness: 0.2, metalness: 0.35, transparent: true, opacity: 0.82 });
 
     // Wassertümpel (flache Scheiben knapp über dem Boden)
@@ -439,79 +481,14 @@ export class World {
     };
 
     const dead = this.theme.vegStyle === 'dead';
-    const treeCount = this.theme.treeCount;
-    // Tal = breite Nadelbäume; Sumpf = hohe, kahle, dünne Bäume mit dunkler Krone
-    const trunkGeo = dead ? new THREE.CylinderGeometry(0.18, 0.4, 9, 6) : new THREE.CylinderGeometry(0.4, 0.6, 6, 6);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: this.theme.trunk, roughness: 1 });
-    const folGeo = dead ? new THREE.ConeGeometry(1.5, 2.6, 6) : new THREE.ConeGeometry(3, 8, 7);
-    const folMat = new THREE.MeshStandardMaterial({ color: this.theme.foliage, roughness: 1 });
-    const trunkY = dead ? 4.5 : 3;
-    const folY = dead ? 8.4 : 9;
-
-    const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCount);
-    const foliage = new THREE.InstancedMesh(folGeo, folMat, treeCount);
-    trunks.castShadow = true;
-    foliage.castShadow = true;
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const s = new THREE.Vector3();
     const p = new THREE.Vector3();
 
-    let placed = 0;
-    let tries = 0;
-    while (placed < treeCount && tries < treeCount * 8) {
-      tries++;
-      const a = rnd() * Math.PI * 2;
-      const dist = 32 + rnd() * 95;
-      const x = Math.cos(a) * dist;
-      const z = Math.sin(a) * dist;
-      if (Math.hypot(x, z) > BARRIER_RADIUS - 8) continue;
-      const y = terrainHeight(x, z);
-      const sc = 0.7 + rnd() * 0.9;
-
-      p.set(x, y + trunkY * sc, z);
-      q.identity();
-      s.set(sc, sc, sc);
-      m.compose(p, q, s);
-      trunks.setMatrixAt(placed, m);
-
-      p.set(x, y + folY * sc, z);
-      m.compose(p, q, s);
-      foliage.setMatrixAt(placed, m);
-
-      this.colliders.push({ x, z, r: 0.7 * sc });
-      placed++;
-    }
-    trunks.count = placed;
-    foliage.count = placed;
-    this.group.add(trunks, foliage);
-
-    // Felsen
-    const rockCount = this.theme.rockCount;
-    const rockGeo = new THREE.DodecahedronGeometry(1.4, 0);
-    const rockMat = new THREE.MeshStandardMaterial({ color: this.theme.rockMat, roughness: 1, flatShading: true });
-    const rocks = new THREE.InstancedMesh(rockGeo, rockMat, rockCount);
-    rocks.castShadow = true;
-    rocks.receiveShadow = true;
-    let rp = 0;
-    for (let i = 0; i < rockCount; i++) {
-      const a = rnd() * Math.PI * 2;
-      const dist = 30 + rnd() * 100;
-      const x = Math.cos(a) * dist;
-      const z = Math.sin(a) * dist;
-      if (Math.hypot(x, z) > BARRIER_RADIUS - 5) continue;
-      const y = terrainHeight(x, z);
-      const sc = 0.6 + rnd() * 1.8;
-      p.set(x, y + sc * 0.4, z);
-      q.setFromEuler(new THREE.Euler(rnd() * 3, rnd() * 6, rnd() * 3));
-      s.set(sc, sc * 0.8, sc);
-      m.compose(p, q, s);
-      rocks.setMatrixAt(rp, m);
-      if (sc > 1.1) this.colliders.push({ x, z, r: sc });
-      rp++;
-    }
-    rocks.count = rp;
-    this.group.add(rocks);
+    // Bäume & Felsen als Pixel-Billboards (HD-2D, passend zu den Sprites)
+    this._propField(dead ? 'deadtree' : 'pine', this.theme.treeCount, dead ? 4.5 : 6.0, dead ? 7.5 : 9.5, 30, 127, 0.8, rnd);
+    this._propField('rock', this.theme.rockCount, 1.6, 3.4, 28, 130, 0.9, rnd);
 
     // Grasbüschel / Schilf (Billboards, instanziert, kein Schatten)
     const grassCount = this.theme.grassCount;

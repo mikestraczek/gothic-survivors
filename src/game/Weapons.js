@@ -141,9 +141,11 @@ export class Weapons {
     this._cloudMat = new THREE.MeshStandardMaterial({ color: 0x6abf3a, emissive: 0x2a6a18, emissiveIntensity: 1.0, transparent: true, opacity: 0.38, depthWrite: false });
 
     // Weihrauch-Aura
-    this._holyMat = new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+    // depthTest:false -> die Weihrauch-Aura bleibt auf Hügeln immer sichtbar (kein Clipping ins Gelände)
+    this._holyMat = new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending });
     this.holyRing = new THREE.Mesh(new THREE.RingGeometry(0.5, 1.0, 40), this._holyMat);
     this.holyRing.rotation.x = -Math.PI / 2;
+    this.holyRing.renderOrder = 3;
     this.holyRing.visible = false;
     this.group.add(this.holyRing);
   }

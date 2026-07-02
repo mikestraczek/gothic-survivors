@@ -129,7 +129,10 @@ export class Effects {
     e.mesh.rotation.x = -Math.PI / 2;
     e.dur = 0.4;
     e.maxR = maxR;
-    e.mesh.position.set(x, 0.35, z);
+    const gy = this.heightAt ? this.heightAt(x, z) : 0; // Geländehöhe -> kein Versinken in Hügeln
+    e.mesh.position.set(x, gy + 0.2, z);
+    e.mesh.material.depthTest = false; // immer über dem Boden sichtbar (auch auf Hügeln)
+    e.mesh.renderOrder = 4;
     e.mesh.scale.setScalar(maxR * 0.25);
     return e;
   }
@@ -141,7 +144,7 @@ export class Effects {
     e.dur = 0.28;
     e.maxR = r;
     e.spin = (Math.random() > 0.5 ? 1 : -1) * 9;
-    e.mesh.position.set(x, 0.9, z);
+    e.mesh.position.set(x, (this.heightAt ? this.heightAt(x, z) : 0) + 0.9, z);
     e.mesh.scale.setScalar(r);
     return e;
   }
@@ -154,7 +157,7 @@ export class Effects {
     const e = this._getFx('boom', this.boomGeo, 0xfff2c0);
     e.dur = 0.42;
     e.maxR = r;
-    e.mesh.position.set(x, 0.9, z);
+    e.mesh.position.set(x, (this.heightAt ? this.heightAt(x, z) : 0) + 0.9, z);
     e.mesh.scale.setScalar(r * 0.3);
     this.ring(x, z, r * 1.4, color);
     this.ring(x, z, r * 0.8, 0xffffff);
@@ -194,13 +197,13 @@ export class Effects {
     const pos = new Float32Array(n * 3);
     const col = new Float32Array(n * 3);
     const cf = new THREE.Color(fill), cr = new THREE.Color(rim);
-    pos[0] = cx; pos[1] = h(cx, cz) + 0.06; pos[2] = cz;
+    pos[0] = cx; pos[1] = h(cx, cz) + 0.12; pos[2] = cz;
     col[0] = cf.r; col[1] = cf.g; col[2] = cf.b;
     for (let i = 0; i <= segs; i++) {
       const a = a0 + (a1 - a0) * (i / segs);
       const vx = cx + Math.cos(a) * r, vz = cz + Math.sin(a) * r;
       const o = (i + 1) * 3;
-      pos[o] = vx; pos[o + 1] = h(vx, vz) + 0.06; pos[o + 2] = vz;
+      pos[o] = vx; pos[o + 1] = h(vx, vz) + 0.12; pos[o + 2] = vz;
       col[o] = cr.r; col[o + 1] = cr.g; col[o + 2] = cr.b;
     }
     const idx = [];
@@ -209,9 +212,10 @@ export class Effects {
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     geo.setIndex(idx);
-    const mat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+    // depthTest:false -> Warn-/Safe-Zonen sind immer sichtbar, auch auf Hügeln (werden nicht vom Gelände verdeckt)
+    const mat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, depthTest: false, side: THREE.DoubleSide });
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.renderOrder = 2;
+    mesh.renderOrder = 3;
     this.group.add(mesh);
     this.zones.push({ mesh, t: 0, dur });
   }

@@ -39,6 +39,7 @@ export class Player {
     this.iframe = 0;
     this.hitFlash = 0;
     this.rooted = 0; // Festgewurzelt (Boss-Fähigkeit): blockt Bewegung, per Tastenhämmern lösbar
+    this.blessing = 0; // Schrein-Segen: Restzeit des Schadens-Buffs
     this.moving = false;
     this.passivesTaken = new Set(); // für Waffen-Verschmelzungen
     this.passiveCounts = {}; // id -> Anzahl (für HUD)
@@ -53,6 +54,9 @@ export class Player {
     this._mvx = 0;
     this._mvz = 1;
     this.rerolls = 3; // Neuwürfe pro Run (Game setzt sie inkl. Meta)
+    this.banishes = 2; // Verbannen pro Run (Level-Up-Karten dauerhaft entfernen)
+    this.banished = new Set(); // verbannte Karten-Schlüssel (bid)
+    this.lockedWeapons = new Set(); // per Achievements freischaltbare Waffen (Game setzt sie)
 
     // ---- glTF-Modell ----
     this.group = hero.group;
@@ -104,12 +108,15 @@ export class Player {
     this.iframe = 0;
     this.hitFlash = 0;
     this.rooted = 0;
+    this.blessing = 0;
     this.passivesTaken.clear();
     this.passiveCounts = {};
     this.dodgeCharges = this.dodgeMax;
     this.dodgeTimer = 0;
     this.dashTime = 0;
     this.rerolls = 3;
+    this.banishes = 2;
+    this.banished.clear();
     this.lastHitBy = null;
     this.group.position.copy(this.position);
   }
@@ -131,6 +138,7 @@ export class Player {
       cooldownMult: this.cooldownMult, projSpeedMult: this.projSpeedMult, pickupRadius: this.pickupRadius,
       armor: this.armor, amount: this.amount, hpRegen: this.hpRegen, goldMult: this.goldMult,
       passives: [...this.passivesTaken], passiveCounts: { ...this.passiveCounts }, rerolls: this.rerolls,
+      banishes: this.banishes, banished: [...this.banished],
     };
   }
 
@@ -144,6 +152,8 @@ export class Player {
     this.passivesTaken = new Set(d.passives || []);
     this.passiveCounts = { ...(d.passiveCounts || {}) };
     if (d.rerolls != null) this.rerolls = d.rerolls;
+    if (d.banishes != null) this.banishes = d.banishes;
+    this.banished = new Set(d.banished || []);
   }
 
   _setupAnims() {

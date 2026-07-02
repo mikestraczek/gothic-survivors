@@ -2,7 +2,7 @@
 <html lang="de">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Gothic Survivors — Im Bann der Barriere</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="/src/style.css" />
@@ -11,8 +11,12 @@
     <div id="app">
       <canvas id="game-canvas"></canvas>
 
-      <!-- Ladebildschirm -->
-      <div id="loading">DIE KOLONIE ERWACHT…</div>
+      <!-- Ladebildschirm mit echtem Fortschritt -->
+      <div id="loading">
+        <div class="loading-title">DIE KOLONIE ERWACHT…</div>
+        <div class="loading-bar"><div id="loading-fill"></div></div>
+        <div id="loading-pct" class="loading-pct">0%</div>
+      </div>
 
       <!-- Pflicht-Namenseingabe (erster Screen) -->
       <div id="name-screen" class="overlay hidden">
@@ -40,8 +44,10 @@
             <button id="start-button">Neuer Run</button>
             <button id="online-button" class="secondary">Online-Koop</button>
             <button id="leaderboard-button" class="secondary">🏆 Bestenliste</button>
+            <button id="achievements-button" class="secondary">🎖 Erfolge</button>
             <button id="shop-button" class="secondary">Halle der Erzbarone</button>
             <button id="combos-button" class="secondary">Kombinationen</button>
+            <button id="settings-button" class="secondary">⚙ Optionen</button>
           </div>
           <div class="controls-hint">
             <h3>So funktioniert's</h3>
@@ -68,6 +74,9 @@
       <div id="map-screen" class="overlay hidden">
         <div class="start-inner">
           <h1 class="game-title" style="font-size: 48px">LEVEL WÄHLEN</h1>
+          <div class="sel-label">Held</div>
+          <div id="map-heroes" class="sel-row"></div>
+          <p id="map-hero-desc" class="hero-desc"></p>
           <div class="sel-label">Karte</div>
           <div id="map-maps" class="sel-row"></div>
           <div class="sel-label">Schwierigkeit</div>
@@ -126,6 +135,9 @@
               <div class="sel-label">Schwierigkeit</div>
               <div id="lobby-diffs" class="sel-row"></div>
             </div>
+            <div class="sel-label">Dein Held</div>
+            <div id="lobby-heroes" class="sel-row"></div>
+            <p id="lobby-hero-desc" class="hero-desc"></p>
 
             <div id="lobby-status">…</div>
             <div class="lobby-row lobby-actions">
@@ -142,6 +154,12 @@
 
       <!-- HUD -->
       <div id="hud" class="hidden"></div>
+
+      <!-- Touch-Steuerung (nur auf Touch-Geräten sichtbar) -->
+      <div id="touch-ui" class="hidden">
+        <div id="joy-base"><div id="joy-knob"></div></div>
+        <button id="touch-dodge" aria-label="Ausweichen">💨</button>
+      </div>
 
       <!-- Cinematisches Intro beim Run-Start -->
       <div id="intro" class="hidden">
@@ -172,6 +190,60 @@
         </div>
       </div>
 
+      <!-- Erfolge -->
+      <div id="achievements-screen" class="overlay hidden">
+        <div class="start-inner ach-inner">
+          <h1 class="game-title" style="font-size: 44px">🎖 ERFOLGE</h1>
+          <p class="lvl-sub">Erfolge schalten Helden, Waffen und Karten frei.</p>
+          <div id="ach-list"></div>
+          <div class="menu-buttons">
+            <button id="ach-back" class="secondary">Zurück</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Optionen -->
+      <div id="settings-screen" class="overlay hidden">
+        <div class="start-inner settings-inner">
+          <h1 class="game-title" style="font-size: 44px">⚙ OPTIONEN</h1>
+          <div class="settings-list">
+            <div class="setting-row">
+              <label for="set-music">🎵 Musik</label>
+              <input type="range" id="set-music" min="0" max="100" step="5" />
+              <span class="setting-val" id="set-music-val">50%</span>
+            </div>
+            <div class="setting-row">
+              <label for="set-sfx">🔊 Effekte</label>
+              <input type="range" id="set-sfx" min="0" max="100" step="5" />
+              <span class="setting-val" id="set-sfx-val">80%</span>
+            </div>
+            <div class="setting-row toggle">
+              <label for="set-shake">📳 Screen Shake</label>
+              <input type="checkbox" id="set-shake" />
+            </div>
+            <div class="setting-row toggle">
+              <label for="set-dmg">🔢 Schadenszahlen</label>
+              <input type="checkbox" id="set-dmg" />
+            </div>
+            <div class="setting-row toggle">
+              <label for="set-shadows">🌑 Schatten</label>
+              <input type="checkbox" id="set-shadows" />
+            </div>
+            <div class="setting-row toggle">
+              <label for="set-bloom">✨ Glühen (Bloom)</label>
+              <input type="checkbox" id="set-bloom" />
+            </div>
+            <div class="setting-row toggle">
+              <label for="set-pixel">🕹 Retro-Pixel-Filter</label>
+              <input type="checkbox" id="set-pixel" />
+            </div>
+          </div>
+          <div class="menu-buttons">
+            <button id="settings-back" class="secondary">Zurück</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Bestenliste -->
       <div id="leaderboard-screen" class="overlay hidden">
         <div class="start-inner lb-inner">
@@ -194,6 +266,7 @@
           <div class="menu-buttons">
             <button id="pause-resume">Weiter</button>
             <button id="pause-combos" class="secondary">Kombinationen</button>
+            <button id="pause-settings" class="secondary">⚙ Optionen</button>
             <button id="pause-save" class="secondary">Speichern &amp; Beenden</button>
             <button id="pause-menu" class="secondary">Hauptmenü</button>
             <button id="pause-leave" class="secondary hidden">Spiel verlassen</button>

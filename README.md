@@ -13,20 +13,35 @@ nachgebaute Tal des Alten Lagers mit der ikonischen Energie-Barriere.
 
 **Früh:** 🦅 Scavenger · 🪰 Blutfliege (fliegt) · 🐺 Schattenwolf · 🦫 Molerat
 · 💀 Skelett · 🧟 Ghul. **Spät (zäher, mehr XP):** 🗿 Wasserspeier (fliegt) ·
-😈 Dämon · 🪨 Troll. **Bosse alle ~100 s, rotierend:** Schattenläufer,
-Knochenkönig, Erzdämon (mit Ankündigung, lassen massig XP & ein Item fallen).
-Eigens gebaute, korrekt ausgerichtete Gothic-Kreaturen, für die Horde
-**instanziert** (hunderte gleichzeitig). Sie kollidieren miteinander **und** mit
-Objekten (Ruinen, Steine, Bäume, Felsen).
+😈 Dämon · 🪨 Troll.
+
+**Verhaltens-Archetypen:** 🧙 **Schwarzmagier** hält Abstand und feuert
+dodgebare Kugeln · 👹 **Höllenbrut** rennt an, schwillt an (Telegraph) und
+**detoniert** — vorher töten verhindert die Explosion · 🧟 **Moderleib**
+zerfällt beim Tod in zwei **Modergänger**.
+
+**Eliten:** Selten spawnen verstärkte Varianten mit Affix — *Windgepeitscht*
+(schnell, eisblau), *Gepanzert* (Schild absorbiert Schaden, gold), *Explosiv*
+(telegrafierte Todes-Explosion, glutorange). Eliten geben 4× XP/Erz und lassen
+eine **🎁 Truhe** fallen (Waffen-Stufe + Erz).
+
+**Bosse:** Schattenläufer (Nahkampf), Knochenkönig (Bullet-Hell/Safe-Zonen),
+Erzdämon (Allrounder) — mit Ankündigung, telegrafierten Angriffen und
+**Enrage-Phasen bei 66 %/33 % HP** (schneller, härter, eine Fähigkeit mehr).
+Alle Charaktere sind Billboard-Pixel-Sprites, für die Horde **instanziert**
+(hunderte gleichzeitig); sie kollidieren miteinander **und** mit Objekten.
 
 **XP-Edelsteine** in 6 Stufen — je stärker der Gegner, desto wertvoller (und
 größer/farbiger) der Stein: hellgrün → grün → blau → violett → gold → purpurrot.
 
-## Welt-Items (beim Drüberlaufen)
+## Welt-Items & Run-Events (beim Drüberlaufen)
 
 💚 **Heiltrank** (Leben auffüllen) · 🔵 **Seelenruf** (zieht alle Edelsteine an)
-· 🔴 **Zorn der Barriere** (trifft alle Feinde) · 🟡 **Erzader** (Erz finden).
-Erscheinen regelmäßig in der Welt und fallen bei Boss-Kills.
+· 🔴 **Zorn der Barriere** (trifft alle Feinde) · 🟡 **Erzader** (Erz finden) ·
+🎁 **Truhe** (Elite-Beute: zufällige Waffe +1 Stufe & Erz) · 🕯 **Schrein der
+Barriere** (erscheint nach jedem besiegten Anführer: volle Heilung + 15 s
+**+40 % Schaden**). Items erscheinen regelmäßig in der Welt und fallen bei
+Boss-Kills.
 
 ---
 
@@ -79,60 +94,92 @@ Ggf. in der Firewall die Ports **5199** und **8080** freigeben.
 
 ## Ziel & Level-Aufbau
 
-Jedes Level besteht aus **3 Phasen** (je ~55 s, steigende Intensität). Nach der
-letzten Phase erscheint der **finale Boss** — besiegst du ihn, ist das **Level
-abgeschlossen** (Sieg-Bildschirm). Es gibt **2 Karten** (Tal der Kolonie,
-Sumpf der Bruderschaft) mit jeweils **2 Schwierigkeitsgraden** (Normal/Schwer).
-Karte & Schwierigkeit wählst du vor dem Start (im Koop wählt der Host in der
-Lobby). Eine **Phasen-Anzeige** im HUD zeigt den Fortschritt.
+Jedes Level besteht aus **3 Phasen** — pro Phase gilt es eine **Kill-Quota** zu
+erfüllen (55/80/110), dann erscheint der **Anführer** (Mini-Boss) der Phase.
+Nach der dritten Phase kommt der **finale Boss** der Karte — besiegst du ihn,
+ist das **Level abgeschlossen** (danach optional **Endlos-Modus**). Es gibt
+**2 Karten** (Tal der Kolonie; Sumpf der Bruderschaft — per Achievement
+freischaltbar) mit jeweils **2 Schwierigkeitsgraden** (Normal/Schwer). Held,
+Karte & Schwierigkeit wählst du vor dem Start (im Koop wählt der Host Karte &
+Schwierigkeit, jeder Spieler seinen eigenen Helden).
+
+## Helden (Charakterauswahl)
+
+⚔️ **Der Söldner** (ausgewogen, startet mit Klingenwirbel) · 🏹 **Die Jägerin**
+(+20 % Schaden, +10 % Tempo, −25 Leben; Schattendolche) · ✝️ **Der Templer**
+(+40 Leben, +2 Rüstung, +Regen, −8 % Tempo; Weihrauch) · 🌒 **Der Schatten**
+(+1 Ausweich-Ladung, +8 % Tempo, −15 Leben; Knochenspeer). Jägerin, Templer und
+Schatten werden über **Achievements** freigeschaltet.
 
 ## Spielprinzip
 
-- **Bewegung mit WASD** — mehr nicht. **Angriffe laufen automatisch.**
+- **Bewegung mit WASD** (bzw. virtueller Joystick auf Touch-Geräten) — mehr
+  nicht. **Angriffe laufen automatisch.** **Leertaste** = Ausweichen (i-Frames).
 - Erlege Feinde → sie lassen **Edelsteine** (Erfahrung) fallen → einsammeln.
-- Bei jedem **Stufenaufstieg** wählst du aus 3 zufälligen **Upgrades**
-  (neue Waffe, Waffe verbessern oder passiver Bonus).
-- Die Schwierigkeit **steigt mit der Zeit**: mehr und stärkere Gegner, alle
-  ~2 Minuten ein **Boss**.
+- Bei jedem **Stufenaufstieg** wählst du aus 3 zufälligen **Upgrades** mit
+  sichtbaren **Seltenheitsstufen**; dazu gibt es **Neuwürfe** (🎲) und
+  **Verbannen** (🚫, entfernt eine Karte für den Rest des Runs).
+- Die Schwierigkeit **steigt mit der Zeit**: mehr, stärkere und
+  vielfältigere Gegner, Eliten und Boss-Enrage-Phasen.
 - Beim Tod endet der Run. Das gesammelte **Erz** wird gebucht und bleibt
   erhalten — gib es in der **Halle der Erzbarone** für permanente
-  Verbesserungen aus (Roguelite-Meta-Progression, im Browser gespeichert).
+  Verbesserungen aus. **Achievements** schalten Helden, Waffen und die
+  zweite Karte frei (alles im Browser gespeichert).
 
-| Taste        | Aktion                  |
-| ------------ | ----------------------- |
-| **W A S D**  | Bewegen                 |
-| **Maus**     | Menüs/Auswahl           |
-| **Mausrad**  | Kamera-Zoom             |
+| Taste        | Aktion                                  |
+| ------------ | --------------------------------------- |
+| **W A S D**  | Bewegen                                 |
+| **Leertaste**| Ausweichen (2 Ladungen)                 |
+| **E**        | Mitspieler wiederbeleben (Koop)         |
+| **Q/Klick**  | Ping · **1–4** Emotes (Koop)            |
+| **M**        | Ton an/aus · **Esc** Pause              |
+| **Mausrad**  | Kamera-Zoom                             |
+| **Touch**    | Links: Joystick · Rechts/💨: Ausweichen |
 
 ---
 
-## Waffen (automatisch, je 8 Stufen)
+## Waffen (automatisch, je 5 Stufen, max. 4 Slots)
 
 | Waffe | Wirkung |
 | ----- | ------- |
-| 🌀 **Klingenwirbel** | Dauerhaft rotierende Klingen um dich (Startwaffe) |
+| 🌀 **Klingenwirbel** | Dauerhaft rotierende Klingen um dich (Startwaffe des Söldners) |
 | 🪓 **Wurfaxt** | Wirbelnde Äxte, durchbohren mehrere Gegner |
 | 🔥 **Feuerball** | Fliegt zum nächsten Feind, explodiert mit Flächenschaden |
-| ✦ **Wächtergeister** | Kreisen um dich, verletzen bei Berührung |
+| ✦ **Wächtergeister** | Kreisen um dich, verletzen bei Berührung (Unlock) |
 | ⚡ **Blitzschlag** | Schlägt zufällige Feinde in Reichweite mit Wucht |
 | ❄️ **Frostbann** | Frostwelle: Schaden + verlangsamt Feinde |
-| 🦴 **Knochenspeer** | Schneller Speer, durchbohrt viele Feinde |
-| ☠️ **Giftwolke** | Hinterlässt ätzende Wolken (Schaden über Zeit) |
+| 🦴 **Knochenspeer** | Schneller Bumerang-Speer, durchbohrt viele Feinde |
+| ☠️ **Giftwolke** | Hinterlässt ätzende Wolken (Schaden über Zeit, Unlock) |
 | ✝️ **Weihrauch** | Heilige Aura schadet nahen Feinden ständig |
+| 🗡️ **Schattendolche** | Fächer schneller, durchbohrender Dolche |
+| ☄️ **Meteor** | Einschläge mit Flächenschaden (Unlock) |
 
-**Verschmelzungen:** Eine Waffe auf Maximalstufe + das passende passive Upgrade
-schaltet beim Level-Up eine **✨ Verschmelzung** frei (z. B. Klingenwirbel +
-Stärke → *Klingensturm*) — deutlich stärkere, evolvierte Form.
+**Verschmelzungen (12):** Zwei Rezept-Formen — **zwei Waffen** (beide auf
+Maximalstufe; die zweite wird verbraucht, ein Slot wird frei) oder **Waffe +
+Passiv** (Maximalstufe + Passiv 3× genommen; kein Slot frei, Passiv bleibt).
+Beispiele: Klingenwirbel + Wurfaxt → *Klingensturm*, Wurfaxt + 3× Stärke →
+*Urteil des Henkers*. Die Übersicht aller Rezepte gibt es im Menü unter
+**Kombinationen**.
 
 ## Passive Boni (Level-Up)
 
 Stärke (+Schaden), Flinkheit (+Tempo), Vitalität (+Leben), Panzerung, Hast
 (−Abklingzeit), Wucht (+Wirkungsbereich), Gier (+Aufnahmeradius), Regeneration,
-Projektiltempo, Vielzahl (+1 Projektil).
+Projektiltempo, Windschritt (Ausweichen), Vielzahl (+1 Projektil, rar).
 
-## Meta-Upgrades (permanent, Erz)
+## Meta-Progression (permanent)
 
-Zähigkeit, Schnelligkeit, Macht, Panzerung, Hast, Magnetismus, Lebenskraft, Gier.
+**Halle der Erzbarone** (Erz): Zähigkeit, Schnelligkeit, Macht, Panzerung,
+Hast, Magnetismus, Lebenskraft, Gier, Würfelglück. Dazu **7 Achievements**,
+die Helden, Waffen und die Sumpf-Karte freischalten (🎖 Erfolge im Menü).
+
+## Optionen & Komfort
+
+⚙ **Optionen** (Menü & Pause): Musik-/Effekt-Lautstärke, Screen Shake,
+Schadenszahlen, Schatten, Bloom, Retro-Pixel-Filter — persistent gespeichert.
+Prozedurale **Musik** (Karten-Themes + Boss-Theme) und SFX laufen komplett
+über die Web Audio API (keine Audiodateien). **Touch-Support**: virtueller
+Joystick + Ausweich-Button, das Spiel läuft auch auf Tablets/Smartphones.
 
 ---
 
@@ -145,28 +192,33 @@ Look: PBR, Echtzeit-Schatten, **Bloom** + **ACES-Tone-Mapping**, mitlaufender
 Lichtkreis um den Helden.
 
 ```
-public/models/Soldier.glb   # animiertes Helden-Modell (three.js-Beispiel, CC)
+public/models/Soldier.glb   # Helden-Modell (meshopt-komprimiert, ~0,55 MB)
+public/sprites/             # Pixel-Art-Sprites (0x72 Dungeon Tileset II, CC0)
 src/
   main.js
   style.css
   game/
-    Game.js            # Orchestrierung: Loop, Run-/Menü-/Shop-Status, Bloom
-    World.js           # Terrain, Barriere, Lager-Kulisse, Vegetation, Licht
-    Assets.js          # glTF-Loader (Held + Animationen)
-    Player.js          # Held: Modell, Animation, Roguelite-Stats, Bewegung
-    SurvivorsCamera.js # Top-Down-Verfolgerkamera
-    Weapons.js         # 9 automatische Waffen + Projektile + Verschmelzungen
-    Effects.js         # Funken/Slashes/Explosionen/Blitze (Pool, additiv + Bloom)
-    EnemyManager.js    # Gothic-Kreaturen (instanziert), Kollision, Spawner, Bosse
-    PickupManager.js   # Welt-Items (Heilung/Magnet/Nova/Erz)
+    Game.js            # Orchestrierung: Loop, Run-/Menü-/Shop-Status, Netcode
+    World.js           # Terrain, Barriere, Kulisse, Vegetation, Licht, Wetter
+    Assets.js          # glTF-Loader (meshopt) + Ladefortschritt
+    Player.js          # Held: Stats, Bewegung, Dodge, Root, Segen
+    Heroes.js          # Spielbare Helden (Startwaffe, Stat-Twist, Tint)
+    SurvivorsCamera.js # Top-Down-Verfolgerkamera + Trauma-Screen-Shake
+    Weapons.js         # 11 automatische Waffen + Projektile + Verschmelzungen
+    Effects.js         # Funken/Slashes/Explosionen/Blitze/Schadenszahlen (Pools)
+    EnemyManager.js    # Gegner (instanziert), Archetypen, Eliten, Bosse+Phasen
+    PickupManager.js   # Welt-Items (Heilung/Magnet/Nova/Erz/Truhe/Schrein)
     GemManager.js      # XP-Edelsteine (instanziert) + Magnet
-    Upgrades.js        # Level-Up-Auswahl + Verschmelzungen
-    Meta.js            # permanente Progression (localStorage) + Shop
-    HUD.js             # XP/Timer/Leben/Waffen/Kills
-    Input.js           # Tastatur/Maus
+    Upgrades.js        # Level-Up-Auswahl (Rarity/Banish) + Verschmelzungen
+    Meta.js            # permanente Progression + Achievements/Unlocks + Shop
+    Settings.js        # persistierte Optionen (Audio/Grafik/Komfort)
+    Audio.js           # prozedurale SFX + Musik-Engine (Web Audio)
+    HUD.js             # XP/Timer/Leben/Waffen/Kills/Minimap/DPS
+    Input.js           # Tastatur/Maus + Touch (virtueller Joystick)
+    spriteart.js       # Sprite-Strips + prozedurale Prop-Billboards
   net/
     Net.js             # WebSocket-Client (Lobby + Snapshot/Input)
-server/index.js        # Relay-Server (Lobby-Räume, npm run server)
+server/index.js        # Relay-Server + Score-API (npm run server)
 scripts/smoke.mjs      # Headless-Test (npm run smoke; benötigt laufende Preview)
 ```
 
@@ -183,13 +235,11 @@ Gegner-Spawn, automatische Waffen, Level-Up-Auswahl, keine Render-/JS-Fehler.
 
 ## Roadmap
 
-- Mehr Waffen & Evolutionen (kombinierte Upgrades wie in Vampire Survivors)
-- Mehr Gegnertypen & einzigartige Bosse mit Mustern
-- Charakter-Auswahl (verschiedene Helden mit Startwaffen) — echte glTF-Modelle
-- Karten/Biome (Sumpf, Minental), Tag-/Nacht-Zyklus
-- Audio (Musik, Treffer/Pickup-Sounds), Schadenszahlen, Bildschirm-Shake
-- Run-Statistiken, Erfolge, Freischaltungen
+- Weitere Karten/Biome (Minental), Tag-/Nacht-Zyklus
+- Mehr Helden & einzigartige Boss-Movesets
+- Text-Chat & Reconnect im Koop, mehr als 2 Spieler
+- i18n (Englisch), Farbenblind-Modus, Key-Rebinding
 
 > Grafik-Hinweis: Three.js liefert die Render-Technik; mehr visuelle Tiefe
-> kommt über zusätzliche glTF-Assets (Gegner-/Boss-Modelle, Texturen) — die
-> Architektur erlaubt das Einsetzen ohne Umbau der Spiellogik.
+> kommt über zusätzliche Sprite-/glTF-Assets — die Architektur erlaubt das
+> Einsetzen ohne Umbau der Spiellogik.

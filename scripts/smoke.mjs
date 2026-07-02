@@ -42,6 +42,16 @@ const poll = async (fn, timeout = 15000) => {
 
 await page.goto(URL, { waitUntil: 'networkidle2', timeout: 30000 });
 
+// Pflicht-Namens-Screen (frisches Profil hat keinen gespeicherten Namen)
+const nameScreen = await poll(() => {
+  const ns = document.getElementById('name-screen');
+  return ns && !ns.classList.contains('hidden') && !!window.__game?.player;
+}, 20000);
+if (nameScreen) {
+  await page.type('#player-name', 'SmokeTest');
+  await page.click('#name-confirm');
+}
+
 const menuReady = await poll(() => {
   const ss = document.getElementById('start-screen');
   return ss && !ss.classList.contains('hidden') && !!window.__game?.player;

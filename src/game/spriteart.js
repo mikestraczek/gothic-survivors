@@ -20,6 +20,10 @@ const TYPE2CHAR = {
   boss: 'orc_shaman', // Ork-Schamane als Boss
   boss_bone: 'necromancer',
   boss_demon: 'big_demon',
+  shooter: 'necromancer', // Distanz-Caster (deutlich kleiner als der Boss)
+  exploder: 'imp',
+  splitter: 'big_zombie',
+  zombling: 'zombie',
   player: 'knight_m',
 };
 
@@ -58,8 +62,9 @@ function buildStrip(imgs) {
 }
 
 // Alle Charakter-Texturen laden (im Game._preload awaiten).
-export async function loadSprites() {
+export async function loadSprites(onProgress) {
   const chars = [...new Set(Object.values(TYPE2CHAR))];
+  let done = 0;
   for (const ch of chars) {
     try {
       const imgs = await Promise.all([0, 1, 2, 3].map((n) => loadImg(`sprites/${ch}_f${n}.png`)));
@@ -67,6 +72,8 @@ export async function loadSprites() {
     } catch (e) {
       console.warn('Sprite-Laden fehlgeschlagen:', ch, e);
     }
+    done++;
+    if (onProgress) onProgress(done / chars.length);
   }
 }
 
@@ -119,6 +126,25 @@ export function spriteMaterial(key) {
 
 export function propMaterial(key) {
   return makeBillboardMaterial(propTexture(key), 1);
+}
+
+// ---------- Blob-Schatten (weicher radialer Verlauf) ----------
+// Verankert Billboard-Sprites optisch am Boden — echte Schatten wirken auf Billboards nicht.
+let _blob = null;
+export function blobShadowTexture() {
+  if (_blob) return _blob;
+  const S = 64;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(S / 2, S / 2, 2, S / 2, S / 2, S / 2);
+  grad.addColorStop(0, 'rgba(0,0,0,0.55)');
+  grad.addColorStop(0.7, 'rgba(0,0,0,0.28)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, S, S);
+  _blob = new THREE.CanvasTexture(c);
+  return _blob;
 }
 
 // ---------- Prozedurale Pixel-Props (Bäume/Felsen/Grabsteine als Billboards) ----------

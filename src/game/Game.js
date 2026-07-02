@@ -34,7 +34,9 @@ import { Upgrades } from './Upgrades.js';
 import { Meta } from './Meta.js';
 import { HUD } from './HUD.js';
 import { GameAudio } from './Audio.js';
-import { spriteQuad, spriteMaterial, SPRITE_FRAMES, loadSprites } from './spriteart.js';
+import { loadSettings, saveSettings } from './Settings.js';
+import { HEROES, HERO_KEYS, applyHero } from './Heroes.js';
+import { spriteQuad, spriteMaterial, SPRITE_FRAMES, loadSprites, blobShadowTexture } from './spriteart.js';
 import { Net } from '../net/Net.js';
 
 const SNAP_HZ = 20;
@@ -72,6 +74,10 @@ export class Game {
     // Level / Phasen
     this._selMap = 'valley';
     this._selDiff = 'normal';
+    this.settings = loadSettings();
+    this.heroKey = 'soldier'; // aktiver Held des laufenden Runs
+    this._remoteHeroKey = 'soldier'; // Held des Mitspielers (Koop)
+    try { this._selHero = localStorage.getItem('gothicHero') || 'soldier'; } catch (e) { this._selHero = 'soldier'; }
     this.mapKey = 'valley';
     this.difficulty = 'normal';
     this.phaseIndex = 0;
@@ -111,6 +117,21 @@ export class Game {
     this.bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.32, 0.5, 0.82);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    // dezente Vignette: dunkelt die Ränder ab und lenkt den Blick zur Mitte
+    const VignetteShader = {
+      uniforms: { tDiffuse: { value: null }, strength: { value: 0.42 } },
+      vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+      fragmentShader: `
+        uniform sampler2D tDiffuse; uniform float strength; varying vec2 vUv;
+        void main(){
+          vec4 c = texture2D(tDiffuse, vUv);
+          float d = distance(vUv, vec2(0.5));
+          c.rgb *= 1.0 - smoothstep(0.48, 0.86, d) * strength;
+          gl_FragColor = c;
+        }`,
+    };
+    this.vignettePass = new ShaderPass(VignetteShader);
+    this.composer.addPass(this.vignettePass);
     // Pixel-Art-Look als letzter Pass
     this.pixelPass = new ShaderPass(PixelArtShader);
     this.pixelPass.uniforms.pixelSize.value = 4;
@@ -135,6 +156,16 @@ export class Game {
     im.setColorAt(0, new THREE.Color(1, 1, 1));
     this.scene.add(im);
     return im;
+  }
+
+  _makeBlobShadow(scale = 2.2) {
+    const geo = new THREE.PlaneGeometry(1, 1);
+    geo.rotateX(-Math.PI / 2);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: blobShadowTexture(), transparent: true, depthWrite: false }));
+    mesh.scale.setScalar(scale);
+    mesh.renderOrder = 1;
+    this.scene.add(mesh);
+    return mesh;
   }
 
   // Kamera-Rechtsachse (x,z) -> bestimmt links/rechts für Sprite-Spiegelung
@@ -166,19 +197,47 @@ export class Game {
     return this[key] || 1;
   }
 
+  // Helden-Sprite einfärben: Helden-Tint (Charakter-Identität) bzw. rotes Aufblitzen bei Schaden
+  _tintHero(im, pl, heroKey) {
+    if (!this._heroWhite) {
+      this._heroWhite = new THREE.Color(1, 1, 1);
+      this._heroFlash = new THREE.Color(2.8, 0.75, 0.65);
+    }
+    const base = (HEROES[heroKey] && HEROES[heroKey].tint) || this._heroWhite;
+    im.setColorAt(0, pl.hitFlash > 0 ? this._heroFlash : base);
+    im.instanceColor.needsUpdate = true;
+  }
+
   _updateHeroSprites() {
     const fr = Math.floor(this.runElapsed * 7) % SPRITE_FRAMES;
     this.playerSprite.visible = true;
     this._placeSprite(this.playerSprite, this.player.position, 2.9, fr, this._heroFlip(this.player, '_pFlip'));
+    this._tintHero(this.playerSprite, this.player, this.heroKey);
+    this.playerShadow.visible = true;
+    this.playerShadow.position.set(this.player.position.x, this.player.position.y + 0.06, this.player.position.z);
     this.remoteSprite.visible = !!this.role && !!this.remotePlayer;
-    if (this.remoteSprite.visible) this._placeSprite(this.remoteSprite, this.remotePlayer.position, 2.9, fr, this._heroFlip(this.remotePlayer, '_rFlip'));
+    this.remoteShadow.visible = this.remoteSprite.visible;
+    if (this.remoteSprite.visible) {
+      this._placeSprite(this.remoteSprite, this.remotePlayer.position, 2.9, fr, this._heroFlip(this.remotePlayer, '_rFlip'));
+      this._tintHero(this.remoteSprite, this.remotePlayer, this._remoteHeroKey);
+      this.remoteShadow.position.set(this.remotePlayer.position.x, this.remotePlayer.position.y + 0.06, this.remotePlayer.position.z);
+    }
   }
 
   async _preload() {
     this.assets = new Assets();
+    // Ladebalken: Modell = 80% des Fortschritts, Sprites = 20%
+    const fill = document.getElementById('loading-fill');
+    const pct = document.getElementById('loading-pct');
+    const setP = (f) => {
+      const v = Math.round(Math.max(0, Math.min(1, f)) * 100);
+      if (fill) fill.style.width = `${v}%`;
+      if (pct) pct.textContent = `${v}%`;
+    };
     try {
-      await this.assets.loadAll();
-      await loadSprites(); // echte Pixel-Art-Sprites (Gegner + Held)
+      await this.assets.loadAll((f) => setP(f * 0.8));
+      await loadSprites((f) => setP(0.8 + f * 0.2)); // echte Pixel-Art-Sprites (Gegner + Held)
+      setP(1);
     } catch (e) {
       console.error('Asset-Ladefehler:', e);
     }
@@ -188,6 +247,10 @@ export class Game {
     this.playerSprite = this._makeSprite('player');
     this.remoteSprite = this._makeSprite('player');
     this.remoteSprite.visible = false;
+    // Blob-Schatten verankern die Helden-Sprites am Boden
+    this.playerShadow = this._makeBlobShadow();
+    this.remoteShadow = this._makeBlobShadow();
+    this.remoteShadow.visible = false;
 
     this.playerLight = new THREE.PointLight(0xffe2b0, 10, 26, 1.4);
     this.scene.add(this.playerLight);
@@ -196,11 +259,18 @@ export class Game {
     this.scene.add(this.playerFill.target);
 
     this.enemies = new EnemyManager(this.scene, this.world);
-    await this.enemies.loadModels(); // echte animierte Modelle (VAT) backen
+    this.enemies.onShake = (a) => this.camCtrl.addShake(a);
+    this.enemies.onBossEnrage = (ph, name) => {
+      this.hud.bossBanner(ph === 2 ? `${name} RAST VOR WUT!` : `${name} WIRD WÜTEND!`);
+      this.hud.toast(ph === 2 ? '⚠ Boss-Enrage: Volle Wut — weiche den Angriffen aus!' : '⚠ Der Boss wird schneller und lernt einen neuen Angriff!', 'blood');
+      this.audio.boss();
+      this.hitStop(0.12);
+    };
     this.enemies.bossAnnounce = (name) => {
       this.hud.bossBanner(`${name} ERSCHEINT`);
       this.hud.toast(`⚠ ${name} ERSCHEINT!`, 'blood');
       this.audio.boss();
+      this.camCtrl.addShake(0.4);
     };
     this.enemies.onSafeZones = () => this._warnSafeZones();
     this.fx = new Effects(this.scene);
@@ -246,6 +316,34 @@ export class Game {
         this.audio.pickup();
         this.hud.toast(`Erzader — +${g} Erz`, 'gold');
       },
+      // Elite-Beute: Erz + eine zufällige eigene Waffe steigt eine Stufe (wie in VS-Truhen)
+      chest: (it, p) => {
+        const who = p || this.player;
+        const wp = who === this.remotePlayer ? this.weapons2 : this.weapons;
+        const g = 25 + Math.floor(this.enemies.elapsed / 20);
+        who.gold += g * (who.goldMult || 1);
+        const upgradable = wp.ownedList().filter((w) => !wp.isMax(w.id));
+        if (upgradable.length) {
+          const w = upgradable[Math.floor(Math.random() * upgradable.length)];
+          wp.add(w.id);
+          this.hud.toast(`🎁 Truhe: ${WEAPON_DEFS[w.id].name} +1 Stufe · +${g} Erz!`, 'gold');
+        } else {
+          this.hud.toast(`🎁 Truhe: +${g} Erz!`, 'gold');
+        }
+        this.audio.chest();
+        this.fx.sparksBurst(it.x, 1.0, it.z, 0xffd24a, 16, 6);
+        this.camCtrl.addShake(0.15);
+      },
+      // Schrein der Barriere: volle Heilung + 15s Schadens-Segen
+      shrine: (it, p) => {
+        const who = p || this.player;
+        who.heal(who.maxHp);
+        who.blessing = 15;
+        this.audio.levelup();
+        this.fx.ring(it.x, it.z, 6, 0x86e0ff);
+        this.fx.sparksBurst(it.x, 1.2, it.z, 0x86e0ff, 20, 7);
+        this.hud.toast('🕯 Segen der Barriere — volle Heilung & +40% Schaden für 15s!', 'gold');
+      },
     };
 
     this.remoteInput = {
@@ -258,6 +356,7 @@ export class Game {
     this._initNet();
     this.camCtrl.snap(this.player.position);
     this._wireUI();
+    this._applySettings();
     document.getElementById('loading').classList.add('hidden');
     this._bootFlow();
     this.clock.start();
@@ -270,18 +369,27 @@ export class Game {
       p.kills++;
       this._phaseKills++;
       this.audio.kill();
-      p.gold += (e.def.gold || 0) * (p.goldMult || 1);
+      p.gold += (e.def.gold || 0) * (e.xpMult || 1) * (p.goldMult || 1);
       this.fx.sparksBurst(e.x, e.y + 0.6, e.z, e.def.boss ? 0xff5a3a : 0xc89060, e.def.boss ? 26 : 7, e.def.boss ? 9 : 5);
       if (e.def.boss) {
+        this._bossKills = (this._bossKills || 0) + 1;
         const gv = Math.max(8, Math.round(e.def.xp / 6));
         for (let i = 0; i < 9; i++) this.gems.spawn(e.x + (Math.random() - 0.5) * 5, e.z + (Math.random() - 0.5) * 5, gv);
         p.gold += 5 * (p.goldMult || 1);
         this.fx.explosion(e.x, e.z, 6, 0x9a4aff);
+        this.camCtrl.addShake(0.55);
+        this.hitStop(0.16);
         this.pickups.spawnAt('heal', e.x + 2, e.z);
         this.pickups.spawnAt('greed', e.x - 2, e.z);
         this.hud.toast('BOSS BESIEGT!', 'gold');
       } else {
-        this.gems.spawn(e.x, e.z, e.def.xp);
+        this.gems.spawn(e.x, e.z, e.def.xp * (e.xpMult || 1));
+        if (e.elite) {
+          this.fx.explosion(e.x, e.z, 3, 0xffd24a);
+          this.camCtrl.addShake(0.25);
+          this.pickups.spawnAt('chest', e.x, e.z); // Eliten hinterlassen Truhen
+          this.hud.toast(`⭐ ${this.enemies.eliteName(e)} besiegt — Truhe!`, 'gold');
+        }
       }
     };
   }
@@ -307,6 +415,7 @@ export class Game {
     this.net.onJoined = () => {
       this._enterLobbyRoom('client');
       this._setLobbyStatus('Verbunden — warte auf Host-Start…');
+      this._sendHeroInfo(); // Held + Waffen-Unlocks an den Host melden
     };
     this.net.onPeerLeft = () => {
       this.hud.toast('Mitspieler hat die Lobby verlassen', 'blood');
@@ -326,7 +435,7 @@ export class Game {
     document.getElementById('lobby-room').classList.add('hidden');
     document.getElementById('lobby-start').classList.add('hidden');
     this._setLobbyStatus('');
-    this._renderSelectors('lobby-maps', 'lobby-diffs');
+    this._renderSelectors('lobby-maps', 'lobby-diffs', 'lobby-heroes', 'lobby-hero-desc');
     document.getElementById('lobby-list').innerHTML = '<div class="lobby-empty">Verbinde…</div>';
     if (await this._lobbyConnect()) this.net.list();
   }
@@ -404,6 +513,7 @@ export class Game {
     if (!d) return;
     if (d.k === 'ping') { this._addPing(d.x, d.z); return; } // Team-Ping (beide Rollen)
     if (d.k === 'emote') { this._showEmote('mate', d.i); return; }
+    if (d.k === 'hero') { this._remoteHero = d.key; this._remoteLocked = d.locked || []; return; } // Heldenwahl des Gastes
     if (d.k === 'start' && this.net.role === 'client') this._beginClientRun(d);
     else if (d.k === 'in' && this.role === 'host') { this.remoteInput._x = d.x; this.remoteInput._z = d.z; this.remoteInput.reviving = !!d.rv; if (d.dodge) this.remotePlayer.dodge(); if (d.mash) this.remotePlayer.mashFree(0.2 *d.mash); }
     else if (d.k === 'snap' && this.role === 'client') this._applySnapshot(d);
@@ -422,18 +532,19 @@ export class Game {
     } else if (d.k === 'lvlup' && this.role === 'client') this._clientLevelUp(d);
     else if (d.k === 'pick' && this.role === 'host') this._hostApplyRemotePick(d.i);
     else if (d.k === 'reroll' && this.role === 'host') this._hostRerollRemote();
+    else if (d.k === 'banish' && this.role === 'host') this._hostBanishRemote(d.i);
     else if (d.k === 'combo' && this.role === 'client') {
       this.mode = 'levelup';
       this.input.enabled = false;
       this.upgrades.presentCombo(
-        { key: d.key, base: d.base, consume: d.consume, name: d.name, desc: d.desc },
-        () => { this.net.send({ k: 'comboPick', yes: 1 }); this.upgrades.close(); this.mode = 'play'; this.input.enabled = true; },
+        { key: d.key, base: d.base, consume: d.consume, passive: d.passive, passiveCount: d.passiveCount, name: d.name, desc: d.desc },
+        () => { this.net.send({ k: 'comboPick', yes: 1 }); this._evolvesThisRun = (this._evolvesThisRun || 0) + 1; this.upgrades.close(); this.mode = 'play'; this.input.enabled = true; },
         () => { this.net.send({ k: 'comboPick', yes: 0 }); this.upgrades.close(); this.mode = 'play'; this.input.enabled = true; }
       );
     } else if (d.k === 'comboPick' && this.role === 'host') {
       const c = this._pendingRemoteCombo;
       if (c) {
-        if (d.yes) this.weapons2.combine(c);
+        if (d.yes) this.weapons2.combine(c, this.remotePlayer);
         else this._declinedRemoteCombos.add(c.key);
       }
       this._pendingRemoteCombo = null;
@@ -474,6 +585,15 @@ export class Game {
     const changeName = document.getElementById('change-name');
     if (changeName) changeName.addEventListener('click', () => this._showNameScreen());
     document.getElementById('leaderboard-button').addEventListener('click', () => this._openLeaderboard());
+    document.getElementById('achievements-button').addEventListener('click', () => {
+      document.getElementById('start-screen').classList.add('hidden');
+      document.getElementById('ach-list').innerHTML = this.meta.achievementsHtml();
+      document.getElementById('achievements-screen').classList.remove('hidden');
+    });
+    document.getElementById('ach-back').addEventListener('click', () => {
+      document.getElementById('achievements-screen').classList.add('hidden');
+      this._showMenu();
+    });
     document.getElementById('lb-back').addEventListener('click', () => { document.getElementById('leaderboard-screen').classList.add('hidden'); this._showMenu(); });
     document.getElementById('lb-tab-time').addEventListener('click', () => { document.getElementById('lb-tab-time').classList.add('active'); document.getElementById('lb-tab-kills').classList.remove('active'); this._renderLeaderboard('time'); });
     document.getElementById('lb-tab-kills').addEventListener('click', () => { document.getElementById('lb-tab-kills').classList.add('active'); document.getElementById('lb-tab-time').classList.remove('active'); this._renderLeaderboard('kills'); });
@@ -508,10 +628,88 @@ export class Game {
     this.meta.onClose = () => this._afterShop();
     const lsv = document.getElementById('lobby-server');
     if (lsv) lsv.placeholder = Net.defaultUrl();
+    this._wireSettings();
+  }
+
+  // -------------------------------------------------- Optionen
+  _applySettings() {
+    const s = this.settings;
+    this.audio.setSfxVolume(s.sfxVol);
+    this.audio.setMusicVolume(s.musicVol);
+    this.camCtrl.shakeScale = s.shake ? 1 : 0;
+    if (this.fx) this.fx.showDmg = s.dmgNumbers;
+    if (this.bloom) this.bloom.enabled = s.bloom;
+    if (this.pixelPass) this.pixelPass.enabled = s.pixelArt;
+    if (this.renderer.shadowMap.enabled !== s.shadows) {
+      this.renderer.shadowMap.enabled = s.shadows;
+      this.scene.traverse((o) => { if (o.isMesh && o.material) o.material.needsUpdate = true; });
+    }
+  }
+
+  _wireSettings() {
+    const btn = document.getElementById('settings-button');
+    if (btn) btn.addEventListener('click', () => this._openSettings('menu'));
+    const pbtn = document.getElementById('pause-settings');
+    if (pbtn) pbtn.addEventListener('click', () => this._openSettings('pause'));
+    document.getElementById('settings-back').addEventListener('click', () => this._closeSettings());
+    const save = () => {
+      saveSettings(this.settings);
+      this._applySettings();
+    };
+    const bindRange = (id, key) => {
+      const el = document.getElementById(id);
+      el.addEventListener('input', () => {
+        this.settings[key] = el.value / 100;
+        document.getElementById(id + '-val').textContent = `${el.value}%`;
+        save();
+      });
+    };
+    const bindToggle = (id, key) => {
+      const el = document.getElementById(id);
+      el.addEventListener('change', () => {
+        this.settings[key] = el.checked;
+        save();
+        this.audio.ui();
+      });
+    };
+    bindRange('set-music', 'musicVol');
+    bindRange('set-sfx', 'sfxVol');
+    bindToggle('set-shake', 'shake');
+    bindToggle('set-dmg', 'dmgNumbers');
+    bindToggle('set-shadows', 'shadows');
+    bindToggle('set-bloom', 'bloom');
+    bindToggle('set-pixel', 'pixelArt');
+  }
+
+  _openSettings(from) {
+    this._settingsReturn = from;
+    const s = this.settings;
+    document.getElementById('set-music').value = Math.round(s.musicVol * 100);
+    document.getElementById('set-music-val').textContent = `${Math.round(s.musicVol * 100)}%`;
+    document.getElementById('set-sfx').value = Math.round(s.sfxVol * 100);
+    document.getElementById('set-sfx-val').textContent = `${Math.round(s.sfxVol * 100)}%`;
+    document.getElementById('set-shake').checked = s.shake;
+    document.getElementById('set-dmg').checked = s.dmgNumbers;
+    document.getElementById('set-shadows').checked = s.shadows;
+    document.getElementById('set-bloom').checked = s.bloom;
+    document.getElementById('set-pixel').checked = s.pixelArt;
+    document.getElementById(from === 'pause' ? 'pause-screen' : 'start-screen').classList.add('hidden');
+    document.getElementById('settings-screen').classList.remove('hidden');
+  }
+
+  _closeSettings() {
+    document.getElementById('settings-screen').classList.add('hidden');
+    document.getElementById(this._settingsReturn === 'pause' ? 'pause-screen' : 'start-screen').classList.remove('hidden');
+  }
+
+  // Musik-Theme des aktuellen Levels
+  _musicTheme() {
+    return this.mapKey === 'swamp' ? 'swamp' : 'valley';
   }
 
   _showMenu() {
     this.mode = 'menu';
+    if (this.audio) this.audio.setMusic('menu');
     clearTimeout(this._introTimer);
     const intro = document.getElementById('intro');
     if (intro) intro.classList.add('hidden');
@@ -567,6 +765,27 @@ export class Game {
   _esc(s) {
     return String(s).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
   }
+  // Run-Statistiken in die Meta-Progression einrechnen + neue Achievements feiern
+  _recordMeta(win) {
+    const fresh = this.meta.recordRun({
+      time: this.runElapsed,
+      kills: this.player.kills,
+      level: this.player.level,
+      win,
+      bossKills: this._bossKills || 0,
+      evolves: this._evolvesThisRun || 0,
+      goldEarned: Math.floor(this.player.gold),
+    });
+    let delay = 400;
+    for (const a of fresh) {
+      setTimeout(() => {
+        this.hud.toast(`🎖 Erfolg „${a.name}" — ${a.unlock} freigeschaltet!`, 'gold');
+        this.audio.levelup();
+      }, delay);
+      delay += 900;
+    }
+  }
+
   // Ergebnis eines Runs speichern: lokal (Cache) + an den Server (Postgres, best effort)
   _recordScore(win) {
     const entry = {
@@ -636,6 +855,7 @@ export class Game {
         v: 2, player: this.player.serialize(), weapons: this.weapons.serialize(),
         elapsed: this.runElapsed, enemyElapsed: this.enemies.elapsed,
         map: this.mapKey, diff: this.difficulty, phaseIndex: this.phaseIndex, phaseKills: this._phaseKills, phaseStage: this.phaseStage, endless: this.endless,
+        hero: this.heroKey, bossKills: this._bossKills || 0, evolves: this._evolvesThisRun || 0,
       };
       localStorage.setItem('gothicSurvivorsRun', JSON.stringify(data));
     } catch (e) { /* ignore */ }
@@ -654,8 +874,12 @@ export class Game {
     document.getElementById('death-screen').classList.add('hidden');
     document.getElementById('win-screen').classList.add('hidden');
     this._applyLevel(data.map || 'valley', data.diff || 'normal');
+    this.heroKey = data.hero || 'soldier';
+    this._bossKills = data.bossKills || 0;
+    this._evolvesThisRun = data.evolves || 0;
     this.player.beginRun();
     this.player.applySave(data.player);
+    this.player.lockedWeapons = this.meta.lockedWeaponSet();
     this.enemies.reset();
     this.gems.reset();
     this.pickups.reset();
@@ -700,6 +924,7 @@ export class Game {
     this.input.enabled = true;
     this._autosaveAcc = 0;
     this.mode = 'play';
+    this.audio.setMusic(this._musicTheme());
   }
 
   // -------------------------------------------------- Pause
@@ -756,18 +981,48 @@ export class Game {
     this._showMenu();
   }
 
-  // -------------------------------------------------- Map-/Schwierigkeitswahl
-  _renderSelectors(mapElId, diffElId) {
+  // -------------------------------------------------- Map-/Schwierigkeits-/Heldenwahl
+  _renderSelectors(mapElId, diffElId, heroElId = null, heroDescId = null) {
     const mapEl = document.getElementById(mapElId);
     const diffEl = document.getElementById(diffElId);
     if (mapEl) {
-      mapEl.innerHTML = MAP_LIST.map((m) => `<button class="sel-btn ${m.key === this._selMap ? 'active' : ''}" data-map="${m.key}">${m.name}</button>`).join('');
-      mapEl.querySelectorAll('[data-map]').forEach((b) => b.addEventListener('click', () => { this._selMap = b.getAttribute('data-map'); this._renderSelectors(mapElId, diffElId); this._lobbyUpdate(); }));
+      // gesperrte Karten (Achievements) mit 🔒 und Bedingung anzeigen
+      if (!this.meta.mapUnlocked(this._selMap)) this._selMap = 'valley';
+      mapEl.innerHTML = MAP_LIST.map((m) => {
+        const locked = !this.meta.mapUnlocked(m.key);
+        return `<button class="sel-btn ${m.key === this._selMap ? 'active' : ''} ${locked ? 'locked' : ''}" data-map="${m.key}" ${locked ? `disabled title="${this.meta.mapReq(m.key)}"` : ''}>${locked ? '🔒 ' : ''}${m.name}</button>`;
+      }).join('');
+      mapEl.querySelectorAll('[data-map]').forEach((b) => b.addEventListener('click', () => { this._selMap = b.getAttribute('data-map'); this._renderSelectors(mapElId, diffElId, heroElId, heroDescId); this._lobbyUpdate(); }));
     }
     if (diffEl) {
       diffEl.innerHTML = Object.keys(DIFFS).map((k) => `<button class="sel-btn ${k === this._selDiff ? 'active' : ''}" data-diff="${k}">${DIFFS[k].name}</button>`).join('');
-      diffEl.querySelectorAll('[data-diff]').forEach((b) => b.addEventListener('click', () => { this._selDiff = b.getAttribute('data-diff'); this._renderSelectors(mapElId, diffElId); this._lobbyUpdate(); }));
+      diffEl.querySelectorAll('[data-diff]').forEach((b) => b.addEventListener('click', () => { this._selDiff = b.getAttribute('data-diff'); this._renderSelectors(mapElId, diffElId, heroElId, heroDescId); this._lobbyUpdate(); }));
     }
+    if (heroElId) this._renderHeroSelector(heroElId, heroDescId, () => this._renderSelectors(mapElId, diffElId, heroElId, heroDescId));
+  }
+
+  _renderHeroSelector(elId, descId, rerender) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (!this.meta.heroUnlocked(this._selHero)) this._selHero = 'soldier';
+    el.innerHTML = HERO_KEYS.map((k) => {
+      const h = HEROES[k];
+      const locked = !this.meta.heroUnlocked(k);
+      return `<button class="sel-btn hero-btn ${k === this._selHero ? 'active' : ''} ${locked ? 'locked' : ''}" data-hero="${k}" ${locked ? `disabled title="${this.meta.heroReq(k)}"` : ''}>${locked ? '🔒' : h.icon} ${h.name}</button>`;
+    }).join('');
+    const desc = document.getElementById(descId);
+    if (desc) desc.textContent = (HEROES[this._selHero] || HEROES.soldier).desc;
+    el.querySelectorAll('[data-hero]').forEach((b) => b.addEventListener('click', () => {
+      this._selHero = b.getAttribute('data-hero');
+      try { localStorage.setItem('gothicHero', this._selHero); } catch (e) {}
+      // Gast in der Lobby: neue Heldenwahl direkt an den Host melden
+      if (this.net && this.net.role === 'client' && this.net.connected) this._sendHeroInfo();
+      rerender();
+    }));
+  }
+
+  _sendHeroInfo() {
+    this.net.send({ k: 'hero', key: this._selHero, locked: [...this.meta.lockedWeaponSet()] });
   }
   // Host: geänderte Karte/Schwierigkeit im Warteraum an die Lobby-Liste melden
   _lobbyUpdate() {
@@ -776,7 +1031,7 @@ export class Game {
 
   _openMapSelect() {
     document.getElementById('start-screen').classList.add('hidden');
-    this._renderSelectors('map-maps', 'map-diffs');
+    this._renderSelectors('map-maps', 'map-diffs', 'map-heroes', 'map-hero-desc');
     document.getElementById('map-screen').classList.remove('hidden');
   }
 
@@ -872,6 +1127,10 @@ export class Game {
           this.enemies.spawnScale = 1;
           this.enemies.phase = this.phaseIndex;
           this.hud.toast(`Phase ${this.phaseIndex + 1} von ${PHASES}`, 'gold');
+          // Run-Event: Schrein der Barriere erscheint nach jedem besiegten Anführer
+          const sa = Math.random() * Math.PI * 2;
+          this.pickups.spawnAt('shrine', c.x + Math.cos(sa) * 9, c.z + Math.sin(sa) * 9);
+          this.hud.toast('🕯 Ein Schrein der Barriere ist erschienen!', 'gold');
         }
       }
     } else if (this.phaseStage === 'final') {
@@ -921,9 +1180,11 @@ export class Game {
     this.mode = 'won';
     this.levelWon = true;
     this.input.enabled = false;
+    this.audio.setMusic('menu');
     this.hud.setSpectate(null);
     this.hud.setBossBar(null);
     this._recordScore(true);
+    this._recordMeta(true);
     this._clearSave();
     this.audio.levelup();
     const earned = Math.floor(this.player.gold);
@@ -945,12 +1206,14 @@ export class Game {
   _clientWin(d) {
     this.mode = 'won';
     this.input.enabled = false;
+    this.audio.setMusic('menu');
     this.hud.setSpectate(null);
     this.hud.setBossBar(null);
     this.weapons.hideGhosts();
     this.enemies.hideBolts();
     this.runElapsed = d.t || this.runElapsed;
     this._recordScore(true);
+    this._recordMeta(true);
     const earned = Math.floor(this.player.gold);
     this.meta.addGold(earned);
     const m = Math.floor((d.t || 0) / 60), s = Math.floor((d.t || 0) % 60);
@@ -991,8 +1254,10 @@ export class Game {
     this.gems.reset();
     this.pickups.reset();
     this.weapons.reset();
-    this.weapons.add('whirl');
+    this.weapons.add((HEROES[this.heroKey] || HEROES.soldier).start); // Startwaffe des Helden
     this.runElapsed = 0;
+    this._bossKills = 0;
+    this._evolvesThisRun = 0;
     this.pendingLevelUps = 0;
     this.pendingRemoteLevelUps = 0;
     this._leveling = false;
@@ -1022,6 +1287,9 @@ export class Game {
     this._applyLevel(mapKey, diff);
     this.player.beginRun();
     this.meta.applyToPlayer(this.player);
+    this.heroKey = this._selHero;
+    applyHero(this.player, this.heroKey);
+    this.player.lockedWeapons = this.meta.lockedWeaponSet();
     this._resetCommon();
     this._onKillP1 = this._makeOnKill(this.player);
     this._lastHp = this.player.hp;
@@ -1030,6 +1298,7 @@ export class Game {
     this.hud.toast(`${this.world.theme.name} · ${DIFFS[diff].name} — Phase 1/${PHASES}`, 'gold');
     this.input.enabled = true;
     this.mode = 'play';
+    this.audio.setMusic(this._musicTheme());
     this._playIntro();
   }
 
@@ -1042,11 +1311,18 @@ export class Game {
     this.player.beginRun();
     this.remotePlayer.beginRun();
     this.meta.applyToPlayer(this.player);
+    this.heroKey = this._selHero;
+    applyHero(this.player, this.heroKey);
+    this.player.lockedWeapons = this.meta.lockedWeaponSet();
+    // Held des Gastes (per 'hero'-Nachricht gemeldet) auf den Remote-Spieler anwenden
+    this._remoteHeroKey = this._remoteHero || 'soldier';
+    applyHero(this.remotePlayer, this._remoteHeroKey);
+    this.remotePlayer.lockedWeapons = new Set(this._remoteLocked || []);
     this.player.position.set(-3, this.world.getHeight(-3, 50), 50);
     this.remotePlayer.position.set(3, this.world.getHeight(3, 50), 50);
     this._resetCommon();
     this.weapons2.reset();
-    this.weapons2.add('whirl');
+    this.weapons2.add((HEROES[this._remoteHeroKey] || HEROES.soldier).start);
     // Koop-Host: alle transienten Effekte aufzeichnen -> per Snapshot an den Gast senden
     this.fx.record = true;
     // Koop ist fordernder als Solo (zwei Spieler zusammen sind stärker): mehr Gegner + zähere Werte
@@ -1057,12 +1333,13 @@ export class Game {
     this._lastHp = this.player.hp;
     this.remoteInput._x = 0;
     this.remoteInput._z = 0;
-    this.net.send({ k: 'start', map: this._selMap, diff: this._selDiff });
+    this.net.send({ k: 'start', map: this._selMap, diff: this._selDiff, hero: this.heroKey });
     this.camCtrl.snap(this.player.position);
     this.hud.show();
     this.hud.toast('Koop gestartet! Jeder levelt selbst.', 'gold');
     this.input.enabled = true;
     this.mode = 'play';
+    this.audio.setMusic(this._musicTheme());
     this._playIntro();
   }
 
@@ -1074,6 +1351,8 @@ export class Game {
     if (d && d.map && this.world.themeKey !== d.map) this.world.applyTheme(d.map);
     this.mapKey = d ? d.map : 'valley';
     this.difficulty = d ? d.diff : 'normal';
+    this.heroKey = this._selHero; // eigener Held (Stats kommen autoritativ vom Host)
+    this._remoteHeroKey = (d && d.hero) || 'soldier';
     this._lastHp = 100;
     this.player.beginRun();
     this.remotePlayer.beginRun();
@@ -1103,6 +1382,7 @@ export class Game {
     this.hud.toast('Mit der Lobby verbunden!', 'gold');
     this.input.enabled = true;
     this.mode = 'play';
+    this.audio.setMusic(this._musicTheme());
     this._playIntro();
   }
 
@@ -1127,7 +1407,7 @@ export class Game {
   _tickRevive(dt) {
     let downed = null, reviver = null, held = false;
     if (this.player.dead && !this.remotePlayer.dead) { downed = this.player; reviver = this.remotePlayer; held = !!this.remoteInput.reviving; }
-    else if (this.remotePlayer.dead && !this.player.dead) { downed = this.remotePlayer; reviver = this.player; held = this.input.isDown('KeyE'); }
+    else if (this.remotePlayer.dead && !this.player.dead) { downed = this.remotePlayer; reviver = this.player; held = this.input.isDown('KeyE') || this.input.isTouch; } // Touch: Nähe genügt
     if (!downed) { this._reviveProg = 0; return; }
     const near = Math.hypot(reviver.position.x - downed.position.x, reviver.position.z - downed.position.z) < REVIVE_RANGE;
     if (near && held) this._reviveProg = Math.min(1, (this._reviveProg || 0) + dt / REVIVE_TIME);
@@ -1173,7 +1453,7 @@ export class Game {
     const near = !a.dead && !b.dead && Math.hypot(a.position.x - b.position.x, a.position.z - b.position.z) < AURA_RANGE;
     for (const [self, other] of [[a, b], [b, a]]) {
       const lastStand = !self.dead && other.dead;
-      self.dmgMult = (lastStand ? 1.3 : 1) * (near ? 1.12 : 1);
+      self.dmgMult = (lastStand ? 1.3 : 1) * (near ? 1.12 : 1) * (self.blessing > 0 ? 1.4 : 1);
       self.speedMult = lastStand ? 1.25 : 1;
       self.aura = near;
       self.lastStand = lastStand;
@@ -1296,7 +1576,7 @@ export class Game {
   _presentLocal() {
     const cands = this.upgrades.generate(this.player, this.weapons);
     this.upgrades.present(
-      cands.map((c) => ({ icon: c.icon, title: c.title, sub: c.sub })),
+      cands.map((c) => ({ icon: c.icon, title: c.title, sub: c.sub, rarity: c.rarity })),
       (i) => {
         cands[i].apply();
         this.upgrades.close();
@@ -1309,6 +1589,15 @@ export class Game {
       () => {
         if (this.player.rerolls > 0) {
           this.player.rerolls--;
+          this._presentLocal();
+        }
+      },
+      this.player.banishes,
+      (i) => {
+        if (this.player.banishes > 0 && cands[i] && cands[i].bid) {
+          this.player.banishes--;
+          this.player.banished.add(cands[i].bid);
+          this.audio.ui();
           this._presentLocal();
         }
       }
@@ -1325,12 +1614,27 @@ export class Game {
 
   _sendRemoteChoices() {
     this._remoteCands = this.upgrades.generate(this.remotePlayer, this.weapons2);
-    this.net.send({ k: 'lvlup', choices: this._remoteCands.map((c) => ({ icon: c.icon, title: c.title, sub: c.sub })), level: this.remotePlayer.level, rerolls: this.remotePlayer.rerolls });
+    this.net.send({
+      k: 'lvlup',
+      choices: this._remoteCands.map((c) => ({ icon: c.icon, title: c.title, sub: c.sub, rarity: c.rarity })),
+      level: this.remotePlayer.level,
+      rerolls: this.remotePlayer.rerolls,
+      banishes: this.remotePlayer.banishes,
+    });
   }
 
   _hostRerollRemote() {
     if (this.remotePlayer.rerolls > 0) {
       this.remotePlayer.rerolls--;
+      this._sendRemoteChoices();
+    }
+  }
+
+  _hostBanishRemote(i) {
+    const rp = this.remotePlayer;
+    if (rp.banishes > 0 && this._remoteCands && this._remoteCands[i] && this._remoteCands[i].bid) {
+      rp.banishes--;
+      rp.banished.add(this._remoteCands[i].bid);
       this._sendRemoteChoices();
     }
   }
@@ -1365,7 +1669,19 @@ export class Game {
       this.input.enabled = false;
       this.upgrades.presentCombo(
         c,
-        () => { this.weapons.combine(c); this.audio.levelup(); this.hud.toast(`${c.name} — verschmolzen! Waffenslot frei.`, 'gold'); this.upgrades.close(); this._endLevelUp(); },
+        () => {
+          this.weapons.combine(c, this.player);
+          this._evolvesThisRun = (this._evolvesThisRun || 0) + 1;
+          this.audio.levelup();
+          this.hud.toast(`${c.name} — verschmolzen! Waffenslot frei.`, 'gold');
+          const pp = this.player.position;
+          this.fx.ring(pp.x, pp.z, 6, 0xffd24a);
+          this.fx.sparksBurst(pp.x, pp.y + 1.2, pp.z, 0xffd24a, 24, 8);
+          this.camCtrl.addShake(0.35);
+          this.hitStop(0.2);
+          this.upgrades.close();
+          this._endLevelUp();
+        },
         () => { this._declinedCombos.add(c.key); this.upgrades.close(); this._endLevelUp(); }
       );
       return true;
@@ -1375,7 +1691,7 @@ export class Game {
       const rem = this.upgrades.availableCombos(this.remotePlayer, this.weapons2, this._declinedRemoteCombos);
       if (rem.length) {
         this._pendingRemoteCombo = rem[0];
-        this.net.send({ k: 'combo', key: rem[0].key, base: rem[0].base, consume: rem[0].consume, name: rem[0].name, desc: rem[0].desc });
+        this.net.send({ k: 'combo', key: rem[0].key, base: rem[0].base, consume: rem[0].consume, passive: rem[0].passive, passiveCount: rem[0].passiveCount, name: rem[0].name, desc: rem[0].desc });
         this.hud.toast('Mitspieler entscheidet über eine Kombination…', 'gold');
         return true;
       }
@@ -1399,7 +1715,9 @@ export class Game {
       d.level,
       'Dein Stufenaufstieg',
       d.rerolls || 0,
-      () => this.net.send({ k: 'reroll' })
+      () => this.net.send({ k: 'reroll' }),
+      d.banishes || 0,
+      (i) => this.net.send({ k: 'banish', i })
     );
   }
 
@@ -1418,8 +1736,10 @@ export class Game {
   _endRun() {
     this.mode = 'dead';
     this.input.enabled = false;
+    this.audio.setMusic('menu');
     this.hud.setSpectate(null);
     this._recordScore(false);
+    this._recordMeta(false);
     this._clearSave(); // beendeter Run ist nicht mehr fortsetzbar
     const earned = Math.floor(this.player.gold);
     this.meta.addGold(earned);
@@ -1445,11 +1765,13 @@ export class Game {
   _clientGameOver(d) {
     this.mode = 'dead';
     this.input.enabled = false;
+    this.audio.setMusic('menu');
     this.hud.setSpectate(null);
     this.weapons.hideGhosts();
     this.enemies.hideBolts();
     this.runElapsed = d.t || this.runElapsed;
     this._recordScore(false);
+    this._recordMeta(false);
     const earned = Math.floor(this.player.gold);
     this.meta.addGold(earned);
     const m = Math.floor((d.t || 0) / 60);
@@ -1586,6 +1908,8 @@ export class Game {
     this.hud.drawEnemyBars(list.slice(0, 60));
     const bi = this.enemies.bossInfo(client);
     this.hud.setBossBar(bi ? bi.name : null, bi ? bi.frac : 0);
+    // Musik: Boss-Theme solange ein Boss lebt, sonst Karten-Theme
+    if (this.mode === 'play') this.audio.setMusic(bi ? 'boss' : this._musicTheme());
     // Boss-Erscheinen beim Gast (Host kündigt schon via bossAnnounce an)
     if (bi && !this._bossSeen) {
       this._bossSeen = true;
@@ -1599,11 +1923,21 @@ export class Game {
   }
 
   // -------------------------------------------------- Loop
+  // Hit-Stop: kurzer Zeitlupen-Freeze für wuchtige Momente (Boss-Kill, Evolution, harter Treffer)
+  hitStop(dur) {
+    this._hitStopT = Math.max(this._hitStopT || 0, dur);
+  }
+
   update() {
-    const dt = Math.min(0.05, this.clock.getDelta());
+    const rawDt = Math.min(0.05, this.clock.getDelta());
+    let dt = rawDt;
+    if (this._hitStopT > 0) {
+      this._hitStopT -= rawDt;
+      dt = rawDt * 0.06; // fast eingefroren, aber nicht hart 0 (Kamera/Effekte atmen weiter)
+    }
     if (this._introT > 0) { this._introT = Math.max(0, this._introT - dt); this.camCtrl.zoom = 1 + 1.2 * (this._introT / INTRO_DUR); }
-    this.world.update(dt, this.world.time + dt);
-    const camp = this._camTarget ? this._camTarget() : this.player.position;
+    const camp = this._camTarget ? this._camTarget() : (this.player && this.player.position);
+    this.world.update(dt, this.world.time + dt, camp); // Wetter folgt dem Kamera-Ziel
     if (this.player && this.playerLight) {
       this.playerLight.position.set(camp.x, camp.y + 5, camp.z);
       this.playerFill.position.set(camp.x + 6, camp.y + 14, camp.z + 6);
@@ -1650,10 +1984,22 @@ export class Game {
       this.hud.setBuffs(null);
     }
 
-    // Verletzungs-Sound + Dash-Feedback
+    // Verletzungs-Feedback: Sound + Shake + Hit-Stop + rote Schadenszahl (funktioniert auch beim Gast,
+    // dessen HP autoritativ per Snapshot kommen)
     if (this.mode === 'play' && this.player) {
       if (this._lastHp == null) this._lastHp = this.player.hp;
-      if (!this.player.dead && this.player.hp < this._lastHp - 2) this.audio.hurt();
+      if (!this.player.dead && this.player.hp < this._lastHp - 2) {
+        this.audio.hurt();
+        this.camCtrl.addShake(0.3);
+        this.hitStop(0.05);
+        this.player.hitFlash = 0.2;
+        const lost = Math.round(this._lastHp - this.player.hp);
+        const pp = this.player.position;
+        const wasRec = this.fx.record;
+        this.fx.record = false; // lokales Feedback, nicht an den Gast doppeln
+        this.fx.dmgNumber(pp.x, pp.y + 3.4, pp.z, lost, '#ff5a4a', lost >= 25);
+        this.fx.record = wasRec;
+      }
       this._lastHp = this.player.hp;
       const dashing = this.player.dashTime > 0;
       if (dashing && !this._wasDash) {
@@ -1663,8 +2009,19 @@ export class Game {
       this._wasDash = dashing;
     }
 
+    this._syncTouchUi();
     this.input.endFrame();
     this.composer.render();
+  }
+
+  // Touch-Steuerung nur während des Spielens einblenden
+  _syncTouchUi() {
+    const want = this.input.isTouch && (this.mode === 'play' || this.mode === 'levelup' || this.mode === 'paused');
+    if (want !== this._touchUiOn) {
+      this._touchUiOn = want;
+      const el = document.getElementById('touch-ui');
+      if (el) el.classList.toggle('hidden', !want);
+    }
   }
 
   _updatePlayHost(dt) {
@@ -1678,6 +2035,10 @@ export class Game {
     this._updateCamRight();
 
     const ps = this._players();
+    // Schrein-Segen: Timer runterzählen; solo den Schadensbonus direkt setzen
+    // (im Koop rechnet _updateBuffs den Segen mit ein)
+    for (const p of ps) if (p.blessing > 0) p.blessing -= dt;
+    if (!co) this.player.dmgMult = this.player.blessing > 0 ? 1.4 : 1;
     this.enemies.update(dt, ps, null);
     // Gefallene Spieler greifen NICHT an (Waffen aus, Visuals versteckt)
     this.weapons.group.visible = !this.player.dead;
@@ -1785,7 +2146,7 @@ export class Game {
     if (this._inAcc >= 1 / INPUT_HZ) {
       this._inAcc = 0;
       const ax = this._clientPaused || this.player.dead ? { x: 0, z: 0 } : this.input.axis();
-      const rv = !this._clientPaused && !this.player.dead && this.input.isDown('KeyE') ? 1 : 0;
+      const rv = !this._clientPaused && !this.player.dead && (this.input.isDown('KeyE') || this.input.isTouch) ? 1 : 0;
       this.net.send({ k: 'in', x: ax.x, z: ax.z, dodge: this._pendingDodge ? 1 : 0, rv, mash: this._mashAcc || 0 });
       this._pendingDodge = false;
       this._mashAcc = 0;

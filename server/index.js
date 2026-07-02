@@ -68,15 +68,36 @@ app.get('/api/scores', async (req, res) => {
   }
 });
 
+// simples In-Memory-Rate-Limit: max. 1 Score-Submit alle 10s pro IP
+const lastSubmit = new Map();
+setInterval(() => {
+  const cutoff = Date.now() - 60000;
+  for (const [ip, t] of lastSubmit) if (t < cutoff) lastSubmit.delete(ip);
+}, 60000).unref();
+
 app.post('/api/scores', async (req, res) => {
   if (!pool) return res.json({ ok: false, stored: false }); // ohne DB: still annehmen, nicht speichern
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '?';
+  const now = Date.now();
+  if (now - (lastSubmit.get(ip) || 0) < 10000) return res.status(429).json({ ok: false });
   const b = req.body || {};
   const num = (v, d = 0) => (Number.isFinite(+v) ? Math.max(0, Math.min(1e9, Math.floor(+v))) : d);
   const name = String(b.name || 'Anonym').slice(0, 24) || 'Anonym';
+  // Plausibilität: absurde Werte gar nicht erst speichern (Scores sind clientseitig gemeldet)
+  const time = num(b.time);
+  const kills = num(b.kills);
+  const level = num(b.level, 1);
+  const plausible =
+    time <= 3 * 3600 && // länger als 3h gibt es nicht
+    kills <= 20000 &&
+    level <= 200 &&
+    kills <= Math.max(60, time * 25); // mehr als ~25 Kills/s ist unmöglich
+  if (!plausible) return res.status(400).json({ ok: false });
+  lastSubmit.set(ip, now);
   try {
     await pool.query(
       `INSERT INTO scores (name, time, kills, level, gold, map, coop, win) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [name, num(b.time), num(b.kills), num(b.level, 1), num(b.gold), String(b.map || '').slice(0, 24), !!b.coop, !!b.win]
+      [name, time, kills, level, num(b.gold), String(b.map || '').slice(0, 24), !!b.coop, !!b.win]
     );
     res.json({ ok: true });
   } catch (e) {

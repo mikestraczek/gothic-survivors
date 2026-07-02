@@ -1,208 +1,30 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { grungeTexture, bumpTexture } from './textures.js';
-import { spriteQuad, spriteMaterial, SPRITE_FRAMES } from './spriteart.js';
+import { spriteQuad, spriteMaterial, SPRITE_FRAMES, blobShadowTexture } from './spriteart.js';
 
 const MAX_PER_TYPE = 340;
 const HARD_CAP = 320; // mehr Gegner gleichzeitig
 
-// ---- Geometrie-Helfer (Vertex-Farbe gebacken, Front = +Z) ----
-function colored(geo, hex) {
-  const c = new THREE.Color(hex);
-  const n = geo.attributes.position.count;
-  const arr = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) {
-    arr[i * 3] = c.r;
-    arr[i * 3 + 1] = c.g;
-    arr[i * 3 + 2] = c.b;
-  }
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(arr, 3));
-  geo.deleteAttribute('uv');
-  return geo;
-}
-function part(geo, hex, [px, py, pz] = [0, 0, 0], rot = null, scale = null) {
-  if (scale) geo.scale(scale[0], scale[1], scale[2]);
-  if (rot) {
-    if (rot[0]) geo.rotateX(rot[0]);
-    if (rot[1]) geo.rotateY(rot[1]);
-    if (rot[2]) geo.rotateZ(rot[2]);
-  }
-  geo.translate(px, py, pz);
-  return colored(geo, hex);
-}
-const sph = (r, c, p, s) => part(new THREE.SphereGeometry(r, 12, 9), c, p, null, s);
-const cyl = (rt, rb, h, c, p, rot) => part(new THREE.CylinderGeometry(rt, rb, h, 8), c, p, rot);
-const cone = (r, h, c, p, rot, seg = 7) => part(new THREE.ConeGeometry(r, h, seg), c, p, rot);
-
-// --- Scavenger (aasfressender Laufvogel) ---
-function geoScavenger() {
-  return mergeGeometries([
-    sph(0.46, 0x6a5236, [0, 0.78, 0], [1, 0.92, 1.4]),
-    sph(0.34, 0x7a6346, [0, 0.62, 0.35], [0.9, 0.7, 0.9]),
-    cyl(0.1, 0.17, 0.62, 0x5a4630, [0, 1.06, 0.32], [0.7, 0, 0]),
-    sph(0.2, 0x4a3826, [0, 1.44, 0.5]),
-    cone(0.1, 0.5, 0xd8b84a, [0, 1.42, 0.84], [Math.PI / 2, 0, 0], 6),
-    sph(0.06, 0x8a1818, [0.1, 0.5, 0.62].map((v, i) => (i === 0 ? 0.1 : i === 1 ? 1.5 : 0.62))),
-    sph(0.06, 0x8a1818, [-0.1, 1.5, 0.62]),
-    cone(0.24, 0.62, 0x5a4630, [0, 0.86, -0.66], [-1.25, 0, 0], 6),
-    cyl(0.05, 0.05, 0.7, 0xb8a040, [0.18, 0.35, 0]),
-    cyl(0.05, 0.05, 0.7, 0xb8a040, [-0.18, 0.35, 0]),
-    sph(0.18, 0x5f4a30, [0.42, 0.82, -0.05], [0.3, 0.7, 1.1]),
-    sph(0.18, 0x5f4a30, [-0.42, 0.82, -0.05], [0.3, 0.7, 1.1]),
-  ]);
-}
-
-// --- Blutfliege (riesiges fliegendes Insekt) ---
-function geoBloodfly() {
-  return mergeGeometries([
-    sph(0.34, 0x2c3a26, [0, 0, 0.1]),
-    sph(0.32, 0x1f2a16, [0, 0, -0.6], [0.9, 0.9, 1.7]),
-    sph(0.24, 0x32422a, [0, 0.06, 0.5]),
-    sph(0.11, 0xd83020, [0.14, 0.12, 0.62]),
-    sph(0.11, 0xd83020, [-0.14, 0.12, 0.62]),
-    part(new THREE.BoxGeometry(0.95, 0.03, 0.5), 0xc2d6c2, [0.55, 0.3, -0.02], [0, 0, 0.45]),
-    part(new THREE.BoxGeometry(0.95, 0.03, 0.5), 0xc2d6c2, [-0.55, 0.3, -0.02], [0, 0, -0.45]),
-    part(new THREE.BoxGeometry(0.7, 0.03, 0.4), 0xa8c0aa, [0.45, 0.18, -0.45], [0, 0.3, 0.3]),
-    part(new THREE.BoxGeometry(0.7, 0.03, 0.4), 0xa8c0aa, [-0.45, 0.18, -0.45], [0, -0.3, -0.3]),
-    cone(0.09, 0.55, 0x14180f, [0, -0.02, -1.3], [-Math.PI / 2, 0, 0], 5),
-  ]);
-}
-
-// --- Schattenwolf (Snapper-artig) ---
-function geoWolf() {
-  const parts = [
-    sph(0.5, 0x44413c, [0, 0.62, 0], [1, 0.85, 1.5]),
-    sph(0.3, 0x3a3632, [0, 0.74, 0.72]),
-    cone(0.18, 0.4, 0x2e2a26, [0, 0.66, 1.02], [Math.PI / 2, 0, 0], 6),
-    cone(0.1, 0.28, 0x24201c, [0.15, 0.98, 0.66], [-0.2, 0, 0.2], 4),
-    cone(0.1, 0.28, 0x24201c, [-0.15, 0.98, 0.66], [-0.2, 0, -0.2], 4),
-    sph(0.05, 0xc83018, [0.13, 0.78, 0.92]),
-    sph(0.05, 0xc83018, [-0.13, 0.78, 0.92]),
-    cone(0.12, 0.7, 0x44413c, [0, 0.66, -0.85], [-1.3, 0, 0], 6),
-  ];
-  for (const sx of [0.24, -0.24]) for (const sz of [0.48, -0.48]) parts.push(cyl(0.1, 0.07, 0.62, 0x383430, [sx, 0.3, sz]));
-  return mergeGeometries(parts);
-}
-
-// --- Molerat ---
-function geoMolerat() {
-  const parts = [
-    sph(0.58, 0x7a6a58, [0, 0.52, 0], [1.25, 0.78, 1.5]),
-    cone(0.42, 0.72, 0x6a5a48, [0, 0.5, 0.7], [Math.PI / 2, 0, 0], 9),
-    cone(0.07, 0.3, 0xe8e0c8, [0.11, 0.4, 1.02], [Math.PI / 2, 0, 0], 4),
-    cone(0.07, 0.3, 0xe8e0c8, [-0.11, 0.4, 1.02], [Math.PI / 2, 0, 0], 4),
-    sph(0.04, 0x301810, [0.13, 0.62, 0.78]),
-    sph(0.04, 0x301810, [-0.13, 0.62, 0.78]),
-  ];
-  for (const sx of [0.36, -0.36]) for (const sz of [0.34, -0.34]) parts.push(cyl(0.09, 0.06, 0.4, 0x5a4a38, [sx, 0.2, sz]));
-  return mergeGeometries(parts);
-}
-
-// --- Skelett (Untoter) ---
-function geoSkeleton() {
-  const bone = 0xd8d0b8;
-  const dark = 0xb6ad94;
-  return mergeGeometries([
-    sph(0.21, bone, [0, 1.62, 0.02]),
-    part(new THREE.BoxGeometry(0.26, 0.1, 0.2), dark, [0, 1.46, 0.06]),
-    sph(0.05, 0x202018, [0.08, 1.64, 0.18]),
-    sph(0.05, 0x202018, [-0.08, 1.64, 0.18]),
-    sph(0.3, bone, [0, 1.16, 0], [1.1, 1.3, 0.7]),
-    cyl(0.05, 0.05, 0.45, dark, [0, 1.45, 0]),
-    part(new THREE.BoxGeometry(0.36, 0.16, 0.22), bone, [0, 0.82, 0]),
-    cyl(0.06, 0.05, 0.62, dark, [0.3, 1.15, 0.04], [0.3, 0, 0.25]),
-    cyl(0.06, 0.05, 0.62, dark, [-0.3, 1.15, 0.04], [0.3, 0, -0.25]),
-    cyl(0.07, 0.06, 0.78, bone, [0.13, 0.44, 0]),
-    cyl(0.07, 0.06, 0.78, bone, [-0.13, 0.44, 0]),
-    part(new THREE.BoxGeometry(0.05, 0.95, 0.13), 0x8a8378, [0.36, 1.0, 0.18], [0.2, 0, 0]),
-  ]);
-}
-
-// --- Ghul (verrottender Humanoid) ---
-function geoGhoul() {
-  return mergeGeometries([
-    sph(0.42, 0x46583a, [0, 1.02, 0.05], [1.1, 1.3, 0.8]),
-    sph(0.25, 0x7a8a5a, [0, 1.55, 0.12]),
-    sph(0.05, 0xd0c020, [0.1, 1.57, 0.3]),
-    sph(0.05, 0xd0c020, [-0.1, 1.57, 0.3]),
-    cyl(0.1, 0.08, 0.85, 0x3e4a30, [0.42, 1.0, 0.12], [0.5, 0, 0.15]),
-    cyl(0.1, 0.08, 0.85, 0x3e4a30, [-0.42, 1.0, 0.12], [0.5, 0, -0.15]),
-    cyl(0.11, 0.09, 0.8, 0x33402a, [0.16, 0.4, 0]),
-    cyl(0.11, 0.09, 0.8, 0x33402a, [-0.16, 0.4, 0]),
-  ]);
-}
-
-// --- Schattenläufer (Boss) ---
-function geoShadowbeast() {
-  const dark = 0x2a2238;
-  const parts = [
-    sph(0.95, dark, [0, 1.85, 0], [1.5, 1.7, 1.2]),
-    sph(0.62, 0x3a2e4e, [0, 2.95, 0.4]),
-    cone(0.2, 1.35, 0xc8bca0, [0.42, 3.25, 0.3], [-0.5, 0, 0.3], 6),
-    cone(0.2, 1.35, 0xc8bca0, [-0.42, 3.25, 0.3], [-0.5, 0, -0.3], 6),
-    sph(0.14, 0xff2a18, [0.26, 2.95, 0.95]),
-    sph(0.14, 0xff2a18, [-0.26, 2.95, 0.95]),
-    cyl(0.32, 0.26, 1.8, 0x241d30, [1.15, 1.7, 0.1], [0.2, 0, 0.1]),
-    cyl(0.32, 0.26, 1.8, 0x241d30, [-1.15, 1.7, 0.1], [0.2, 0, -0.1]),
-    cyl(0.36, 0.3, 1.4, 0x1e1828, [0.5, 0.7, 0]),
-    cyl(0.36, 0.3, 1.4, 0x1e1828, [-0.5, 0.7, 0]),
-  ];
-  return mergeGeometries(parts);
-}
-
-// --- Wasserspeier (fliegender Stein-Tank) ---
-function geoGargoyle() {
-  return mergeGeometries([
-    sph(0.5, 0x6a6a74, [0, 0.85, 0], [1, 0.9, 1]),
-    sph(0.3, 0x5a5a64, [0, 1.4, 0.15]),
-    cone(0.12, 0.42, 0x7c7c88, [0.18, 1.66, 0.1], [-0.2, 0, 0.2], 4),
-    cone(0.12, 0.42, 0x7c7c88, [-0.18, 1.66, 0.1], [-0.2, 0, -0.2], 4),
-    sph(0.06, 0xffaa20, [0.12, 1.45, 0.34]),
-    sph(0.06, 0xffaa20, [-0.12, 1.45, 0.34]),
-    part(new THREE.BoxGeometry(1.4, 0.06, 0.8), 0x53535d, [0.85, 1.05, -0.2], [0, 0.35, 0.5]),
-    part(new THREE.BoxGeometry(1.4, 0.06, 0.8), 0x53535d, [-0.85, 1.05, -0.2], [0, -0.35, -0.5]),
-    cyl(0.12, 0.1, 0.5, 0x5a5a64, [0.22, 0.4, 0]),
-    cyl(0.12, 0.1, 0.5, 0x5a5a64, [-0.22, 0.4, 0]),
-  ]);
-}
-
-// --- Dämon (gehörnter Höllen-Humanoid) ---
-function geoDemon() {
-  return mergeGeometries([
-    sph(0.5, 0x8a2a20, [0, 1.1, 0], [1, 1.3, 0.72]),
-    sph(0.28, 0x9a3326, [0, 1.78, 0.08]),
-    cone(0.1, 0.48, 0xe8d8c0, [0.18, 2.05, 0], [-0.35, 0, 0.35], 5),
-    cone(0.1, 0.48, 0xe8d8c0, [-0.18, 2.05, 0], [-0.35, 0, -0.35], 5),
-    sph(0.05, 0xffd020, [0.1, 1.8, 0.27]),
-    sph(0.05, 0xffd020, [-0.1, 1.8, 0.27]),
-    cyl(0.14, 0.1, 0.95, 0x6e2018, [0.44, 1.12, 0.06], [0.4, 0, 0.18]),
-    cyl(0.14, 0.1, 0.95, 0x6e2018, [-0.44, 1.12, 0.06], [0.4, 0, -0.18]),
-    cyl(0.16, 0.12, 0.88, 0x6e2018, [0.18, 0.42, 0]),
-    cyl(0.16, 0.12, 0.88, 0x6e2018, [-0.18, 0.42, 0]),
-  ]);
-}
-
-// --- Troll (großer, langsamer Brocken) ---
-function geoTroll() {
-  return mergeGeometries([
-    sph(0.72, 0x5a6a3a, [0, 1.3, 0], [1.2, 1.3, 1]),
-    sph(0.32, 0x6a7a48, [0, 2.0, 0.1]),
-    sph(0.05, 0xd0c020, [0.13, 2.04, 0.32]),
-    sph(0.05, 0xd0c020, [-0.13, 2.04, 0.32]),
-    cone(0.05, 0.22, 0xe8e0c8, [0.09, 1.86, 0.34], [Math.PI / 2, 0, 0], 4),
-    cone(0.05, 0.22, 0xe8e0c8, [-0.09, 1.86, 0.34], [Math.PI / 2, 0, 0], 4),
-    cyl(0.24, 0.18, 1.35, 0x4a5a30, [0.72, 1.3, 0.05], [0.3, 0, 0.12]),
-    cyl(0.24, 0.18, 1.35, 0x4a5a30, [-0.72, 1.3, 0.05], [0.3, 0, -0.12]),
-    cyl(0.26, 0.2, 1.0, 0x4a5a30, [0.26, 0.5, 0]),
-    cyl(0.26, 0.2, 1.0, 0x4a5a30, [-0.26, 0.5, 0]),
-  ]);
-}
+// numerischer Grid-Schlüssel (keine String-Allokation pro Gegner/Frame); Arena passt in ±512 Zellen
+const _gkey = (cx, cz) => (cx + 512) * 2048 + (cz + 512);
 
 // Reihenfolge der Typen (Index = Snapshot-Code) — nur anhängen, nie umsortieren!
 export const ETYPE_KEYS = [
   'scavenger', 'bloodfly', 'wolf', 'molerat', 'skeleton', 'ghoul', 'boss',
   'gargoyle', 'demon', 'troll', 'boss_bone', 'boss_demon',
+  'shooter', 'exploder', 'splitter', 'zombling',
 ];
+
+// ---- Eliten: seltene, verstärkte Varianten normaler Gegner mit Affix ----
+const ELITE_KEYS = ['swift', 'shield', 'boom'];
+const ELITE_TINT = {
+  swift: new THREE.Color(0.7, 1.3, 2.2), // eisblau
+  shield: new THREE.Color(2.0, 1.7, 0.7), // gold
+  boom: new THREE.Color(2.2, 0.9, 0.55), // glutorange
+};
+const ELITE_NAMES = { swift: 'Windgepeitscht', shield: 'Gepanzert', boom: 'Explosiv' };
+
+// Boss-Enrage-Tints je Phase (1 = angeschlagen, 2 = rasend)
+const BOSS_PHASE_TINT = [null, new THREE.Color(1.5, 1.05, 0.9), new THREE.Color(1.9, 0.85, 0.7)];
 
 // Bosse, die in Abständen rotierend erscheinen
 const BOSS_TYPES = ['boss', 'boss_bone', 'boss_demon'];
@@ -211,42 +33,34 @@ const ENEMY_NAMES = {
   scavenger: 'Aasfresser', bloodfly: 'Blutfliege', wolf: 'Wolf', molerat: 'Maulwurfsratte',
   skeleton: 'Skelett', ghoul: 'Ghul', gargoyle: 'Gargyle', demon: 'Dämon', troll: 'Troll',
   boss: 'Schattenläufer', boss_bone: 'Knochenkönig', boss_demon: 'Erzdämon',
+  shooter: 'Schwarzmagier', exploder: 'Höllenbrut', splitter: 'Moderleib', zombling: 'Modergänger',
 };
 
 const ETYPES = {
-  scavenger: { proc: geoScavenger, hp: 9, speed: 2.6, dmg: 6, radius: 0.55, scale: 1.05, xp: 1, gold: 0.05, glow: 0x86b03a },
-  bloodfly: { proc: geoBloodfly, hp: 7, speed: 3.0, dmg: 7, radius: 0.5, scale: 0.95, xp: 2, gold: 0.07, fly: true, glow: 0xd02828 },
-  wolf: { proc: geoWolf, hp: 20, speed: 3.5, dmg: 9, radius: 0.6, scale: 1.15, xp: 3, gold: 0.09, glow: 0xe08018 },
-  molerat: { proc: geoMolerat, hp: 32, speed: 2.2, dmg: 11, radius: 0.8, scale: 1.1, xp: 4, gold: 0.1, glow: 0xc89838 },
-  skeleton: { proc: geoSkeleton, hp: 46, speed: 2.5, dmg: 12, radius: 0.6, scale: 1.15, xp: 6, gold: 0.14, glow: 0x9fd8e6 },
-  ghoul: { proc: geoGhoul, hp: 64, speed: 2.3, dmg: 15, radius: 0.7, scale: 1.2, xp: 9, gold: 0.18, glow: 0x7ec24a },
+  scavenger: { hp: 9, speed: 2.6, dmg: 6, radius: 0.55, scale: 1.05, xp: 1, gold: 0.05, glow: 0x86b03a },
+  bloodfly: { hp: 7, speed: 3.0, dmg: 7, radius: 0.5, scale: 0.95, xp: 2, gold: 0.07, fly: true, glow: 0xd02828 },
+  wolf: { hp: 20, speed: 3.5, dmg: 9, radius: 0.6, scale: 1.15, xp: 3, gold: 0.09, glow: 0xe08018 },
+  molerat: { hp: 32, speed: 2.2, dmg: 11, radius: 0.8, scale: 1.1, xp: 4, gold: 0.1, glow: 0xc89838 },
+  skeleton: { hp: 46, speed: 2.5, dmg: 12, radius: 0.6, scale: 1.15, xp: 6, gold: 0.14, glow: 0x9fd8e6 },
+  ghoul: { hp: 64, speed: 2.3, dmg: 15, radius: 0.7, scale: 1.2, xp: 9, gold: 0.18, glow: 0x7ec24a },
   // Spät-Gegner (tankiger, mehr XP)
-  gargoyle: { proc: geoGargoyle, hp: 85, speed: 2.7, dmg: 15, radius: 0.7, scale: 1.3, xp: 9, gold: 0.22, fly: true, glow: 0x7aa0d0 },
-  demon: { proc: geoDemon, hp: 110, speed: 3.1, dmg: 18, radius: 0.7, scale: 1.5, xp: 13, gold: 0.28, glow: 0xe85018 },
-  troll: { proc: geoTroll, hp: 190, speed: 1.8, dmg: 24, radius: 1.1, scale: 1.9, xp: 18, gold: 0.45, glow: 0x58a838 },
+  gargoyle: { hp: 85, speed: 2.7, dmg: 15, radius: 0.7, scale: 1.3, xp: 9, gold: 0.22, fly: true, glow: 0x7aa0d0 },
+  demon: { hp: 110, speed: 3.1, dmg: 18, radius: 0.7, scale: 1.5, xp: 13, gold: 0.28, glow: 0xe85018 },
+  troll: { hp: 190, speed: 1.8, dmg: 24, radius: 1.1, scale: 1.9, xp: 18, gold: 0.45, glow: 0x58a838 },
   // Bosse
   // Jeder Boss hat ein EIGENES Fähigkeiten-Set (fühlt sich anders an):
   //  Schattenläufer = Nahkämpfer (Slam/Kegel/Festwurzeln), Knochenkönig = Distanz/Bullet-Hell (Kugeln/Nova/Safe-Zonen),
   //  Erzdämon = aggressiver Allrounder (Slam/Nova/Kugeln/Festwurzeln).
-  boss: { proc: geoShadowbeast, hp: 1300, speed: 2.0, dmg: 26, radius: 2.0, scale: 2.6, xp: 60, gold: 5, boss: true, glow: 0xb030e0, abilities: ['slam', 'frontal', 'root'] },
-  boss_bone: { proc: geoSkeleton, hp: 1600, speed: 2.2, dmg: 28, radius: 1.8, scale: 1.8, xp: 75, gold: 6, boss: true, glow: 0xdce6f0, abilities: ['bolts', 'nova', 'safe'] },
-  boss_demon: { proc: geoDemon, hp: 2000, speed: 2.4, dmg: 32, radius: 1.9, scale: 2.0, xp: 90, gold: 7, boss: true, glow: 0xff3a14, abilities: ['slam', 'nova', 'bolts', 'root'] },
+  // Verhaltens-Archetypen: Schütze hält Abstand und feuert Kugeln, Höllenbrut rennt an und
+  // detoniert (telegrafiert — vorher töten verhindert die Explosion), Moderleib zerfällt in Modergänger.
+  shooter: { hp: 42, speed: 2.4, dmg: 11, radius: 0.6, scale: 1.2, xp: 8, gold: 0.2, ranged: true, glow: 0x9adcff },
+  exploder: { hp: 26, speed: 3.6, dmg: 12, radius: 0.5, scale: 1.0, xp: 5, gold: 0.12, explode: { r: 3.2 }, glow: 0xff7a2a },
+  splitter: { hp: 95, speed: 1.9, dmg: 16, radius: 0.9, scale: 1.55, xp: 10, gold: 0.24, split: { type: 'zombling', n: 2 }, glow: 0x86c86a },
+  zombling: { hp: 12, speed: 3.3, dmg: 7, radius: 0.45, scale: 0.85, xp: 1, gold: 0.04, glow: 0x86c86a },
+  boss: { hp: 1300, speed: 2.0, dmg: 26, radius: 2.0, scale: 2.6, xp: 60, gold: 5, boss: true, glow: 0xb030e0, abilities: ['slam', 'frontal', 'root'] },
+  boss_bone: { hp: 1600, speed: 2.2, dmg: 28, radius: 1.8, scale: 1.8, xp: 75, gold: 6, boss: true, glow: 0xdce6f0, abilities: ['bolts', 'nova', 'safe'] },
+  boss_demon: { hp: 2000, speed: 2.4, dmg: 32, radius: 1.9, scale: 2.0, xp: 90, gold: 7, boss: true, glow: 0xff3a14, abilities: ['slam', 'nova', 'bolts', 'root'] },
 };
-
-// Fresnel-Randglühen in der Typ-Farbe per Shader-Injektion.
-function addRimGlow(mat, color, strength) {
-  const r = (color.r * strength).toFixed(3);
-  const g = (color.g * strength).toFixed(3);
-  const b = (color.b * strength).toFixed(3);
-  mat.onBeforeCompile = (sh) => {
-    sh.fragmentShader = sh.fragmentShader.replace(
-      '#include <dithering_fragment>',
-      `float _rim = pow(1.0 - clamp(dot(normalize(vNormal), normalize(vViewPosition)), 0.0, 1.0), 2.5);
-       gl_FragColor.rgb += vec3(${r}, ${g}, ${b}) * _rim;
-       #include <dithering_fragment>`
-    );
-  };
-}
 
 export class EnemyManager {
   constructor(scene, world) {
@@ -263,6 +77,20 @@ export class EnemyManager {
 
     // HD-2D: jeder Gegner ist ein Billboard-Pixel-Sprite (InstancedMesh je Typ).
     this._buildSpriteMeshes();
+
+    // Blob-Schatten unter allen Gegnern (verankert die Sprites am Boden; ein Draw-Call)
+    const shGeo = new THREE.PlaneGeometry(1, 1);
+    shGeo.rotateX(-Math.PI / 2);
+    this._shadowMesh = new THREE.InstancedMesh(
+      shGeo,
+      new THREE.MeshBasicMaterial({ map: blobShadowTexture(), transparent: true, depthWrite: false }),
+      HARD_CAP + 60
+    );
+    this._shadowMesh.count = 0;
+    this._shadowMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this._shadowMesh.frustumCulled = false;
+    this._shadowMesh.renderOrder = 1;
+    this.scene.add(this._shadowMesh);
 
     this.spawnTimer = 1.0;
     this.bossTimer = 90;
@@ -284,6 +112,8 @@ export class EnemyManager {
     this.coopScale = 1; // Koop: mehr Gegner gleichzeitig
     this.bossInterval = 100; // Sekunden zwischen wiederkehrenden Bossen (Endlos kürzer)
     this.fx = null; // vom Game gesetzt (Boss-Telegraphen)
+    this.onShake = null; // vom Game gesetzt (Screen-Shake bei Einschlägen)
+    this.onBossEnrage = null; // vom Game gesetzt (Banner/Sound bei Boss-Enrage)
     this._aoes = []; // telegrafierte Boss-AoE-Angriffe
 
     // Anti-Kiting: Gegner werden „zornig" (schneller), wenn zu lange niemand getötet wird
@@ -317,12 +147,10 @@ export class EnemyManager {
     }
   }
 
-  // (Sprites werden bereits im Konstruktor gebaut — kein Modell-Laden nötig)
-  async loadModels() {}
-
   reset() {
     for (const e of this.enemies) e.alive = false;
     for (const key of ETYPE_KEYS) this.meshes[key].count = 0;
+    this._shadowMesh.count = 0;
     this.spawnTimer = 1.0;
     this.bossTimer = 90;
     this.elapsed = 0;
@@ -379,12 +207,16 @@ export class EnemyManager {
     if (t > 20) pool.push('bloodfly');
     if (t > 40) pool.push('wolf');
     if (t > 70) pool.push('molerat');
+    if (t > 90) pool.push('exploder');
     if (t > 100) pool.push('skeleton', 'wolf');
+    if (t > 120) pool.push('shooter');
     if (t > 150) pool.push('ghoul', 'skeleton');
+    if (t > 160) pool.push('splitter');
     if (t > 180) pool.push('gargoyle');
     if (t > 220) pool.push('demon', 'ghoul');
+    if (t > 250) pool.push('shooter', 'exploder');
     if (t > 270) pool.push('troll', 'demon');
-    if (t > 330) pool.push('troll', 'gargoyle', 'demon');
+    if (t > 330) pool.push('troll', 'gargoyle', 'demon', 'splitter');
     return pool;
   }
 
@@ -416,8 +248,37 @@ export class EnemyManager {
     e._dx = 0;
     e._dz = 1;
     e.slow = 0;
+    e.elite = null;
+    e.tint = null;
+    e.shield = 0;
+    e.xpMult = 1;
+    e.arming = null;
+    e._shoot = null;
+    e.bossPhase = 0;
+    e._cyc = null;
+    e._ci = null;
     e.id = this._nextId++;
     return e;
+  }
+
+  // Selten (ab ~90s bzw. Phase 2): normalen Gegner zur Elite mit Affix aufwerten
+  _maybeElite(e) {
+    if (!e || e.def.boss || e.type === 'zombling') return e;
+    if (this.elapsed < 90 && this.phase < 1) return e;
+    if (this._rnd() > 0.05) return e;
+    const a = ELITE_KEYS[Math.floor(this._rnd() * ELITE_KEYS.length)];
+    e.elite = a;
+    e.maxHp = Math.round(e.maxHp * 3);
+    e.hp = e.maxHp;
+    e.scale *= 1.35;
+    e.xpMult = 4;
+    e.tint = ELITE_TINT[a];
+    if (a === 'swift') e.speed *= 1.5;
+    if (a === 'shield') e.shield = Math.round(e.maxHp * 0.5);
+    return e;
+  }
+  eliteName(e) {
+    return `${ELITE_NAMES[e.elite] || 'Elite'}: ${ENEMY_NAMES[e.type] || e.type}`;
   }
 
   // Boss spawnen (Mini- oder Endboss). hpMult/sizeMult skalieren ihn; announceName zeigt das Banner.
@@ -463,7 +324,7 @@ export class EnemyManager {
       if (Math.hypot(x, z) >= this.world.barrierRadius - 6) continue;
       let ok = true;
       for (const p of centers) { if (Math.hypot(x - p.x, z - p.z) < minDist) { ok = false; break; } }
-      if (ok) return this.spawn(type, x, z);
+      if (ok) return this._maybeElite(this.spawn(type, x, z));
     }
     return null;
   }
@@ -475,7 +336,10 @@ export class EnemyManager {
   // centers = Liste der Spielerpositionen (Singleplayer: 1, Koop: 2)
   update(dt, players, onKill) {
     this.elapsed += dt;
-    const centers = players.map((p) => p.position);
+    // wiederverwendete Puffer statt Allokationen pro Frame
+    const centers = this._centers || (this._centers = []);
+    centers.length = 0;
+    for (const p of players) centers.push(p.position);
     const anyAlive = players.some((p) => p.alive && !p.dead);
 
     // Anti-Kiting: „Zorn" steigt, wenn zu lange kein Kill fällt -> Gegner werden schneller.
@@ -515,10 +379,14 @@ export class EnemyManager {
       }
     }
 
-    // Separations-Grid
+    // Separations-Grid — persistent & wiederverwendet (kein new Map() pro Frame).
+    // Nach dem Update dient es auch den Waffen-Abfragen (inRadius) als Broadphase.
     const cell = 1.6;
-    const grid = new Map();
-    const key = (cx, cz) => cx + ',' + cz;
+    this._frame = (this._frame || 0) + 1;
+    const grid = this._grid || (this._grid = new Map());
+    if (this._frame % 600 === 0) grid.clear(); // leere Buckets gelegentlich entsorgen
+    else for (const arr of grid.values()) arr.length = 0;
+    const key = _gkey;
     for (let i = 0; i < this.enemies.length; i++) {
       const e = this.enemies[i];
       if (!e.alive) continue;
@@ -527,6 +395,7 @@ export class EnemyManager {
       if (!arr) grid.set(k, (arr = []));
       arr.push(i);
     }
+    this._gridFrame = this._frame;
 
     const maxR = this.world.barrierRadius - 4;
 
@@ -559,6 +428,37 @@ export class EnemyManager {
       dz /= d;
       e._dx = dx;
       e._dz = dz;
+
+      // ---- Verhaltens-Archetypen ----
+      if (target) {
+        if (e.def.ranged) {
+          // Schütze: Abstand halten, aus der Distanz Kugeln feuern (dodgebar)
+          if (d < 11) { dx = -dx; dz = -dz; }
+          else if (d < 16) { dx = 0; dz = 0; }
+          e._shoot = (e._shoot == null ? 1.2 + this._rnd() * 2 : e._shoot) - dt;
+          if (e._shoot <= 0 && d < 26) {
+            e._shoot = 2.4 + this._rnd() * 1.8;
+            const ang = Math.atan2(tz - e.z, tx - e.x);
+            this._spawnBolt(e.x, e.z, Math.cos(ang) * 7.5, Math.sin(ang) * 7.5, e.dmg, e.type);
+            if (this.fx) this.fx.sparksBurst(e.x, e.y + 1.4, e.z, 0x9adcff, 5, 3);
+          }
+        } else if (e.def.explode) {
+          // Höllenbrut: nah ran, kurz anschwellen (Telegraph), dann detonieren.
+          // Wer sie vorher tötet, verhindert die Explosion.
+          if (e.arming != null) {
+            dx = 0; dz = 0;
+            e.arming -= dt;
+            if (e.arming <= 0) {
+              e.alive = false;
+              this._aoes.push({ type: 'circle', x: e.x, z: e.z, r: e.def.explode.r, dmg: Math.round(e.dmg * 1.8), delay: 0, src: e.type });
+              continue;
+            }
+          } else if (d < 2.8) {
+            e.arming = 0.85;
+            if (this.fx) this.fx.telegraph(e.x, e.z, e.def.explode.r, 0.85, e.y);
+          }
+        }
+      }
 
       let sepX = 0;
       let sepZ = 0;
@@ -619,6 +519,24 @@ export class EnemyManager {
         // ---- Boss-Fähigkeiten: jeder Boss hat NUR seine eigenen (def.abilities) ----
         if (e.def.boss) {
           const ab = e.def.abilities || ['slam', 'nova', 'frontal', 'safe'];
+          // Boss-Phasen: bei 66% und 33% HP Enrage — schneller, härter, eine Fähigkeit mehr
+          const frac = e.hp / e.maxHp;
+          const wantPhase = frac < 0.33 ? 2 : frac < 0.66 ? 1 : 0;
+          if ((e.bossPhase || 0) < wantPhase) {
+            e.bossPhase = wantPhase;
+            e.speed *= 1.12;
+            e.atk = Math.min(e.atk || 2, 0.6); // direkt der nächste Angriff
+            e.tint = BOSS_PHASE_TINT[wantPhase];
+            const cur = e._cyc || ab.filter((a) => a !== 'safe');
+            const extra = ['nova', 'bolts', 'slam', 'frontal'].find((a) => !cur.includes(a));
+            if (extra) e._cyc = cur.concat(extra);
+            if (this.fx) {
+              this.fx.ring(e.x, e.z, 8, 0xff3020);
+              this.fx.sparksBurst(e.x, e.y + 1.6, e.z, 0xff5030, 28, 8);
+            }
+            if (this.onShake) this.onShake(0.45);
+            if (this.onBossEnrage) this.onBossEnrage(wantPhase, ENEMY_NAMES[e.type] || 'Der Boss');
+          }
           // Spezial: sichere Zonen (nur wenn der Boss sie hat)
           if (ab.includes('safe')) {
             e.special = (e.special || 9) - dt;
@@ -645,7 +563,8 @@ export class EnemyManager {
           if (cyc.length) {
             e.atk = (e.atk || 2) - dt;
             if (e.atk <= 0) {
-              e.atk = 2.6 + this._rnd() * 1.6;
+              // Enrage-Phasen beschleunigen die Angriffsrotation deutlich
+              e.atk = (2.6 + this._rnd() * 1.6) * (1 - 0.22 * (e.bossPhase || 0));
               e._ci = ((e._ci == null ? -1 : e._ci) + 1) % cyc.length;
               this._bossAttack(e, cyc[e._ci], target);
             }
@@ -674,6 +593,7 @@ export class EnemyManager {
           }
         } else if (a.type === 'cone') {
           if (this.fx) this.fx.explosion(a.x + a.dx * a.range * 0.5, a.z + a.dz * a.range * 0.5, 3.6, 0xff5a3a);
+          if (this.onShake) this.onShake(0.3);
           for (const p of players) {
             if (!p.alive || p.dead) continue;
             const pdx = p.position.x - a.x, pdz = p.position.z - a.z;
@@ -682,6 +602,7 @@ export class EnemyManager {
           }
         } else {
           if (this.fx) this.fx.explosion(a.x, a.z, a.r, 0xff5a3a);
+          if (this.onShake) this.onShake(0.3);
           for (const p of players) {
             if (!p.alive || p.dead) continue;
             if (Math.hypot(p.position.x - a.x, p.position.z - a.z) < a.r) p.takeDamage(a.dmg, a.src);
@@ -801,22 +722,33 @@ export class EnemyManager {
     const _q = this._tmpQ.identity();
     const _p = this._p || (this._p = { x: 0, y: 0, z: 0 });
     const _s = this._sv || (this._sv = { x: 1, y: 1, z: 1 });
+    let shadowIdx = 0;
+    const shadowCap = this._shadowMesh.instanceMatrix.count;
 
     for (const e of list) {
       if (needAlive && !e.alive) continue;
+      // Blob-Schatten am Boden (auch unter Fliegern)
+      if (shadowIdx < shadowCap) {
+        const ss = e.scale * (e.def.boss ? 2.6 : 1.7);
+        _p.x = e.x; _p.y = e.y + 0.05; _p.z = e.z;
+        _s.x = ss; _s.y = 1; _s.z = ss;
+        this._tmpM.compose(_p, _q, _s);
+        this._shadowMesh.setMatrixAt(shadowIdx++, this._tmpM);
+      }
       const mesh = this.meshes[e.type];
       const idx = counters[e.type];
       if (idx >= mesh.instanceMatrix.count) continue;
       const def = e.def;
       // Sprite-Höhe in Welt-Einheiten; Füße auf dem Boden (Billboard verankert unten)
-      const sc = e.scale * 3.1;
+      let sc = e.scale * 3.1;
+      if (e.arming) sc *= 1 + 0.22 * Math.sin(this.elapsed * 30); // Höllenbrut schwillt vor der Detonation an
       let y = e.y;
       if (def.fly) y += 1.4 + Math.sin(this.elapsed * 6 + e.phase) * 0.25; // Schweben
       _p.x = e.x; _p.y = y; _p.z = e.z;
       _s.x = sc; _s.y = sc; _s.z = sc;
       this._tmpM.compose(_p, _q, _s); // nur Position+Skalierung; Billboard im Shader
       mesh.setMatrixAt(idx, this._tmpM);
-      mesh.setColorAt(idx, e.flash > 0 ? this._flash : this._white);
+      mesh.setColorAt(idx, e.flash > 0 ? this._flash : e.tint || this._white);
       // Lauf-/Flatter-Frame
       const frame = Math.floor(this.elapsed * (def.fly ? 12 : 6) + e.phase) % SPRITE_FRAMES;
       mesh.geometry.getAttribute('aFrame').setX(idx, frame);
@@ -835,15 +767,19 @@ export class EnemyManager {
       mesh.geometry.getAttribute('aFrame').needsUpdate = true;
       mesh.geometry.getAttribute('aFlip').needsUpdate = true;
     }
+    this._shadowMesh.count = shadowIdx;
+    this._shadowMesh.instanceMatrix.needsUpdate = true;
   }
 
   // ---------- Multiplayer ----------
-  // Host: Snapshot [id, typeIdx, x, z, hp255] je lebendem Gegner
+  // Host: Snapshot [id, typeIdx, x, z, hp255, flags] je lebendem Gegner.
+  // flags: Bits 0-2 = Elite-Affix (Index+1), Bit 3 = Detonations-Anschwellen
   snapshot() {
     const out = [];
     for (const e of this.enemies) {
       if (!e.alive) continue;
-      out.push(e.id, ETYPE_KEYS.indexOf(e.type), Math.round(e.x * 20) / 20, Math.round(e.z * 20) / 20, Math.max(0, Math.round((e.hp / e.maxHp) * 255)));
+      const flags = (e.elite ? ELITE_KEYS.indexOf(e.elite) + 1 : 0) | (e.arming != null ? 8 : 0);
+      out.push(e.id, ETYPE_KEYS.indexOf(e.type), Math.round(e.x * 20) / 20, Math.round(e.z * 20) / 20, Math.max(0, Math.round((e.hp / e.maxHp) * 255)), flags);
     }
     return out;
   }
@@ -852,7 +788,7 @@ export class EnemyManager {
   setSnapshot(arr) {
     this._ghostGen++;
     const gen = this._ghostGen;
-    for (let i = 0; i + 4 < arr.length; i += 5) {
+    for (let i = 0; i + 5 < arr.length; i += 6) {
       const id = arr[i];
       const type = ETYPE_KEYS[arr[i + 1]];
       const tx = arr[i + 2];
@@ -862,9 +798,13 @@ export class EnemyManager {
         g = { type, def: ETYPES[type], x: tx, z: tz, tx, tz, scale: ETYPES[type].scale, phase: (id * 1.37) % 10, _dx: 0, _dz: 1, flash: 0 };
         this._ghosts.set(id, g);
       }
+      const flags = arr[i + 5] || 0;
+      const elite = flags & 7;
       g.type = type;
       g.def = ETYPES[type];
-      g.scale = g.def.scale;
+      g.scale = g.def.scale * (elite ? 1.35 : 1);
+      g.tint = elite ? ELITE_TINT[ELITE_KEYS[elite - 1]] : null;
+      g.arming = !!(flags & 8);
       g.tx = tx;
       g.tz = tz;
       g.hpFrac = arr[i + 4] / 255;
@@ -923,9 +863,33 @@ export class EnemyManager {
     return best;
   }
 
+  // Gegner im Radius. Nutzt das Separations-Grid als Broadphase (statt alle 320 zu scannen).
+  // ACHTUNG: gibt einen WIEDERVERWENDETEN Puffer zurück — Ergebnis sofort verbrauchen,
+  // nicht über den nächsten inRadius-Aufruf hinaus aufheben.
   inRadius(x, z, r) {
-    const out = [];
+    const out = this._queryOut || (this._queryOut = []);
+    out.length = 0;
     const rr = r * r;
+    if (this._grid && this._gridFrame === this._frame) {
+      const cell = 1.6;
+      const m = r + 0.6; // Sicherheitsrand: Gegner bewegen sich nach dem Grid-Aufbau noch minimal
+      const x0 = Math.floor((x - m) / cell);
+      const x1 = Math.floor((x + m) / cell);
+      const z0 = Math.floor((z - m) / cell);
+      const z1 = Math.floor((z + m) / cell);
+      for (let cx = x0; cx <= x1; cx++) {
+        for (let cz = z0; cz <= z1; cz++) {
+          const arr = this._grid.get(_gkey(cx, cz));
+          if (!arr) continue;
+          for (const j of arr) {
+            const e = this.enemies[j];
+            if (!e.alive) continue;
+            if ((e.x - x) ** 2 + (e.z - z) ** 2 <= rr) out.push(e);
+          }
+        }
+      }
+      return out;
+    }
     for (const e of this.enemies) {
       if (!e.alive) continue;
       if ((e.x - x) ** 2 + (e.z - z) ** 2 <= rr) out.push(e);
@@ -939,8 +903,20 @@ export class EnemyManager {
 
   damage(e, amount, knock, onKill, slow) {
     if (!e.alive) return;
+    // Gepanzerte Eliten: Schild absorbiert zuerst (graue Zahlen)
+    if (e.shield > 0) {
+      const abs = Math.min(e.shield, amount);
+      e.shield -= abs;
+      amount -= abs;
+      if (this.fx) this.fx.dmgNumber(e.x, e.y + e.scale * 2.6, e.z, abs, '#b9c4d4', false);
+      if (amount <= 0) {
+        e.flash = 0.12;
+        return;
+      }
+    }
     e.hp -= amount;
     e.flash = 0.12;
+    if (this.fx) this.fx.dmgNumber(e.x, e.y + e.scale * 2.6, e.z, amount, e.def.boss ? '#ffc46a' : '#ffe9a0', amount >= 100);
     if (slow) e.slow = slow;
     if (knock) {
       e.kx += knock.x;
@@ -950,6 +926,18 @@ export class EnemyManager {
       e.alive = false;
       this.totalKills++;
       this._sinceKill = 0; // Kill beruhigt den Zorn (Anti-Kiting)
+      // Moderleib zerfällt in Modergänger
+      if (e.def.split) {
+        for (let i = 0; i < e.def.split.n; i++) {
+          this.spawn(e.def.split.type, e.x + (this._rnd() - 0.5) * 1.6, e.z + (this._rnd() - 0.5) * 1.6);
+        }
+        if (this.fx) this.fx.sparksBurst(e.x, e.y + 0.8, e.z, 0x86c86a, 10, 4);
+      }
+      // Explosiv-Elite: verzögerte Todes-Explosion (telegrafiert — wegrennen!)
+      if (e.elite === 'boom') {
+        this._aoes.push({ type: 'circle', x: e.x, z: e.z, r: 3.4, dmg: Math.round(e.dmg * 1.6), delay: 0.75, src: e.type });
+        if (this.fx) this.fx.telegraph(e.x, e.z, 3.4, 0.75, e.y);
+      }
       if (onKill) onKill(e);
     }
   }

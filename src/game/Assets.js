@@ -1,15 +1,18 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 
 // Lädt & cached glTF-Modelle (echte animierte Charaktere).
+// Modelle sind meshopt-komprimiert (2,16 MB -> ~0,55 MB) -> Decoder nötig.
 export class Assets {
   constructor() {
     this.loader = new GLTFLoader();
+    this.loader.setMeshoptDecoder(MeshoptDecoder);
     this.gltf = {};
   }
 
-  load(key, url) {
+  load(key, url, onProgress) {
     return new Promise((resolve, reject) => {
       this.loader.load(
         url,
@@ -17,7 +20,9 @@ export class Assets {
           this.gltf[key] = gltf;
           resolve(gltf);
         },
-        undefined,
+        (xhr) => {
+          if (onProgress && xhr.total > 0) onProgress(Math.min(1, xhr.loaded / xhr.total));
+        },
         (err) => reject(err)
       );
     });
@@ -28,7 +33,8 @@ export class Assets {
     let done = 0;
     for (const [key, url] of list) {
       try {
-        await this.load(key, url);
+        // Byte-genauer Fortschritt innerhalb der Datei + Anteil an der Gesamtliste
+        await this.load(key, url, (f) => onProgress && onProgress((done + f) / list.length));
       } catch (e) {
         console.warn('Konnte Modell nicht laden:', key, e);
       }

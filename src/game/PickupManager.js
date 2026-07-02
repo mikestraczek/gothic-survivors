@@ -6,7 +6,12 @@ const DEFS = {
   magnet: { color: 0x49b6ff, name: 'Seelenruf', desc: 'Alle Edelsteine angezogen' },
   nova: { color: 0xff5a3a, name: 'Zorn der Barriere', desc: 'Alle Feinde getroffen' },
   greed: { color: 0xffd24a, name: 'Erzader', desc: 'Erz gefunden' },
+  chest: { color: 0xd8a02a, name: 'Truhe', desc: 'Beute aus Elite-Gegnern' },
+  shrine: { color: 0x86e0ff, name: 'Schrein der Barriere', desc: 'Segen: Heilung + Schadens-Buff' },
 };
+
+// Reihenfolge für Snapshot-Codes — nur anhängen, nie umsortieren!
+const SNAP_ORDER = ['heal', 'magnet', 'nova', 'greed', 'chest', 'shrine'];
 
 function buildPickup(type) {
   const def = DEFS[type];
@@ -46,6 +51,22 @@ function buildPickup(type) {
     const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), emissive(0xd8a82a, 1.8));
     gem.position.y = 0.95;
     g.add(gem);
+  } else if (type === 'chest') {
+    // Holztruhe mit goldenem Beschlag
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.6), new THREE.MeshStandardMaterial({ color: 0x5a3a1c, roughness: 0.7 }));
+    body.position.y = 0.45;
+    const lid = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.24, 0.64), new THREE.MeshStandardMaterial({ color: 0x6e4824, roughness: 0.6 }));
+    lid.position.y = 0.8;
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.1, 0.66), emissive(0xd8a02a, 1.6));
+    band.position.y = 0.62;
+    g.add(body, lid, band);
+  } else if (type === 'shrine') {
+    // kleiner Obelisk mit schwebendem Licht
+    const stone = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.34, 1.3, 6), new THREE.MeshStandardMaterial({ color: 0x4a505a, roughness: 0.8 }));
+    stone.position.y = 0.65;
+    const light = new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), emissive(0x86e0ff, 2.4));
+    light.position.y = 1.6;
+    g.add(stone, light);
   }
   g.traverse((o) => {
     if (o.isMesh) o.castShadow = false;
@@ -92,22 +113,20 @@ export class PickupManager {
 
   // ---- Multiplayer ----
   snapshot() {
-    const order = ['heal', 'magnet', 'nova', 'greed'];
     const o = [];
     for (const it of this.items) {
       if (!it.alive) continue;
-      o.push(order.indexOf(it.type), Math.round(it.x * 10) / 10, Math.round(it.z * 10) / 10);
+      o.push(SNAP_ORDER.indexOf(it.type), Math.round(it.x * 10) / 10, Math.round(it.z * 10) / 10);
     }
     return o;
   }
   applySnapshot(arr) {
-    const order = ['heal', 'magnet', 'nova', 'greed'];
     for (const it of this.items) {
       it.alive = false;
       it.group.visible = false;
     }
     for (let i = 0; i + 2 < arr.length; i += 3) {
-      this.spawnAt(order[arr[i]], arr[i + 1], arr[i + 2]);
+      this.spawnAt(SNAP_ORDER[arr[i]], arr[i + 1], arr[i + 2]);
     }
   }
   animate(dt) {

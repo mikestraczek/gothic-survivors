@@ -82,9 +82,9 @@ export const WEAPON_DEFS = {
   },
 };
 
-// Verschmelzungen: Waffe (max) + bestimmtes Passiv -> verstärkte Form
-// Kombinationen: ZWEI Waffen (beide auf Maxlevel) verschmelzen zu einer.
-// `base` wird zur verstärkten Waffe (evolved), `consume` wird entfernt -> ein Slot wird frei.
+// Kombinationen — zwei Rezept-Formen:
+//  1) ZWEI Waffen (beide Maxlevel): `base` wird verstärkt (evolved), `consume` wird entfernt -> Slot frei.
+//  2) Waffe (Maxlevel) + PASSIV (mehrfach genommen): `base` wird verstärkt, kein Slot frei, Passiv bleibt.
 export const COMBINATIONS = [
   { base: 'whirl', consume: 'axe', name: 'Klingensturm', desc: 'Klingenwirbel + Wurfäxte zu einer verheerenden Waffe' },
   { base: 'fireball', consume: 'lightning', name: 'Höllensturm', desc: 'Feuerbälle + Blitze zu einem Inferno' },
@@ -94,6 +94,11 @@ export const COMBINATIONS = [
   { base: 'holy', consume: 'daggers', name: 'Geweihte Klingen', desc: 'Weihrauch + Schattendolche — heilige, durchbohrende Aura' },
   { base: 'meteor', consume: 'fireball', name: 'Kataklysmus', desc: 'Meteor + Feuerball — verheerender Flächeneinschlag' },
   { base: 'holy', consume: 'lightning', name: 'Göttlicher Zorn', desc: 'Weihrauch + Blitze — strafende heilige Energie' },
+  // Waffe + Passiv (3× genommen)
+  { base: 'axe', passive: 'might', passiveCount: 3, name: 'Urteil des Henkers', desc: 'Wurfaxt (max) + 3× Stärke — richtende Riesenäxte' },
+  { base: 'lightning', passive: 'proj', passiveCount: 3, name: 'Sturmruf', desc: 'Blitzschlag (max) + 3× Geschwindigkeit — das Gewitter folgt dir' },
+  { base: 'poison', passive: 'area', passiveCount: 3, name: 'Pestwind', desc: 'Giftwolke (max) + 3× Wucht — alles verwest' },
+  { base: 'orbit', passive: 'hp', passiveCount: 3, name: 'Seelenwacht', desc: 'Wächtergeister (max) + 3× Vitalität — unermüdliche Wächter' },
 ];
 
 export class Weapons {
@@ -226,14 +231,18 @@ export class Weapons {
     if (id === 'holy' && this.holyRing) this.holyRing.visible = false;
   }
 
-  // Kombination möglich? Beide Waffen vorhanden & auf Maxlevel, base noch nicht verschmolzen.
-  canCombine(c) {
-    return this.has(c.base) && this.has(c.consume) && this.isMax(c.base) && this.isMax(c.consume) && !this.owned[c.base].evolved;
+  // Kombination möglich? base auf Maxlevel & unverschmolzen; zweite Zutat ist entweder
+  // eine zweite Max-Waffe (consume) oder ein mehrfach genommenes Passiv (passive, braucht player).
+  canCombine(c, player = null) {
+    if (!this.has(c.base) || !this.isMax(c.base) || this.owned[c.base].evolved) return false;
+    if (c.consume) return this.has(c.consume) && this.isMax(c.consume);
+    if (c.passive) return !!player && (player.passiveCounts?.[c.passive] || 0) >= (c.passiveCount || 3);
+    return false;
   }
-  // Verschmelzen: consume entfernen, base verstärken -> ein Slot frei.
-  combine(c) {
-    if (!this.canCombine(c)) return;
-    this.remove(c.consume);
+  // Verschmelzen: consume entfernen (falls Waffen-Rezept), base verstärken.
+  combine(c, player = null) {
+    if (!this.canCombine(c, player)) return;
+    if (c.consume) this.remove(c.consume);
     this.evolve(c.base);
   }
 

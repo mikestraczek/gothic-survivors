@@ -73,7 +73,6 @@ export class World {
     this.renderer = renderer;
     this.colliders = []; // {x, z, r}
     this.torchLights = [];
-    this.spawns = { npcs: [], enemies: [], items: [] };
     this.time = 0;
     this.themeKey = themeKey;
     this.theme = THEMES[themeKey] || THEMES.valley;
@@ -81,7 +80,6 @@ export class World {
     this.group = new THREE.Group();
     scene.add(this.group);
     this._build();
-    this._defineSpawns();
   }
 
   _build() {
@@ -93,6 +91,76 @@ export class World {
     this._buildVegetation();
     this._buildGraveyard();
     if (this.theme.layout !== 'bog') this._buildOldCamp();
+    this._buildWeather();
+  }
+
+  // --------------------------------------------------------------- Wetter & Atmosphäre
+  // Sumpf: fallender Regen · Tal: treibende Glühwürmchen. Beides instanziert,
+  // folgt dem Kamera-Ziel (center in update) — wirkt überall in der Arena.
+  _buildWeather() {
+    this.weather = null;
+    if (this.theme.terrain === 'swamp') {
+      const N = 480;
+      const geo = new THREE.PlaneGeometry(0.03, 0.8);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x9fb6c8, transparent: true, opacity: 0.34, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+      const im = new THREE.InstancedMesh(geo, mat, N);
+      im.frustumCulled = false;
+      this.group.add(im);
+      const drops = [];
+      for (let i = 0; i < N; i++) {
+        drops.push({ x: (Math.random() - 0.5) * 84, y: Math.random() * 26, z: (Math.random() - 0.5) * 84, v: 19 + Math.random() * 9 });
+      }
+      this.weather = { kind: 'rain', im, parts: drops };
+    } else {
+      const N = 130;
+      const geo = new THREE.SphereGeometry(0.055, 6, 5);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xd8f0a0, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending });
+      const im = new THREE.InstancedMesh(geo, mat, N);
+      im.frustumCulled = false;
+      this.group.add(im);
+      const motes = [];
+      for (let i = 0; i < N; i++) {
+        motes.push({ x: (Math.random() - 0.5) * 90, y: 0.6 + Math.random() * 3.2, z: (Math.random() - 0.5) * 90, phase: Math.random() * 6.28, speed: 0.4 + Math.random() * 0.8 });
+      }
+      this.weather = { kind: 'motes', im, parts: motes };
+    }
+    this._wm = this._wm || new THREE.Matrix4();
+    this._wq = this._wq || new THREE.Quaternion();
+    this._wqTilt = this._wqTilt || new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0.14));
+    this._ws = this._ws || new THREE.Vector3(1, 1, 1);
+    this._wp = this._wp || new THREE.Vector3();
+  }
+
+  _updateWeather(dt, elapsed, center) {
+    const w = this.weather;
+    if (!w) return;
+    const cx = center ? center.x : 0;
+    const cy = center ? center.y : 0;
+    const cz = center ? center.z : 0;
+    if (w.kind === 'rain') {
+      for (let i = 0; i < w.parts.length; i++) {
+        const d = w.parts[i];
+        d.y -= d.v * dt;
+        if (d.y < 0) d.y += 26;
+        this._wp.set(cx + d.x, cy + d.y, cz + d.z);
+        this._ws.set(1, 1, 1);
+        this._wm.compose(this._wp, this._wqTilt, this._ws);
+        w.im.setMatrixAt(i, this._wm);
+      }
+    } else {
+      for (let i = 0; i < w.parts.length; i++) {
+        const m = w.parts[i];
+        const px = cx + m.x + Math.sin(elapsed * m.speed + m.phase) * 2.4;
+        const pz = cz + m.z + Math.cos(elapsed * m.speed * 0.8 + m.phase) * 2.4;
+        const py = cy + m.y + Math.sin(elapsed * 0.7 + m.phase * 2) * 0.8;
+        const pulse = 0.7 + 0.5 * Math.sin(elapsed * 2.2 + m.phase * 3); // Glimmen
+        this._wp.set(px, py, pz);
+        this._ws.setScalar(Math.max(0.15, pulse));
+        this._wm.compose(this._wp, this._wq, this._ws);
+        w.im.setMatrixAt(i, this._wm);
+      }
+    }
+    w.im.instanceMatrix.needsUpdate = true;
   }
 
   // Magie-Erz-Brocken (glühendes Gothic-Erz) — 3D, wiederverwendbar.
@@ -596,37 +664,6 @@ export class World {
     this.group.add(grass);
   }
 
-  // --------------------------------------------------------------- Spawns
-  _defineSpawns() {
-    // NPCs: id (Dialog), name, x, z, rot
-    this.spawns.npcs = [
-      { id: 'diego', name: 'Diego', x: 4, z: 40 },
-      { id: 'thorus', name: 'Thorus', x: 2, z: 26 },
-      { id: 'nek', name: 'Nek', x: -16, z: 34 },
-    ];
-    // Gegner
-    this.spawns.enemies = [
-      { type: 'scavenger', x: 30, z: 55 },
-      { type: 'scavenger', x: 45, z: 48 },
-      { type: 'scavenger', x: 52, z: 62 },
-      { type: 'scavenger', x: 20, z: 70 },
-      { type: 'molerat', x: -40, z: 50 },
-      { type: 'molerat', x: -55, z: 40 },
-      { type: 'scavenger', x: -30, z: 65 },
-    ];
-    // Beute in der Welt
-    this.spawns.items = [
-      { id: 'apple', x: 8, z: 42 },
-      { id: 'meat', x: -2, z: 30 },
-      { id: 'ore', x: 18, z: 30 },
-      { id: 'shortSword', x: -12, z: 18 },
-      { id: 'diggerClothes', x: 6, z: 20 },
-      { id: 'healPotion', x: -20, z: -8 },
-      { id: 'ore', x: 22, z: 38 },
-      { id: 'bread', x: 10, z: 36 },
-    ];
-  }
-
   // --------------------------------------------------------------- Kollision
   resolve(pos, radius) {
     for (const c of this.colliders) {
@@ -650,9 +687,10 @@ export class World {
   }
 
   // --------------------------------------------------------------- Update
-  update(dt, elapsed) {
+  update(dt, elapsed, center = null) {
     this.time = elapsed;
     if (this.barrierMat) this.barrierMat.uniforms.uTime.value = elapsed;
+    this._updateWeather(dt, elapsed, center);
     // Fackel-Flackern
     for (const t of this.torchLights) {
       const f = 0.75 + Math.sin(elapsed * 11 + t.seed) * 0.12 + Math.sin(elapsed * 23 + t.seed * 2) * 0.08;

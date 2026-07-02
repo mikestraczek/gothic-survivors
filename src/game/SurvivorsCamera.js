@@ -9,6 +9,14 @@ export class SurvivorsCamera {
     this.zoom = 1;
     this._desired = new THREE.Vector3();
     this._look = new THREE.Vector3();
+    // Trauma-basierter Screen-Shake: addShake() stapelt Trauma, Auslenkung = Trauma²
+    this.trauma = 0;
+    this.shakeScale = 1; // 0 = aus (Settings)
+    this._shakeT = 0;
+  }
+
+  addShake(amount) {
+    this.trauma = Math.min(1, this.trauma + amount);
   }
 
   snap(playerPos) {
@@ -28,5 +36,15 @@ export class SurvivorsCamera {
     this.camera.position.lerp(this._desired, k);
     this._look.set(playerPos.x, playerPos.y + 1, playerPos.z);
     this.camera.lookAt(this._look);
+
+    // Shake NACH dem lookAt: Position + leichte Rotation, klingt über ~0.6s ab
+    if (this.trauma > 0 && this.shakeScale > 0) {
+      this._shakeT += dt * 28;
+      const s = this.trauma * this.trauma * this.shakeScale;
+      this.camera.position.x += (Math.sin(this._shakeT * 1.1) + Math.sin(this._shakeT * 2.3) * 0.5) * 0.34 * s;
+      this.camera.position.y += (Math.cos(this._shakeT * 1.7) + Math.sin(this._shakeT * 2.9) * 0.5) * 0.26 * s;
+      this.camera.rotation.z += 0.02 * s * Math.sin(this._shakeT * 3.7);
+    }
+    this.trauma = Math.max(0, this.trauma - dt * 1.7);
   }
 }

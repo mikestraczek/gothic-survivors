@@ -14,6 +14,25 @@ const META = [
   { id: 'reroll', name: 'Würfelglück', sub: '+1 Neuwurf je Run/Stufe', max: 3, cost: (l) => 90 + l * 80, apply: (p, l) => (p.rerolls = (p.rerolls || 0) + l) },
 ];
 
+// ---- Achievements: schalten Helden, Waffen und Karten frei ----
+// check(stats) prüft gegen die kumulierten Statistiken (über alle Runs).
+export const ACHIEVEMENTS = [
+  { id: 'first_win', name: 'Bezwinger des Tals', desc: 'Schließe ein Level ab', unlock: 'Karte: Sumpf der Bruderschaft', check: (s) => s.wins >= 1 },
+  { id: 'kills_500', name: 'Schlächter', desc: 'Erlege insgesamt 500 Gegner', unlock: 'Heldin: Die Jägerin', check: (s) => s.totalKills >= 500 },
+  { id: 'survive_10', name: 'Unbeugsam', desc: 'Überlebe 10 Minuten in einem Run', unlock: 'Held: Der Templer', check: (s) => s.bestTime >= 600 },
+  { id: 'level_20', name: 'Aufgestiegen', desc: 'Erreiche Stufe 20 in einem Run', unlock: 'Held: Der Schatten', check: (s) => s.bestLevel >= 20 },
+  { id: 'evolve', name: 'Verschmelzer', desc: 'Führe eine Waffen-Verschmelzung durch', unlock: 'Waffe: Meteor', check: (s) => s.evolves >= 1 },
+  { id: 'boss_10', name: 'Anführer-Schreck', desc: 'Besiege 10 Bosse oder Anführer', unlock: 'Waffe: Giftwolke', check: (s) => s.bossKills >= 10 },
+  { id: 'gold_1000', name: 'Erzbaron', desc: 'Sammle insgesamt 1000 Erz', unlock: 'Waffe: Wächtergeister', check: (s) => s.totalGold >= 1000 },
+];
+
+// Was hängt an welchem Achievement?
+const HERO_REQ = { hunter: 'kills_500', templar: 'survive_10', shadow: 'level_20' };
+const WEAPON_REQ = { meteor: 'evolve', poison: 'boss_10', orbit: 'gold_1000' };
+const MAP_REQ = { swamp: 'first_win' };
+
+const EMPTY_STATS = { wins: 0, totalKills: 0, bestTime: 0, bestLevel: 0, evolves: 0, bossKills: 0, totalGold: 0 };
+
 export class Meta {
   constructor(el, toast) {
     this.el = el;
@@ -22,13 +41,31 @@ export class Meta {
   }
 
   _load() {
+    let data = null;
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) return JSON.parse(raw);
+      if (raw) data = JSON.parse(raw);
     } catch (e) {
       /* ignore */
     }
-    return { gold: 0, upgrades: {} };
+    if (!data) data = { gold: 0, upgrades: {} };
+    if (!data.stats) {
+      // Migration für Bestandsspieler: Statistiken aus der lokalen Bestenliste ableiten,
+      // damit bereits Erspieltes (Siege, Kills) nicht verloren geht.
+      data.stats = { ...EMPTY_STATS };
+      try {
+        const scores = JSON.parse(localStorage.getItem('gothicScores') || '[]');
+        for (const s of scores) {
+          if (s.win) data.stats.wins++;
+          data.stats.totalKills += s.kills || 0;
+          data.stats.bestTime = Math.max(data.stats.bestTime, s.time || 0);
+          data.stats.bestLevel = Math.max(data.stats.bestLevel, s.level || 0);
+          data.stats.totalGold += s.gold || 0;
+        }
+      } catch (e) { /* ignore */ }
+    }
+    if (!data.achievements) data.achievements = {};
+    return data;
   }
   _save() {
     try {
@@ -55,6 +92,72 @@ export class Meta {
       if (l > 0) u.apply(player, l);
     }
     player.hp = player.maxHp;
+  }
+
+  // ---- Achievements & Unlocks ----
+  hasAchievement(id) {
+    return !!this.data.achievements[id];
+  }
+  heroUnlocked(key) {
+    const req = HERO_REQ[key];
+    return !req || this.hasAchievement(req);
+  }
+  mapUnlocked(key) {
+    const req = MAP_REQ[key];
+    return !req || this.hasAchievement(req);
+  }
+  heroReq(key) {
+    const a = ACHIEVEMENTS.find((x) => x.id === HERO_REQ[key]);
+    return a ? a.desc : '';
+  }
+  mapReq(key) {
+    const a = ACHIEVEMENTS.find((x) => x.id === MAP_REQ[key]);
+    return a ? a.desc : '';
+  }
+  // Waffen, die noch NICHT freigeschaltet sind (für den Level-Up-Pool)
+  lockedWeaponSet() {
+    const out = new Set();
+    for (const [wid, req] of Object.entries(WEAPON_REQ)) {
+      if (!this.hasAchievement(req)) out.add(wid);
+    }
+    return out;
+  }
+
+  // Run-Ergebnis in die kumulierten Statistiken einrechnen und neue Achievements prüfen.
+  // Gibt die Liste frisch freigeschalteter Achievements zurück (für Toasts).
+  recordRun({ time = 0, kills = 0, level = 0, win = false, bossKills = 0, evolves = 0, goldEarned = 0 }) {
+    const s = this.data.stats;
+    if (win) s.wins++;
+    s.totalKills += kills;
+    s.bestTime = Math.max(s.bestTime, Math.round(time));
+    s.bestLevel = Math.max(s.bestLevel, level);
+    s.bossKills += bossKills;
+    s.evolves += evolves;
+    s.totalGold += Math.max(0, Math.round(goldEarned));
+    const fresh = [];
+    for (const a of ACHIEVEMENTS) {
+      if (!this.data.achievements[a.id] && a.check(s)) {
+        this.data.achievements[a.id] = true;
+        fresh.push(a);
+      }
+    }
+    this._save();
+    return fresh;
+  }
+
+  // Achievement-Liste als HTML (für den Erfolge-Screen)
+  achievementsHtml() {
+    return ACHIEVEMENTS.map((a) => {
+      const done = this.hasAchievement(a.id);
+      return `<div class="ach-item ${done ? 'done' : ''}">
+        <div class="ach-icon">${done ? '🏆' : '🔒'}</div>
+        <div class="ach-text">
+          <div class="ach-name">${a.name}</div>
+          <div class="ach-desc">${a.desc}</div>
+          <div class="ach-unlock">${done ? 'Freigeschaltet' : 'Schaltet frei'}: ${a.unlock}</div>
+        </div>
+      </div>`;
+    }).join('');
   }
 
   buy(id) {

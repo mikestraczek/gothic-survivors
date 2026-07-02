@@ -33,27 +33,42 @@ export class Upgrades {
   }
 
   // Kandidaten für ein bestimmtes Spieler/Waffen-Paar erzeugen (mit apply-Closures).
+  // rarity steuert die Karten-Optik; bid ist der Verbannungs-Schlüssel (Banish).
   generate(player, weapons, n = 3) {
     const out = [];
+    const banned = player.banished || new Set();
     // Hinweis: Verschmelzungen laufen über das separate Kombinations-Popup (Game).
     // Waffen aufwerten
     for (const w of weapons.ownedList()) {
       if (weapons.isMax(w.id)) continue;
+      if (banned.has('up:' + w.id)) continue;
       const def = WEAPON_DEFS[w.id];
-      out.push({ weight: 5, icon: WEAPON_ICON[w.id], title: `${def.name} → Stufe ${w.level + 1}`, sub: def.desc, apply: () => weapons.add(w.id) });
+      const toMax = w.level + 1 >= (def.maxLevel || 5);
+      out.push({
+        weight: 5, bid: 'up:' + w.id, rarity: toMax ? 'rare' : 'uncommon',
+        icon: WEAPON_ICON[w.id], title: `${def.name} → Stufe ${w.level + 1}`, sub: def.desc,
+        apply: () => weapons.add(w.id),
+      });
     }
     // neue Waffen — Kombinieren entfernt eine Waffe, also wieder Platz
     if (weapons.ownedList().length < MAX_WEAPONS) {
       for (const id of Object.keys(WEAPON_DEFS)) {
         if (weapons.has(id)) continue;
+        if (banned.has('new:' + id)) continue;
+        if (player.lockedWeapons && player.lockedWeapons.has(id)) continue; // noch nicht freigeschaltet
         const def = WEAPON_DEFS[id];
-        out.push({ weight: 4, icon: WEAPON_ICON[id], title: `Neue Waffe: ${def.name}`, sub: def.desc, apply: () => weapons.add(id) });
+        out.push({
+          weight: 4, bid: 'new:' + id, rarity: 'uncommon',
+          icon: WEAPON_ICON[id], title: `Neue Waffe: ${def.name}`, sub: def.desc,
+          apply: () => weapons.add(id),
+        });
       }
     }
     // Passive
     for (const pa of PASSIVES) {
+      if (banned.has('pa:' + pa.id)) continue;
       out.push({
-        weight: pa.rare ? 1 : 3,
+        weight: pa.rare ? 1 : 3, bid: 'pa:' + pa.id, rarity: pa.rare ? 'rare' : 'common',
         icon: PASSIVE_ICON[pa.id] || '◆',
         title: pa.name,
         sub: pa.sub,
@@ -83,47 +98,70 @@ export class Upgrades {
     return chosen;
   }
 
-  // Anzeige-Liste rendern; onPick(index) beim Klick. rerolls/onReroll optional.
-  present(displayList, onPick, level, subtitle, rerolls = 0, onReroll = null) {
+  // Anzeige-Liste rendern; onPick(index) beim Klick. rerolls/onReroll und banishes/onBanish optional.
+  // Banish: Button togglet den Verbannen-Modus, dann entfernt ein Karten-Klick die Option dauerhaft (Run).
+  present(displayList, onPick, level, subtitle, rerolls = 0, onReroll = null, banishes = 0, onBanish = null) {
+    const RARITY_LABEL = { common: 'Gewöhnlich', uncommon: 'Selten', rare: 'Rar', epic: 'Episch' };
     let html = `<div class="lvl-inner">
       <h2>${level ? 'STUFE ' + level : 'STUFENAUFSTIEG'}</h2>
       <p class="lvl-sub">${subtitle || 'Wähle eine Belohnung'}</p>
       <div class="lvl-choices">`;
     displayList.forEach((c, i) => {
-      html += `<button class="lvl-choice" data-i="${i}">
+      const rar = c.rarity || 'common';
+      html += `<button class="lvl-choice r-${rar}" data-i="${i}">
         <div class="lc-icon">${c.icon || '◆'}</div>
-        <div class="lc-text"><div class="lc-title">${c.title}</div><div class="lc-sub">${c.sub}</div></div>
+        <div class="lc-text"><div class="lc-title">${c.title}</div><div class="lc-sub">${c.sub}</div><div class="lc-rar">${RARITY_LABEL[rar] || ''}</div></div>
       </button>`;
     });
-    html += `</div>`;
+    html += `</div><div class="lvl-actions">`;
     if (onReroll) {
       html += `<button id="lvl-reroll" class="secondary" ${rerolls > 0 ? '' : 'disabled'}>🎲 Neu würfeln (${rerolls})</button>`;
     }
-    html += `</div>`;
+    if (onBanish) {
+      html += `<button id="lvl-banish" class="secondary" ${banishes > 0 ? '' : 'disabled'}>🚫 Verbannen (${banishes})</button>`;
+    }
+    html += `</div></div>`;
     this.el.innerHTML = html;
     this.el.classList.remove('hidden');
+    let banishing = false;
     this.el.querySelectorAll('.lvl-choice').forEach((btn) => {
-      btn.addEventListener('click', () => onPick(parseInt(btn.getAttribute('data-i'), 10)));
+      btn.addEventListener('click', () => {
+        const i = parseInt(btn.getAttribute('data-i'), 10);
+        if (banishing) onBanish(i);
+        else onPick(i);
+      });
     });
     const rb = this.el.querySelector('#lvl-reroll');
     if (rb && onReroll) rb.addEventListener('click', () => onReroll());
+    const bb = this.el.querySelector('#lvl-banish');
+    if (bb && onBanish) {
+      bb.addEventListener('click', () => {
+        banishing = !banishing;
+        this.el.querySelector('.lvl-inner').classList.toggle('banishing', banishing);
+        bb.classList.toggle('active', banishing);
+        if (this.toast && banishing) this.toast('Verbannen: Karte anklicken — sie erscheint diesen Run nicht mehr', 'gold');
+      });
+    }
   }
 
-  // Mögliche Waffen-Kombinationen (declined = überspringen, Key = base+consume).
+  // Mögliche Kombinationen (declined = überspringen; Key = base+Zutat).
   availableCombos(player, weapons, declined) {
     const out = [];
     for (const c of COMBINATIONS) {
-      const key = c.base + '+' + c.consume;
+      const key = c.base + '+' + (c.consume || c.passive);
       if (declined && declined.has(key)) continue;
-      if (weapons.canCombine(c)) out.push({ key, base: c.base, consume: c.consume, name: c.name, desc: c.desc });
+      if (weapons.canCombine(c, player)) out.push({ key, base: c.base, consume: c.consume, passive: c.passive, passiveCount: c.passiveCount, name: c.name, desc: c.desc });
     }
     return out;
   }
 
-  // "🌀 Klingenwirbel + 🪓 Wurfaxt → ✨ Klingensturm"
+  // "🌀 Klingenwirbel + 🪓 Wurfaxt → ✨ Klingensturm" bzw. "🪓 Wurfaxt + 💪 3× Stärke → ✨ …"
   _comboLine(c) {
     const wi = (id) => `${WEAPON_ICON[id] || '◆'} ${(WEAPON_DEFS[id] && WEAPON_DEFS[id].name) || id}`;
-    return `<span class="combo-src">${wi(c.base)}</span> <span class="combo-plus">+</span> <span class="combo-src">${wi(c.consume)}</span> <span class="combo-arrow">→</span> <span class="combo-res">✨ ${c.name}</span>`;
+    const second = c.consume
+      ? wi(c.consume)
+      : `${PASSIVE_ICON[c.passive] || '◆'} ${c.passiveCount || 3}× ${(PASSIVE_INFO[c.passive] && PASSIVE_INFO[c.passive].name) || c.passive}`;
+    return `<span class="combo-src">${wi(c.base)}</span> <span class="combo-plus">+</span> <span class="combo-src">${second}</span> <span class="combo-arrow">→</span> <span class="combo-res">✨ ${c.name}</span>`;
   }
 
   // Liste aller möglichen Kombinationen (für das Hauptmenü)

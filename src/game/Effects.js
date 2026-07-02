@@ -23,6 +23,11 @@ export class Effects {
     this.heightAt = null; // vom Game gesetzt: (x,z) => Geländehöhe
     this.zones = [];
 
+    // ---- Schadenszahlen (gepoolte Canvas-Sprites, steigen auf und verblassen) ----
+    this.showDmg = true; // per Settings abschaltbar
+    this._dmgPool = [];
+    this._dmgBudget = 14; // Neuspawns pro Frame begrenzen (GC/Overdraw)
+
     // ---- Funken (InstancedMesh) ----
     this.sparks = [];
     const sparkGeo = new THREE.TetrahedronGeometry(0.13, 0);
@@ -89,8 +94,64 @@ export class Effects {
       else if (e.k === 'tele') this.telegraph(e.x, e.z, e.a, e.b, e.c);
       else if (e.k === 'safe') this.telegraphSafe(e.x, e.z, e.a, e.b, e.c);
       else if (e.k === 'cone') this.telegraphCone(e.x, e.z, e.dx, e.dz, e.a, e.b, e.c);
+      else if (e.k === 'dmg') this.dmgNumber(e.x, e.y, e.z, e.a, e.b, !!e.c);
     }
     this.record = was;
+  }
+
+  // ---------- Schadenszahlen ----------
+  _getDmgSprite() {
+    let d = this._dmgPool.find((s) => !s.alive);
+    if (!d) {
+      if (this._dmgPool.length >= 48) return null;
+      const c = document.createElement('canvas');
+      c.width = 160;
+      c.height = 64;
+      const tex = new THREE.CanvasTexture(c);
+      tex.minFilter = THREE.LinearFilter;
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false });
+      const spr = new THREE.Sprite(mat);
+      spr.renderOrder = 6;
+      spr.visible = false;
+      this.group.add(spr);
+      d = { spr, c, tex, alive: false };
+      this._dmgPool.push(d);
+    }
+    return d;
+  }
+
+  // Schadenszahl über dem Getroffenen. big = dicker Treffer (größer, langsamer)
+  dmgNumber(x, y, z, amount, color = '#ffe9a0', big = false) {
+    if (!this.showDmg || this._dmgBudget <= 0) return;
+    this._dmgBudget--;
+    if (this.record) this.events.push({ k: 'dmg', x, y, z, a: Math.round(amount), b: color, c: big ? 1 : 0 });
+    const d = this._getDmgSprite();
+    if (!d) return;
+    const g = d.c.getContext('2d');
+    g.clearRect(0, 0, d.c.width, d.c.height);
+    const txt = String(Math.max(1, Math.round(amount)));
+    g.font = `bold ${big ? 46 : 34}px Georgia, serif`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.lineWidth = 7;
+    g.strokeStyle = 'rgba(12,7,3,0.9)';
+    g.strokeText(txt, 80, 34);
+    g.fillStyle = color;
+    g.fillText(txt, 80, 34);
+    d.tex.needsUpdate = true;
+    d.alive = true;
+    d.t = 0;
+    d.dur = big ? 0.9 : 0.65;
+    d.big = big;
+    d.x = x + (Math.random() - 0.5) * 0.8;
+    d.y = y;
+    d.z = z;
+    d.vy = 2.4 + Math.random() * 0.9;
+    d.spr.visible = true;
+    d.spr.position.set(d.x, d.y, d.z);
+    d.spr.material.opacity = 1;
+    const s = big ? 3.0 : 1.8;
+    d.spr.scale.set(s, s * 0.4, 1);
   }
 
   // ---------- öffentliche Spawner ----------
@@ -241,6 +302,26 @@ export class Effects {
 
   // ---------- Update ----------
   update(dt) {
+    // Schadenszahlen: Pop-in, aufsteigen, ausblenden
+    this._dmgBudget = 14;
+    for (const d of this._dmgPool) {
+      if (!d.alive) continue;
+      d.t += dt;
+      const k = d.t / d.dur;
+      if (k >= 1) {
+        d.alive = false;
+        d.spr.visible = false;
+        continue;
+      }
+      d.vy *= 1 - dt * 1.6;
+      d.y += d.vy * dt;
+      d.spr.position.set(d.x, d.y, d.z);
+      const pop = d.t < 0.08 ? 0.7 + (d.t / 0.08) * 0.45 : Math.max(1, 1.15 - (d.t - 0.08) * 0.8);
+      const s = (d.big ? 3.0 : 1.8) * pop;
+      d.spr.scale.set(s, s * 0.4, 1);
+      d.spr.material.opacity = k > 0.55 ? 1 - (k - 0.55) / 0.45 : 1;
+    }
+
     // Boden-Warnzonen: pulsieren, zum Ende heller/schneller, dann entfernen
     if (this.zones.length) {
       for (let i = this.zones.length - 1; i >= 0; i--) {

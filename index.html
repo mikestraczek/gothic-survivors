@@ -20,10 +20,15 @@
           <h1 class="game-title">GOTHIC</h1>
           <p class="game-subtitle">Survivors — Im Bann der Barriere</p>
           <p id="menu-stats" class="game-edition">Gesammeltes Erz: 0</p>
+          <div class="name-row">
+            <label for="player-name">⚔ Name</label>
+            <input id="player-name" maxlength="16" placeholder="Dein Name" />
+          </div>
           <div class="menu-buttons">
             <button id="resume-button" class="hidden">Run fortsetzen</button>
             <button id="start-button">Neuer Run</button>
             <button id="online-button" class="secondary">Online-Koop</button>
+            <button id="leaderboard-button" class="secondary">🏆 Bestenliste</button>
             <button id="shop-button" class="secondary">Halle der Erzbarone</button>
             <button id="combos-button" class="secondary">Kombinationen</button>
           </div>
@@ -32,6 +37,9 @@
             <ul>
               <li><b>WASD</b> — Bewegen</li>
               <li><b>Leertaste</b> — Ausweichen (2×)</li>
+              <li><b>Tasten hämmern</b> — aus Festwurzeln befreien</li>
+              <li><b>E</b> — Mitspieler wiederbeleben (Koop)</li>
+              <li><b>Klick/Q</b> — Ping (Ort markieren) · <b>1–4</b> — Emotes (Koop)</li>
               <li><b>Maus</b> — nur Menüs</li>
               <li><b>Mausrad</b> — Zoom</li>
               <li><b>M</b> — Ton an/aus</li>
@@ -61,38 +69,79 @@
         </div>
       </div>
 
-      <!-- Online-Lobby -->
+      <!-- Online-Lobby / Warteraum -->
       <div id="lobby" class="overlay hidden">
         <div class="lobby-inner">
-          <h2>Online-Koop</h2>
-          <p class="lobby-sub">Erstelle eine Lobby und gib den Code weiter — oder tritt mit einem Code bei.</p>
-          <div class="lobby-row">
-            <button id="lobby-create">Lobby erstellen</button>
+          <h2 class="lobby-title">ONLINE-KOOP</h2>
+
+          <!-- Eingang: erstellen oder offene Lobby beitreten -->
+          <div id="lobby-entry">
+            <p class="lobby-sub">Eröffne eine Lobby oder tritt einer offenen Lobby bei.</p>
+            <button id="lobby-create" class="lobby-create-btn">🎮 Neue Lobby erstellen</button>
+            <div class="lobby-browser">
+              <div class="lobby-browser-head">
+                <span>Offene Lobbys</span>
+                <button id="lobby-refresh" class="secondary small">↻ Aktualisieren</button>
+              </div>
+              <div id="lobby-list"><div class="lobby-empty">Suche nach Lobbys…</div></div>
+            </div>
+            <div class="lobby-row lobby-adv">
+              <label>Server</label>
+              <input id="lobby-server" placeholder="ws://localhost:8080" />
+            </div>
           </div>
-          <div class="lobby-row">
-            <input id="lobby-code-input" maxlength="4" placeholder="CODE" />
-            <button id="lobby-join" class="secondary">Beitreten</button>
+
+          <!-- Warteraum -->
+          <div id="lobby-room" class="hidden">
+            <div class="lobby-room-head">🛡️ Warteraum</div>
+
+            <div class="lobby-players">
+              <div class="lp-slot ready">
+                <div class="lp-avatar host">👑</div>
+                <div class="lp-info"><div class="lp-name">Host</div><div class="lp-state" id="lp-state-1">Du</div></div>
+                <div class="lp-dot on"></div>
+              </div>
+              <div class="lp-vs">+</div>
+              <div class="lp-slot" id="lp-slot-2">
+                <div class="lp-avatar">🧑</div>
+                <div class="lp-info"><div class="lp-name">Mitspieler</div><div class="lp-state" id="lp-state-2">Warte…</div></div>
+                <div class="lp-dot" id="lp-dot-2"></div>
+              </div>
+            </div>
+
+            <div id="lobby-host-opts">
+              <div class="sel-label">Karte</div>
+              <div id="lobby-maps" class="sel-row"></div>
+              <div class="sel-label">Schwierigkeit</div>
+              <div id="lobby-diffs" class="sel-row"></div>
+            </div>
+
+            <div id="lobby-status">…</div>
+            <div class="lobby-row lobby-actions">
+              <button id="lobby-start" class="hidden">Spiel starten</button>
+            </div>
           </div>
-          <div class="lobby-row lobby-adv">
-            <label>Server</label>
-            <input id="lobby-server" placeholder="ws://localhost:8080" />
-          </div>
-          <div class="sel-label">Karte (Host)</div>
-          <div id="lobby-maps" class="sel-row"></div>
-          <div class="sel-label">Schwierigkeit (Host)</div>
-          <div id="lobby-diffs" class="sel-row"></div>
-          <div id="lobby-code" class="hidden"></div>
-          <div id="lobby-status">Erstelle eine Lobby oder tritt mit einem Code bei.</div>
+
           <div class="lobby-row lobby-actions">
-            <button id="lobby-start" class="hidden">Spiel starten</button>
             <button id="lobby-back" class="secondary">Zurück</button>
           </div>
-          <p class="lobby-hint">Hinweis: Der Relay-Server muss laufen (<code>npm run server</code>). Für Spiel über das Internet muss er erreichbar/gehostet sein.</p>
+          <p class="lobby-hint">Hinweis: Der Relay-Server muss laufen (<code>npm run server</code>). Für Internet-Spiel muss er erreichbar sein.</p>
         </div>
       </div>
 
       <!-- HUD -->
       <div id="hud" class="hidden"></div>
+
+      <!-- Cinematisches Intro beim Run-Start -->
+      <div id="intro" class="hidden">
+        <div class="intro-flash"></div>
+        <div class="intro-inner">
+          <div class="intro-kicker">IM BANN DER BARRIERE</div>
+          <div class="intro-title">Die Kolonie</div>
+          <div class="intro-line"></div>
+          <div class="intro-sub">Überlebe.</div>
+        </div>
+      </div>
 
       <!-- Level-Up-Auswahl -->
       <div id="levelup" class="overlay hidden"></div>
@@ -112,12 +161,28 @@
         </div>
       </div>
 
+      <!-- Bestenliste -->
+      <div id="leaderboard-screen" class="overlay hidden">
+        <div class="start-inner lb-inner">
+          <h1 class="game-title" style="font-size: 44px">🏆 BESTENLISTE</h1>
+          <div class="lb-tabs">
+            <button id="lb-tab-time" class="lb-tab active">Längste Zeit</button>
+            <button id="lb-tab-kills" class="lb-tab">Meiste Kills</button>
+          </div>
+          <div id="lb-list"></div>
+          <div class="menu-buttons">
+            <button id="lb-back" class="secondary">Zurück</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Pause -->
       <div id="pause-screen" class="overlay hidden">
         <div class="start-inner">
           <h1 class="game-title" style="font-size: 56px">PAUSE</h1>
           <div class="menu-buttons">
             <button id="pause-resume">Weiter</button>
+            <button id="pause-combos" class="secondary">Kombinationen</button>
             <button id="pause-save" class="secondary">Speichern &amp; Beenden</button>
             <button id="pause-menu" class="secondary">Hauptmenü</button>
             <button id="pause-leave" class="secondary hidden">Spiel verlassen</button>

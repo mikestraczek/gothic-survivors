@@ -38,6 +38,7 @@ export class Player {
     // Kampf-/Trefferzustand
     this.iframe = 0;
     this.hitFlash = 0;
+    this.rooted = 0; // Festgewurzelt (Boss-Fähigkeit): blockt Bewegung, per Tastenhämmern lösbar
     this.moving = false;
     this.passivesTaken = new Set(); // für Waffen-Verschmelzungen
     this.passiveCounts = {}; // id -> Anzahl (für HUD)
@@ -82,6 +83,11 @@ export class Player {
     this.amount = this.base.amount;
     this.hpRegen = this.base.hpRegen;
     this.goldMult = this.base.goldMult;
+    // Koop-Buffs (vom Game je Frame gesetzt): Schaden/Tempo-Multiplikatoren + Flags
+    this.dmgMult = 1;
+    this.speedMult = 1;
+    this.aura = false;
+    this.lastStand = false;
   }
 
   beginRun() {
@@ -97,6 +103,7 @@ export class Player {
     this.kills = 0;
     this.iframe = 0;
     this.hitFlash = 0;
+    this.rooted = 0;
     this.passivesTaken.clear();
     this.passiveCounts = {};
     this.dodgeCharges = this.dodgeMax;
@@ -109,7 +116,7 @@ export class Player {
 
   // Ausweich-Sprung in Bewegungsrichtung (mit kurzen i-Frames)
   dodge() {
-    if (this.dead || this.dodgeCharges <= 0 || this.dashTime > 0) return false;
+    if (this.dead || this.rooted > 0 || this.dodgeCharges <= 0 || this.dashTime > 0) return false;
     this.dodgeCharges--;
     this.dashTime = 0.18;
     this.dashDir = { x: this._mvx, z: this._mvz };
@@ -175,6 +182,11 @@ export class Player {
     this.hp = Math.min(this.maxHp, this.hp + n);
   }
 
+  // Festwurzeln durch Tastenhämmern verkürzen
+  mashFree(sec) {
+    if (this.rooted > 0 && sec > 0) this.rooted = Math.max(0, this.rooted - sec);
+  }
+
   addGold(n) {
     this.gold += n;
   }
@@ -203,7 +215,8 @@ export class Player {
 
     if (this.iframe > 0) this.iframe -= dt;
     if (this.hitFlash > 0) this.hitFlash -= dt;
-    if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + this.hpRegen * dt);
+    const regen = this.hpRegen + (this.aura ? 1.2 : 0); // Nähe-Aura: Extra-Regeneration
+    if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + regen * dt);
 
     // Dodge-Ladungen wieder aufladen
     if (this.dodgeCharges < this.dodgeMax) {
@@ -212,6 +225,17 @@ export class Player {
         this.dodgeTimer = 0;
         this.dodgeCharges++;
       }
+    }
+
+    // Festgewurzelt: keine Bewegung/kein Dash — kurz, per Tastenhämmern lösbar
+    if (this.rooted > 0) {
+      this.rooted = Math.max(0, this.rooted - dt);
+      this.moving = false;
+      this.position.y = this.world.getHeight(this.position.x, this.position.z);
+      this.group.position.set(this.position.x, this.position.y, this.position.z);
+      this.group.rotation.y = this.yaw + this.modelYawOffset;
+      this._play(this.idleAction);
+      return;
     }
 
     // Welt-achsen-Bewegung (Top-Down): W = -Z (oben am Bildschirm)
@@ -234,15 +258,16 @@ export class Player {
     if (input.pressed && input.pressed('Space')) this.dodge();
 
     // Dash überschreibt Bewegung kurzzeitig (schnell + i-Frames)
+    const spd = this.moveSpeed * (this.speedMult || 1); // speedMult: Last-Stand-Bonus
     if (this.dashTime > 0) {
       this.dashTime -= dt;
-      this.position.x += this.dashDir.x * this.moveSpeed * 4.2 * dt;
-      this.position.z += this.dashDir.z * this.moveSpeed * 4.2 * dt;
+      this.position.x += this.dashDir.x * spd * 4.2 * dt;
+      this.position.z += this.dashDir.z * spd * 4.2 * dt;
       this.yaw = Math.atan2(this.dashDir.x, this.dashDir.z);
       this.moving = true;
     } else if (this.moving) {
-      this.position.x += dx * this.moveSpeed * dt;
-      this.position.z += dz * this.moveSpeed * dt;
+      this.position.x += dx * spd * dt;
+      this.position.z += dz * spd * dt;
     }
 
     // Gelände & Grenzen

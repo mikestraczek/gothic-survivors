@@ -225,9 +225,9 @@ const ETYPES = {
   demon: { proc: geoDemon, hp: 110, speed: 3.1, dmg: 18, radius: 0.7, scale: 1.5, xp: 13, gold: 0.28, glow: 0xe85018 },
   troll: { proc: geoTroll, hp: 190, speed: 1.8, dmg: 24, radius: 1.1, scale: 1.9, xp: 18, gold: 0.45, glow: 0x58a838 },
   // Bosse
-  boss: { proc: geoShadowbeast, hp: 1300, speed: 2.0, dmg: 26, radius: 2.0, scale: 2.6, xp: 60, gold: 5, boss: true, glow: 0xb030e0, abilities: ['slam', 'frontal'] },
-  boss_bone: { proc: geoSkeleton, hp: 1600, speed: 2.2, dmg: 28, radius: 1.8, scale: 1.8, xp: 75, gold: 6, boss: true, glow: 0xdce6f0, abilities: ['nova', 'safe'] },
-  boss_demon: { proc: geoDemon, hp: 2000, speed: 2.4, dmg: 32, radius: 1.9, scale: 2.0, xp: 90, gold: 7, boss: true, glow: 0xff3a14, abilities: ['slam', 'nova', 'frontal', 'safe'] },
+  boss: { proc: geoShadowbeast, hp: 1300, speed: 2.0, dmg: 26, radius: 2.0, scale: 2.6, xp: 60, gold: 5, boss: true, glow: 0xb030e0, abilities: ['slam', 'frontal', 'bolts', 'root'] },
+  boss_bone: { proc: geoSkeleton, hp: 1600, speed: 2.2, dmg: 28, radius: 1.8, scale: 1.8, xp: 75, gold: 6, boss: true, glow: 0xdce6f0, abilities: ['nova', 'safe', 'bolts', 'root'] },
+  boss_demon: { proc: geoDemon, hp: 2000, speed: 2.4, dmg: 32, radius: 1.9, scale: 2.0, xp: 90, gold: 7, boss: true, glow: 0xff3a14, abilities: ['slam', 'nova', 'frontal', 'bolts', 'root', 'safe'] },
 };
 
 // Fresnel-Randglühen in der Typ-Farbe per Shader-Injektion.
@@ -278,8 +278,22 @@ export class EnemyManager {
     this.spawnEnabled = true;
     this.spawnScale = 1; // <1 während Bossfights, >1 im Endlos-Modus (mehr Adds)
     this.maxAlive = HARD_CAP; // im Endlos-Modus angehoben
+    this.coopScale = 1; // Koop: mehr Gegner gleichzeitig
+    this.bossInterval = 100; // Sekunden zwischen wiederkehrenden Bossen (Endlos kürzer)
     this.fx = null; // vom Game gesetzt (Boss-Telegraphen)
     this._aoes = []; // telegrafierte Boss-AoE-Angriffe
+
+    // Anti-Kiting: Gegner werden „zornig" (schneller), wenn zu lange niemand getötet wird
+    this._sinceKill = 0;
+    this._wrath = 1;
+
+    // ---- Boss-Kugeln (dodgebare Projektile) ----
+    this._bolts = []; // Host: simuliert (mit Mesh)
+    this._boltGhosts = []; // Client: reine Anzeige
+    this._boltGeo = new THREE.SphereGeometry(0.45, 12, 10);
+    this._boltMat = new THREE.MeshStandardMaterial({ color: 0xff7ad0, emissive: 0xff2a9a, emissiveIntensity: 2.6 });
+    this._boltGroup = new THREE.Group();
+    this.scene.add(this._boltGroup);
   }
 
   // HD-2D: Billboard-Pixel-Sprite je Gegnertyp (InstancedMesh)
@@ -317,10 +331,19 @@ export class EnemyManager {
     this.spawnEnabled = true;
     this.spawnScale = 1;
     this.maxAlive = HARD_CAP;
+    this.coopScale = 1;
+    this.bossInterval = 100;
     this._aoes = [];
+    this.hideBolts();
+    this._sinceKill = 0;
+    this._wrath = 1;
   }
   setDifficulty(d) {
     this.diff = d;
+  }
+  // Zorn-Stärke normiert (0 = ruhig, 1 = maximal) — fürs HUD
+  wrathFrac() {
+    return Math.max(0, Math.min(1, (this._wrath - 1) / 1.6));
   }
   displayName(type) {
     return ENEMY_NAMES[type] || 'einem Gegner';
@@ -424,10 +447,22 @@ export class EnemyManager {
     return null;
   }
 
-  // Spawn um den/die Spieler herum (Liste von {x,z})
+  // Spawn um den/die Spieler herum (Liste von {x,z}) — nie direkt auf/an einem Spieler (auch nicht am Mate)
   _spawnAround(centers) {
-    const c = centers[Math.floor(this._rnd() * centers.length)];
-    return this.spawnRing(this._curType(), c.x, c.z);
+    const type = this._curType();
+    const minDist = 13;
+    for (let tries = 0; tries < 10; tries++) {
+      const c = centers[Math.floor(this._rnd() * centers.length)];
+      const a = this._rnd() * Math.PI * 2;
+      const dist = 17 + this._rnd() * 7;
+      const x = c.x + Math.cos(a) * dist;
+      const z = c.z + Math.sin(a) * dist;
+      if (Math.hypot(x, z) >= this.world.barrierRadius - 6) continue;
+      let ok = true;
+      for (const p of centers) { if (Math.hypot(x - p.x, z - p.z) < minDist) { ok = false; break; } }
+      if (ok) return this.spawn(type, x, z);
+    }
+    return null;
   }
   _curType() {
     const pool = this._typePool();
@@ -440,10 +475,21 @@ export class EnemyManager {
     const centers = players.map((p) => p.position);
     const anyAlive = players.some((p) => p.alive && !p.dead);
 
+    // Anti-Kiting: „Zorn" steigt, wenn zu lange kein Kill fällt -> Gegner werden schneller.
+    // In Boss-Phasen (reduzierter spawnScale) nicht eskalieren. Reset in damage() bei jedem Kill.
+    const kiteGuard = anyAlive && this.spawnScale >= 0.9;
+    if (kiteGuard) {
+      this._sinceKill += dt;
+      this._wrath = 1 + Math.min(1.6, Math.max(0, this._sinceKill - 6) * 0.13);
+    } else {
+      this._sinceKill = 0;
+      this._wrath = 1;
+    }
+
     if (anyAlive && this.spawnEnabled) {
       // Konstante Ziel-Population statt immer schnellerer Wellen -> Platz zum Ausweichen
       const cap = this.maxAlive || HARD_CAP;
-      const target = Math.min(cap, Math.round((24 + this.phase * 9) * this.diff * this.spawnScale * (0.7 + 0.3 * players.length)));
+      const target = Math.min(cap, Math.round((24 + this.phase * 9) * this.diff * this.spawnScale * this.coopScale * (0.7 + 0.3 * players.length)));
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
         this.spawnTimer = 0.55;
@@ -457,7 +503,7 @@ export class EnemyManager {
     if (anyAlive && this.autoBoss) {
       this.bossTimer -= dt;
       if (this.bossTimer <= 0) {
-        this.bossTimer = 100;
+        this.bossTimer = this.bossInterval || 100;
         const c = centers[Math.floor(this._rnd() * centers.length)];
         const type = BOSS_TYPES[this._bossIndex % BOSS_TYPES.length];
         this._bossIndex++;
@@ -535,7 +581,7 @@ export class EnemyManager {
         }
       }
 
-      const spd = e.slow > 0 ? e.speed * 0.5 : e.speed;
+      const spd = (e.slow > 0 ? e.speed * 0.5 : e.speed) * this._wrath;
       if (e.slow > 0) e.slow -= dt;
       e.x += (dx * spd + e.kx) * dt + Math.max(-0.5, Math.min(0.5, sepX * 0.5));
       e.z += (dz * spd + e.kz) * dt + Math.max(-0.5, Math.min(0.5, sepZ * 0.5));
@@ -562,7 +608,10 @@ export class EnemyManager {
       // Kontaktschaden am nächsten Spieler
       if (target) {
         const distToP = Math.hypot(target.position.x - e.x, target.position.z - e.z);
-        if (distToP < e.radius + target.radius + 0.2) target.takeDamage(e.dmg, e.type);
+        // Bosse haben einen großen Kollisionsradius (Trennung/Treffer) — für Kontaktschaden aber
+        // enger fassen, damit man nur bei echter Berührung getroffen wird, nicht schon aus der Ferne.
+        const contactR = e.def.boss ? e.radius * 0.5 : e.radius + 0.2;
+        if (distToP < contactR + target.radius) target.takeDamage(e.dmg, e.type);
 
         // ---- Boss-Fähigkeiten: jeder Boss hat NUR seine eigenen (def.abilities) ----
         if (e.def.boss) {
@@ -640,6 +689,7 @@ export class EnemyManager {
       this._aoes = this._aoes.filter((a) => !a.done);
     }
 
+    this._updateBolts(dt, players);
     this._render();
   }
 
@@ -655,12 +705,87 @@ export class EnemyManager {
       const range = 11;
       this._aoes.push({ type: 'cone', x: e.x, z: e.z, dx, dz, range, half: 0.55, dmg: Math.round(e.dmg * 1.4), delay: 1.2, src: e.type });
       if (this.fx) this.fx.telegraphCone(e.x, e.z, dx, dz, range, 1.2, e.y);
+    } else if (kind === 'bolts') {
+      // Kugelsalve: gezielter 3er-Fächer + radialer Ring — dodgebar durch Wegbewegen
+      const dmg = Math.round(e.dmg * 1.1);
+      const sp = 9;
+      let dx = target.position.x - e.x, dz = target.position.z - e.z;
+      const base = Math.atan2(dz, dx);
+      for (let i = -1; i <= 1; i++) {
+        const ang = base + i * 0.22;
+        this._spawnBolt(e.x, e.z, Math.cos(ang) * sp, Math.sin(ang) * sp, dmg, e.type);
+      }
+      const n = 10;
+      for (let i = 0; i < n; i++) {
+        const ang = (i / n) * Math.PI * 2;
+        this._spawnBolt(e.x, e.z, Math.cos(ang) * sp * 0.8, Math.sin(ang) * sp * 0.8, dmg, e.type);
+      }
+      if (this.fx) this.fx.sparksBurst(e.x, 1.4, e.z, 0xff7ad0, 12, 5);
+    } else if (kind === 'root') {
+      // Festwurzeln: kurz (1,5s) — per Tastenhämmern lösbar. Bewusst kurz, sonst zu gefährlich.
+      target.rooted = 1.5;
+      if (this.fx) {
+        this.fx.ring(target.position.x, target.position.z, 2.6, 0x9a6a2a);
+        this.fx.sparksBurst(target.position.x, 0.6, target.position.z, 0x7a5020, 12, 3);
+      }
     } else {
       // slam: Einschlag auf Spielerposition
       const r = 3.8;
       this._aoes.push({ type: 'circle', x: target.position.x, z: target.position.z, r, dmg: Math.round(e.dmg * 1.6), delay: 1.1, src: e.type });
       if (this.fx) this.fx.telegraph(target.position.x, target.position.z, r, 1.1, target.position.y);
     }
+  }
+
+  // ---- Boss-Kugeln: spawnen (Host), simulieren (Host), als Ghosts anzeigen (Client) ----
+  _spawnBolt(x, z, vx, vz, dmg, src) {
+    let b = this._bolts.find((q) => !q.alive);
+    if (!b) {
+      const mesh = new THREE.Mesh(this._boltGeo, this._boltMat);
+      b = { mesh, alive: false };
+      this._bolts.push(b);
+      this._boltGroup.add(mesh);
+    }
+    b.alive = true; b.x = x; b.z = z; b.vx = vx; b.vz = vz; b.dmg = dmg; b.src = src; b.life = 3.2; b.r = 0.5;
+    b.mesh.visible = true; b.mesh.position.set(x, 1.2, z);
+  }
+  _updateBolts(dt, players) {
+    if (!this._bolts.length) return;
+    const maxR = this.world.barrierRadius;
+    for (const b of this._bolts) {
+      if (!b.alive) continue;
+      b.life -= dt;
+      b.x += b.vx * dt; b.z += b.vz * dt;
+      let hit = false;
+      for (const p of players) {
+        if (!p.alive || p.dead) continue;
+        if (Math.hypot(p.position.x - b.x, p.position.z - b.z) < b.r + p.radius) { p.takeDamage(b.dmg, b.src); hit = true; break; }
+      }
+      if (hit || b.life <= 0 || Math.hypot(b.x, b.z) > maxR) {
+        b.alive = false; b.mesh.visible = false;
+        if (hit && this.fx) this.fx.sparksBurst(b.x, 1.2, b.z, 0xff7ad0, 5, 4);
+        continue;
+      }
+      b.mesh.position.set(b.x, 1.2, b.z);
+    }
+  }
+  boltSnapshot() {
+    const out = [];
+    for (const b of this._bolts) if (b.alive) out.push([Math.round(b.x * 10) / 10, Math.round(b.z * 10) / 10]);
+    return out;
+  }
+  renderBoltGhosts(list, dt) {
+    list = list || [];
+    let i = 0;
+    for (; i < list.length; i++) {
+      let g = this._boltGhosts[i];
+      if (!g) { g = new THREE.Mesh(this._boltGeo, this._boltMat); this._boltGroup.add(g); this._boltGhosts.push(g); }
+      g.visible = true; g.position.set(list[i][0], 1.2, list[i][1]);
+    }
+    for (; i < this._boltGhosts.length; i++) this._boltGhosts[i].visible = false;
+  }
+  hideBolts() {
+    for (const b of this._bolts) { b.alive = false; b.mesh.visible = false; }
+    for (const g of this._boltGhosts) g.visible = false;
   }
 
   _render() {
@@ -821,6 +946,7 @@ export class EnemyManager {
     if (e.hp <= 0) {
       e.alive = false;
       this.totalKills++;
+      this._sinceKill = 0; // Kill beruhigt den Zorn (Anti-Kiting)
       if (onKill) onKill(e);
     }
   }

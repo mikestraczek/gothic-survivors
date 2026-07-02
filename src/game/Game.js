@@ -39,6 +39,12 @@ import { Net } from '../net/Net.js';
 
 const SNAP_HZ = 20;
 const INPUT_HZ = 22;
+const REVIVE_RANGE = 2.8; // Nähe zum gefallenen Mate für Wiederbelebung
+const REVIVE_TIME = 3.0; // Sekunden Halten für eine Wiederbelebung
+const AURA_RANGE = 7; // Nähe-Aura wirkt, wenn beide Spieler enger als das beieinander sind
+const ROOT_MAX = 1.5; // Boss-Festwurzeln: Anzeige-Normierung (muss zur Dauer in EnemyManager passen)
+const INTRO_DUR = 2.6; // Dauer des Start-Intros (Kamera-Flourish + Titel)
+const EMOTES = ['🆘 Hilfe!', '👍 Danke!', '💎 Sammeln!', '⚠ Achtung!']; // Quick-Emotes (Tasten 1–4)
 const PHASES = 3; // Phasen pro Level, dann finaler Boss
 const KILLS_PER_PHASE = [55, 80, 110]; // Gegner pro Phase erlegen, dann Mini-Boss
 const MINI_BOSSES = ['boss', 'boss_bone', 'boss_demon']; // Phasen-Anführer
@@ -165,7 +171,7 @@ export class Game {
     const fr = Math.floor(this.runElapsed * 7) % SPRITE_FRAMES;
     this.playerSprite.visible = true;
     this._placeSprite(this.playerSprite, this.player.position, 2.9, fr, this._heroFlip(this.player, '_pFlip'));
-    this.remoteSprite.visible = !!this.role && this.remotePlayer && this.remotePlayer.group.visible;
+    this.remoteSprite.visible = !!this.role && !!this.remotePlayer;
     if (this.remoteSprite.visible) this._placeSprite(this.remoteSprite, this.remotePlayer.position, 2.9, fr, this._heroFlip(this.remotePlayer, '_rFlip'));
   }
 
@@ -244,7 +250,7 @@ export class Game {
     };
 
     this.remoteInput = {
-      enabled: true, _x: 0, _z: 0,
+      enabled: true, _x: 0, _z: 0, reviving: false,
       axis() { return { x: this._x, z: this._z }; },
       isDown: () => false, pressed: () => false, mouseDown: () => false, clicked: () => false,
       mouse: { wheel: 0, dx: 0, dy: 0 },
@@ -287,87 +293,108 @@ export class Game {
   // -------------------------------------------------- Netzwerk / Lobby
   _initNet() {
     this.net = new Net();
-    this.net.onCreated = (code) => {
-      const box = document.getElementById('lobby-code');
-      box.classList.remove('hidden');
-      box.innerHTML = `<div class="code-row"><input id="code-field" readonly value="${code}" /><button id="copy-code">Kopieren</button></div><div class="code-hint">Code antippen markiert ihn · oder „Kopieren"</div>`;
-      const field = document.getElementById('code-field');
-      field.addEventListener('click', () => { field.select(); field.setSelectionRange(0, 99); });
-      document.getElementById('copy-code').addEventListener('click', () => this._copyCode());
-      document.getElementById('lobby-status').textContent = 'Warte auf Mitspieler…';
+    this.net.onCreated = () => {
+      this._enterLobbyRoom('host');
+      this._setLobbySlot2(false);
       document.getElementById('lobby-start').classList.add('hidden');
+      this._setLobbyStatus('Warte auf Mitspieler…');
     };
     this.net.onPeerJoined = () => {
-      document.getElementById('lobby-status').textContent = 'Mitspieler verbunden! Bereit.';
+      this._setLobbySlot2(true);
+      this._setLobbyStatus('Mitspieler verbunden — bereit zum Start!');
       document.getElementById('lobby-start').classList.remove('hidden');
+      if (this.audio && this.audio.pickup) this.audio.pickup();
     };
     this.net.onJoined = () => {
-      document.getElementById('lobby-status').textContent = 'Verbunden — warte auf Host-Start…';
+      this._enterLobbyRoom('client');
+      this._setLobbyStatus('Verbunden — warte auf Host-Start…');
     };
     this.net.onPeerLeft = () => {
       this.hud.toast('Mitspieler hat die Lobby verlassen', 'blood');
-      if (this.mode === 'play' || this.mode === 'levelup') this._leaveOnline();
-      else document.getElementById('lobby-status').textContent = 'Mitspieler getrennt.';
+      if (this.mode === 'play' || this.mode === 'levelup' || this.mode === 'paused') this._leaveOnline();
+      else { this._setLobbySlot2(false); document.getElementById('lobby-start').classList.add('hidden'); this._setLobbyStatus('Mitspieler getrennt — warte…'); }
     };
-    this.net.onError = (msg) => {
-      document.getElementById('lobby-status').textContent = 'Fehler: ' + msg;
-    };
+    this.net.onError = (msg) => this._setLobbyStatus('Fehler: ' + msg);
+    this.net.onLobbyList = (list) => { if (this.mode === 'lobby') this._renderLobbyList(list); };
     this.net.onData = (d) => this._onNetData(d);
   }
 
-  _openLobby() {
+  async _openLobby() {
     this.mode = 'lobby';
     document.getElementById('start-screen').classList.add('hidden');
     document.getElementById('lobby').classList.remove('hidden');
-    document.getElementById('lobby-status').textContent = 'Erstelle eine Lobby oder tritt mit einem Code bei.';
+    document.getElementById('lobby-entry').classList.remove('hidden');
+    document.getElementById('lobby-room').classList.add('hidden');
     document.getElementById('lobby-start').classList.add('hidden');
-    const box = document.getElementById('lobby-code');
-    box.classList.add('hidden');
-    box.innerHTML = '';
+    this._setLobbyStatus('');
     this._renderSelectors('lobby-maps', 'lobby-diffs');
+    document.getElementById('lobby-list').innerHTML = '<div class="lobby-empty">Verbinde…</div>';
+    if (await this._lobbyConnect()) this.net.list();
   }
 
-  _copyCode() {
-    const code = this.net.code;
-    if (!code) return;
-    const btn = document.getElementById('copy-code');
-    const done = (ok) => {
-      if (btn) {
-        btn.textContent = ok ? 'Kopiert!' : 'Strg+C';
-        setTimeout(() => { if (btn) btn.textContent = 'Kopieren'; }, 1500);
-      }
-    };
-    const fallback = () => {
-      const f = document.getElementById('code-field');
-      let ok = false;
-      if (f) {
-        f.focus();
-        f.select();
-        f.setSelectionRange(0, 99);
-        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-      }
-      done(ok);
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(code).then(() => done(true)).catch(fallback);
-    } else {
-      fallback();
+  // Verbindet mit dem Server (falls noch nicht verbunden). Gibt true bei Erfolg.
+  async _lobbyConnect() {
+    if (this.net.connected) return true;
+    try {
+      await this.net.connect(document.getElementById('lobby-server').value || undefined);
+      return true;
+    } catch (e) {
+      document.getElementById('lobby-list').innerHTML = '<div class="lobby-empty">Server nicht erreichbar — läuft <code>npm run server</code>?</div>';
+      return false;
     }
   }
-  async _lobbyCreate() {
-    document.getElementById('lobby-status').textContent = 'Verbinde…';
-    try { await this.net.connect(document.getElementById('lobby-server').value || undefined); this.net.create(); } catch (e) {}
+
+  // Offene Lobbys anzeigen (mit Beitreten-Button je Zeile)
+  _renderLobbyList(list) {
+    const el = document.getElementById('lobby-list');
+    if (!el) return;
+    if (!list || !list.length) { el.innerHTML = '<div class="lobby-empty">Keine offenen Lobbys — erstelle eine!</div>'; return; }
+    const mapName = (k) => { const m = MAP_LIST.find((x) => x.key === k); return m ? m.name : k; };
+    const diffName = (k) => (DIFFS[k] ? DIFFS[k].name : k);
+    el.innerHTML = list.map((l) => `
+      <div class="lobby-item">
+        <div class="li-info"><div class="li-map">🗺️ ${mapName(l.map)}</div><div class="li-diff">${diffName(l.diff)}</div></div>
+        <button class="li-join" data-id="${l.id}">Beitreten</button>
+      </div>`).join('');
+    el.querySelectorAll('.li-join').forEach((b) => b.addEventListener('click', () => this._lobbyJoinId(b.getAttribute('data-id'))));
   }
-  async _lobbyJoin() {
-    const code = document.getElementById('lobby-code-input').value.trim().toUpperCase();
-    if (!code) return;
-    document.getElementById('lobby-status').textContent = 'Verbinde…';
-    try { await this.net.connect(document.getElementById('lobby-server').value || undefined); this.net.join(code); } catch (e) {}
+
+  // Warteraum betreten (Host oder Client)
+  _enterLobbyRoom(role) {
+    document.getElementById('lobby-entry').classList.add('hidden');
+    document.getElementById('lobby-room').classList.remove('hidden');
+    document.getElementById('lobby-host-opts').classList.toggle('hidden', role !== 'host'); // nur Host wählt Karte
+    document.getElementById('lp-state-1').textContent = role === 'host' ? 'Du' : 'Verbunden';
+    document.getElementById('lp-state-2').textContent = role === 'client' ? 'Du' : 'Warte…';
+    if (role === 'client') this._setLobbySlot2(true);
+  }
+  _setLobbySlot2(connected) {
+    const slot = document.getElementById('lp-slot-2');
+    const dot = document.getElementById('lp-dot-2');
+    const state = document.getElementById('lp-state-2');
+    if (slot) slot.classList.toggle('ready', connected);
+    if (dot) dot.classList.toggle('on', connected);
+    if (state && this.net.role === 'host') state.textContent = connected ? 'Verbunden' : 'Warte…';
+  }
+  _setLobbyStatus(txt) {
+    const el = document.getElementById('lobby-status');
+    if (el) el.textContent = txt;
+  }
+
+  async _lobbyCreate() {
+    if (!(await this._lobbyConnect())) return;
+    this.net.create(this._selMap, this._selDiff);
+  }
+  async _lobbyJoinId(id) {
+    if (!id || !(await this._lobbyConnect())) return;
+    this._setLobbyStatus('Trete bei…');
+    this.net.join(id);
   }
 
   _ensureCoop() {
     if (!this.remotePlayer) this.remotePlayer = new Player(this.scene, this.world, this.assets.createHero(1.9, 0x6aa6e6));
-    this.remotePlayer.group.visible = true;
+    // HD-2D: der Mitspieler wird als Pixel-Sprite gezeigt — rohes 3D-Modell bleibt versteckt
+    this.remotePlayer.group.visible = false;
     if (!this.weapons2) {
       this.weapons2 = new Weapons(this.scene);
       this.weapons2.fx = this.fx;
@@ -376,8 +403,10 @@ export class Game {
 
   _onNetData(d) {
     if (!d) return;
+    if (d.k === 'ping') { this._addPing(d.x, d.z); return; } // Team-Ping (beide Rollen)
+    if (d.k === 'emote') { this._showEmote('mate', d.i); return; }
     if (d.k === 'start' && this.net.role === 'client') this._beginClientRun(d);
-    else if (d.k === 'in' && this.role === 'host') { this.remoteInput._x = d.x; this.remoteInput._z = d.z; if (d.dodge) this.remotePlayer.dodge(); }
+    else if (d.k === 'in' && this.role === 'host') { this.remoteInput._x = d.x; this.remoteInput._z = d.z; this.remoteInput.reviving = !!d.rv; if (d.dodge) this.remotePlayer.dodge(); if (d.mash) this.remotePlayer.mashFree(0.34 * d.mash); }
     else if (d.k === 'snap' && this.role === 'client') this._applySnapshot(d);
     else if (d.k === 'won' && this.role === 'client') this._clientWin(d);
     else if (d.k === 'endless' && this.role === 'client') {
@@ -411,6 +440,7 @@ export class Game {
       this._pendingRemoteCombo = null;
       this._endLevelUp();
     } else if (d.k === 'dps' && this.role === 'client') this._clientDealt = d.d || {};
+    else if (d.k === 'gpause' && this.role === 'host') this._peerPause(d.on);
     else if (d.k === 'over' && this.role === 'client') this._clientGameOver(d);
   }
 
@@ -419,16 +449,21 @@ export class Game {
     document.getElementById('start-button').addEventListener('click', () => this._openMapSelect());
     document.getElementById('resume-button').addEventListener('click', () => this.resumeRun());
     document.getElementById('shop-button').addEventListener('click', () => this.openShop('menu'));
-    document.getElementById('combos-button').addEventListener('click', () => {
-      document.getElementById('combos-list').innerHTML = this.upgrades.combosListHtml();
-      document.getElementById('start-screen').classList.add('hidden');
-      document.getElementById('combos-screen').classList.remove('hidden');
-    });
+    document.getElementById('combos-button').addEventListener('click', () => this._openCombos('menu'));
+    const pauseCombos = document.getElementById('pause-combos');
+    if (pauseCombos) pauseCombos.addEventListener('click', () => this._openCombos('pause'));
     document.getElementById('combos-back').addEventListener('click', () => {
       document.getElementById('combos-screen').classList.add('hidden');
-      document.getElementById('start-screen').classList.remove('hidden');
+      const back = this._combosReturn === 'pause' ? 'pause-screen' : 'start-screen';
+      document.getElementById(back).classList.remove('hidden');
     });
     document.getElementById('online-button').addEventListener('click', () => this._openLobby());
+    const nameEl = document.getElementById('player-name');
+    if (nameEl) { this._loadName(); nameEl.addEventListener('input', () => { try { localStorage.setItem('gothicName', nameEl.value.trim()); } catch (e) {} }); }
+    document.getElementById('leaderboard-button').addEventListener('click', () => this._openLeaderboard());
+    document.getElementById('lb-back').addEventListener('click', () => { document.getElementById('leaderboard-screen').classList.add('hidden'); this._showMenu(); });
+    document.getElementById('lb-tab-time').addEventListener('click', () => { document.getElementById('lb-tab-time').classList.add('active'); document.getElementById('lb-tab-kills').classList.remove('active'); this._renderLeaderboard('time'); });
+    document.getElementById('lb-tab-kills').addEventListener('click', () => { document.getElementById('lb-tab-kills').classList.add('active'); document.getElementById('lb-tab-time').classList.remove('active'); this._renderLeaderboard('kills'); });
     document.getElementById('map-start').addEventListener('click', () => { document.getElementById('map-screen').classList.add('hidden'); this.startRun(this._selMap, this._selDiff); });
     document.getElementById('map-back').addEventListener('click', () => { document.getElementById('map-screen').classList.add('hidden'); this._showMenu(); });
     document.getElementById('win-menu').addEventListener('click', () => { document.getElementById('win-screen').classList.add('hidden'); this._quitToMenu(); });
@@ -450,7 +485,7 @@ export class Game {
     document.getElementById('retry-button').addEventListener('click', () => this.startRun(this.mapKey, this.difficulty));
     document.getElementById('death-shop-button').addEventListener('click', () => this.openShop('death'));
     document.getElementById('lobby-create').addEventListener('click', () => this._lobbyCreate());
-    document.getElementById('lobby-join').addEventListener('click', () => this._lobbyJoin());
+    document.getElementById('lobby-refresh').addEventListener('click', () => { if (this.net.connected) this.net.list(); });
     document.getElementById('lobby-start').addEventListener('click', () => this._hostStart());
     document.getElementById('lobby-back').addEventListener('click', () => {
       this.net.close();
@@ -464,10 +499,92 @@ export class Game {
 
   _showMenu() {
     this.mode = 'menu';
+    clearTimeout(this._introTimer);
+    const intro = document.getElementById('intro');
+    if (intro) intro.classList.add('hidden');
+    this._introT = 0;
     const ms = document.getElementById('menu-stats');
     if (ms) ms.textContent = `Gesammeltes Erz: ${this.meta.gold}`;
     document.getElementById('resume-button').classList.toggle('hidden', !this._hasSave());
     document.getElementById('start-screen').classList.remove('hidden');
+  }
+
+  // Kombinationen-Übersicht — aus dem Hauptmenü ODER dem Pause-Menü aufrufbar
+  _openCombos(from) {
+    this._combosReturn = from;
+    document.getElementById('combos-list').innerHTML = this.upgrades.combosListHtml();
+    document.getElementById(from === 'pause' ? 'pause-screen' : 'start-screen').classList.add('hidden');
+    document.getElementById('combos-screen').classList.remove('hidden');
+  }
+
+  // -------------------------------------------------- Name & Bestenliste
+  _playerName() {
+    const el = document.getElementById('player-name');
+    return ((el && el.value.trim()) || '') || 'Anonym';
+  }
+  _loadName() {
+    try { const n = localStorage.getItem('gothicName'); if (n) document.getElementById('player-name').value = n; } catch (e) {}
+  }
+  _esc(s) {
+    return String(s).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+  }
+  // Ergebnis eines Runs speichern: lokal (Cache) + an den Server (Postgres, best effort)
+  _recordScore(win) {
+    const entry = {
+      name: this._playerName(),
+      time: Math.round(this.runElapsed),
+      kills: this.player.kills,
+      level: this.player.level,
+      gold: Math.floor(this.player.gold),
+      map: this.mapKey,
+      coop: !!this.role,
+      win: !!win,
+      ts: Date.now(),
+    };
+    try {
+      const scores = JSON.parse(localStorage.getItem('gothicScores') || '[]');
+      scores.push(entry);
+      scores.sort((a, b) => b.time - a.time);
+      localStorage.setItem('gothicScores', JSON.stringify(scores.slice(0, 100)));
+    } catch (e) { /* ignore */ }
+    try {
+      fetch('/api/scores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }).catch(() => {});
+    } catch (e) { /* offline: nur lokal */ }
+  }
+  _openLeaderboard() {
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('leaderboard-screen').classList.remove('hidden');
+    document.getElementById('lb-tab-time').classList.add('active');
+    document.getElementById('lb-tab-kills').classList.remove('active');
+    this._renderLeaderboard('time');
+  }
+  // Server-Bestenliste laden (Postgres); leer/offline -> lokale Liste anzeigen
+  async _renderLeaderboard(sortBy) {
+    this._lbSort = sortBy;
+    const el = document.getElementById('lb-list');
+    el.innerHTML = '<div class="lb-empty">Lade…</div>';
+    let server = null;
+    try {
+      const r = await fetch(`/api/scores?sort=${sortBy}&limit=15`);
+      if (r.ok) { const data = await r.json(); if (Array.isArray(data)) server = data; }
+    } catch (e) { /* Server nicht erreichbar */ }
+    if (this._lbSort !== sortBy) return; // Tab wurde inzwischen gewechselt
+    if (server && server.length) { this._renderLbRows(el, server, true); return; }
+    // leer oder offline -> lokale Liste
+    let local = [];
+    try { local = JSON.parse(localStorage.getItem('gothicScores') || '[]'); } catch (e) {}
+    local.sort((a, b) => (sortBy === 'kills' ? b.kills - a.kills : b.time - a.time));
+    this._renderLbRows(el, local.slice(0, 15), false);
+  }
+  _renderLbRows(el, scores, global) {
+    if (!scores || !scores.length) { el.innerHTML = '<div class="lb-empty">Noch keine Einträge — überlebe einen Run!</div>'; return; }
+    const fmtT = (t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+    let h = `<div class="lb-src">${global ? '🌐 Global' : '💾 Lokal (Server offline)'}</div>`;
+    h += `<div class="lb-row lb-head"><span class="lb-rank">#</span><span class="lb-name">Name</span><span class="lb-val">Zeit</span><span class="lb-val">Kills</span><span class="lb-val">Stufe</span></div>`;
+    scores.slice(0, 15).forEach((s, i) => {
+      h += `<div class="lb-row"><span class="lb-rank">${i + 1}</span><span class="lb-name">${this._esc(s.name)}${s.coop ? ' 👥' : ''}${s.win ? ' 🏆' : ''}</span><span class="lb-val">${fmtT(s.time)}</span><span class="lb-val">${s.kills}</span><span class="lb-val">${s.level}</span></div>`;
+    });
+    el.innerHTML = h;
   }
 
   // -------------------------------------------------- Speichern / Fortsetzen
@@ -535,6 +652,8 @@ export class Game {
     this._leveling = false;
     this._onKillP1 = this._makeOnKill(this.player);
     this._lastHp = this.player.hp;
+    this.fx.record = false; // Solo-Fortsetzung: keine Aufnahme
+    this.fx.drain();
     this.hud.setSpectate(null);
     this.camCtrl.snap(this.player.position);
     this.hud.show();
@@ -553,6 +672,7 @@ export class Game {
     this.mode = 'paused';
     this.input.enabled = false;
     if (this.role === 'host') this.net.send({ k: 'pause', on: true });
+    if (this.role === 'client') this.net.send({ k: 'gpause', on: true }); // Host mit-pausieren
     const isClient = this.role === 'client';
     document.getElementById('pause-save').classList.toggle('hidden', isClient);
     document.getElementById('pause-menu').classList.toggle('hidden', isClient);
@@ -564,6 +684,20 @@ export class Game {
     this.mode = 'play';
     this.input.enabled = true;
     if (this.role === 'host') this.net.send({ k: 'pause', on: false });
+    if (this.role === 'client') this.net.send({ k: 'gpause', on: false });
+  }
+
+  // Host: Gast hat sein Menü geöffnet/geschlossen -> Simulation mit-pausieren
+  _peerPause(on) {
+    this._peerPaused = on;
+    if (on) {
+      if (this.mode === 'play') { this.mode = 'paused'; this.input.enabled = false; }
+      this.hud.setPeerPause(true);
+    } else {
+      this.hud.setPeerPause(false);
+      const ownPause = !document.getElementById('pause-screen').classList.contains('hidden');
+      if (this.mode === 'paused' && !ownPause && !this._leveling) { this.mode = 'play'; this.input.enabled = true; }
+    }
   }
   _saveAndQuit() {
     this._saveRun();
@@ -589,12 +723,16 @@ export class Game {
     const diffEl = document.getElementById(diffElId);
     if (mapEl) {
       mapEl.innerHTML = MAP_LIST.map((m) => `<button class="sel-btn ${m.key === this._selMap ? 'active' : ''}" data-map="${m.key}">${m.name}</button>`).join('');
-      mapEl.querySelectorAll('[data-map]').forEach((b) => b.addEventListener('click', () => { this._selMap = b.getAttribute('data-map'); this._renderSelectors(mapElId, diffElId); }));
+      mapEl.querySelectorAll('[data-map]').forEach((b) => b.addEventListener('click', () => { this._selMap = b.getAttribute('data-map'); this._renderSelectors(mapElId, diffElId); this._lobbyUpdate(); }));
     }
     if (diffEl) {
       diffEl.innerHTML = Object.keys(DIFFS).map((k) => `<button class="sel-btn ${k === this._selDiff ? 'active' : ''}" data-diff="${k}">${DIFFS[k].name}</button>`).join('');
-      diffEl.querySelectorAll('[data-diff]').forEach((b) => b.addEventListener('click', () => { this._selDiff = b.getAttribute('data-diff'); this._renderSelectors(mapElId, diffElId); }));
+      diffEl.querySelectorAll('[data-diff]').forEach((b) => b.addEventListener('click', () => { this._selDiff = b.getAttribute('data-diff'); this._renderSelectors(mapElId, diffElId); this._lobbyUpdate(); }));
     }
+  }
+  // Host: geänderte Karte/Schwierigkeit im Warteraum an die Lobby-Liste melden
+  _lobbyUpdate() {
+    if (this.net && this.net.role === 'host' && this.net.connected) this.net.updateLobby(this._selMap, this._selDiff);
   }
 
   _openMapSelect() {
@@ -631,7 +769,8 @@ export class Game {
     this.enemies.spawnEnabled = true;
     this.enemies.spawnScale = 1;
     this.enemies.autoBoss = true; // wiederkehrende Bosse
-    this.enemies.bossTimer = 60;
+    this.enemies.bossTimer = 55;
+    this.enemies.bossInterval = 70; // Bosse kommen häufiger als im normalen Lauf (100)
     this._endlessTime = 0;
     this._endlessRamp = 0;
     this.player.dead = false;
@@ -647,6 +786,7 @@ export class Game {
     this.mode = 'play';
     this.audio.levelup();
     this.hud.toast('ENDLOS-MODUS — überlebe so lange du kannst!', 'gold');
+    this._playIntro();
     if (this.role === 'host') this.net.send({ k: 'endless' });
   }
 
@@ -654,13 +794,13 @@ export class Game {
     if (this.endless) {
       this._endlessRamp = (this._endlessRamp || 0) + dt;
       this._endlessTime = (this._endlessTime || 0) + dt;
-      if (this._endlessRamp > 18) {
+      if (this._endlessRamp > 14) {
         this._endlessRamp = 0;
-        this.enemies.phase++; // zähere Gegner + mehr Spawns
+        this.enemies.phase++; // zähere Gegner + mehr Spawns (schneller als zuvor)
       }
-      // immer mehr Gegner gleichzeitig, je länger man überlebt
-      this.enemies.spawnScale = 1 + this._endlessTime / 70;
-      this.enemies.maxAlive = 700;
+      // immer mehr Gegner gleichzeitig, je länger man überlebt (steiler)
+      this.enemies.spawnScale = 1 + this._endlessTime / 45;
+      this.enemies.maxAlive = 800;
       return;
     }
     if (this.levelWon) return;
@@ -705,19 +845,20 @@ export class Game {
   }
 
   // Live-DPS: gleitender Mittelwert je Waffe aus dem kumulierten Schaden
-  _updateDps(dt, dealt) {
-    const tr = this._dps || (this._dps = { last: {}, ema: {}, acc: 0 });
+  // DPS = Gesamtschaden der Waffe / Zeit seit sie im Besitz ist (stabil, kein gleitender Mittelwert)
+  _updateDps(dt, dealt, weapons) {
+    const tr = this._dps || (this._dps = { acc: 0 });
     tr.acc += dt;
-    if (tr.acc < 0.25) return;
-    const interval = tr.acc;
+    if (tr.acc < 0.25) return; // nur ~4x/s neu rendern
     tr.acc = 0;
+    const elapsed = weapons ? weapons.elapsed : this.runElapsed;
+    const since = (weapons && weapons.ownedSince) || {};
     const entries = [];
     for (const wid of Object.keys(dealt || {})) {
       const cur = dealt[wid];
-      const rate = Math.max(0, cur - (tr.last[wid] || 0)) / interval;
-      tr.last[wid] = cur;
-      tr.ema[wid] = (tr.ema[wid] || 0) * 0.6 + rate * 0.4;
-      if (cur > 0) entries.push({ id: wid, total: cur, dps: tr.ema[wid] });
+      if (cur <= 0) continue;
+      const dur = Math.max(1, elapsed - (since[wid] || 0));
+      entries.push({ id: wid, total: cur, dps: cur / dur });
     }
     entries.sort((a, b) => b.total - a.total);
     this.hud.setDps(entries);
@@ -743,6 +884,7 @@ export class Game {
     this.input.enabled = false;
     this.hud.setSpectate(null);
     this.hud.setBossBar(null);
+    this._recordScore(true);
     this._clearSave();
     this.audio.levelup();
     const earned = Math.floor(this.player.gold);
@@ -766,6 +908,10 @@ export class Game {
     this.input.enabled = false;
     this.hud.setSpectate(null);
     this.hud.setBossBar(null);
+    this.weapons.hideGhosts();
+    this.enemies.hideBolts();
+    this.runElapsed = d.t || this.runElapsed;
+    this._recordScore(true);
     const earned = Math.floor(this.player.gold);
     this.meta.addGold(earned);
     const m = Math.floor((d.t || 0) / 60), s = Math.floor((d.t || 0) % 60);
@@ -781,6 +927,26 @@ export class Game {
   }
 
   // -------------------------------------------------- Run-Start
+  // Cinematisches Intro beim Run-Start: Titel-Reveal + Kamera zieht sanft heran
+  _playIntro() {
+    const el = document.getElementById('intro');
+    if (el) {
+      const theme = (this.world.theme && this.world.theme.name) || 'Die Kolonie';
+      const diff = (DIFFS[this.difficulty] && DIFFS[this.difficulty].name) || '';
+      el.querySelector('.intro-title').textContent = theme;
+      el.querySelector('.intro-sub').textContent = diff ? `${diff} · Überlebe im Bann der Barriere` : 'Überlebe im Bann der Barriere';
+      el.classList.remove('hidden', 'play');
+      void el.offsetWidth; // Reflow -> Animation sauber neu starten
+      el.classList.add('play');
+      clearTimeout(this._introTimer);
+      this._introTimer = setTimeout(() => el.classList.add('hidden'), Math.round(INTRO_DUR * 1000 + 200));
+    }
+    // Kamera weit setzen; die Zoom-Fahrt zieht sie im Loop heran
+    this._introT = INTRO_DUR;
+    this.camCtrl.zoom = 2.2;
+    this.camCtrl.snap((this._camTarget ? this._camTarget() : this.player.position));
+  }
+
   _resetCommon() {
     this.enemies.reset();
     this.gems.reset();
@@ -794,6 +960,15 @@ export class Game {
     this._dps = null;
     this._clientDealt = {};
     this._dpsSendAcc = 0;
+    this._reviveProg = 0;
+    this._clientRevive = 0;
+    this.remoteInput.reviving = false;
+    this._prevRemoteDead = false;
+    this._lastStandActive = false;
+    this._pings = [];
+    // Solo: keine Effekt-Aufnahme nötig (Host schaltet sie danach ein)
+    this.fx.record = false;
+    this.fx.drain();
     this.hud.setDps([]);
     this.hud.setSpectate(null);
   }
@@ -816,6 +991,7 @@ export class Game {
     this.hud.toast(`${this.world.theme.name} · ${DIFFS[diff].name} — Phase 1/${PHASES}`, 'gold');
     this.input.enabled = true;
     this.mode = 'play';
+    this._playIntro();
   }
 
   _hostStart() {
@@ -832,6 +1008,11 @@ export class Game {
     this._resetCommon();
     this.weapons2.reset();
     this.weapons2.add('whirl');
+    // Koop-Host: alle transienten Effekte aufzeichnen -> per Snapshot an den Gast senden
+    this.fx.record = true;
+    // Koop ist fordernder als Solo (zwei Spieler zusammen sind stärker): mehr Gegner + zähere Werte
+    this.enemies.coopScale = 1.35;
+    this.enemies.diff *= 1.18;
     this._onKillP1 = this._makeOnKill(this.player);
     this._onKillP2 = this._makeOnKill(this.remotePlayer);
     this._lastHp = this.player.hp;
@@ -843,6 +1024,7 @@ export class Game {
     this.hud.toast('Koop gestartet! Jeder levelt selbst.', 'gold');
     this.input.enabled = true;
     this.mode = 'play';
+    this._playIntro();
   }
 
   _beginClientRun(d) {
@@ -866,17 +1048,31 @@ export class Game {
     this.weapons2._ldSig = null;
     this.runElapsed = 0;
     this._clientPaused = false;
+    this._reviveProg = 0;
+    this._clientRevive = 0;
+    this._prevRemoteDead = false;
+    this._lastStandActive = false;
+    this._pings = [];
+    this._ghostProj = [];
+    this._ghostBolts = [];
+    // Client rendert nur -> keine eigene Effekt-Aufnahme, spielt die des Hosts ab
+    this.fx.record = false;
+    this.fx.drain();
     this.hud.setSpectate(null);
     this.camCtrl.snap(this.player.position);
     this.hud.show();
     this.hud.toast('Mit der Lobby verbunden!', 'gold');
     this.input.enabled = true;
     this.mode = 'play';
+    this._playIntro();
   }
 
   _leaveOnline() {
+    if (this.net) this.net.close();
     this.role = null;
     this.mode = 'menu';
+    if (this.weapons) this.weapons.hideGhosts();
+    if (this.enemies) this.enemies.hideBolts();
     if (this.remotePlayer) this.remotePlayer.group.visible = false;
     document.getElementById('start-screen').classList.remove('hidden');
     document.getElementById('lobby').classList.add('hidden');
@@ -885,6 +1081,149 @@ export class Game {
 
   _players() {
     return this.role ? [this.player, this.remotePlayer] : [this.player];
+  }
+
+  // -------------------------------------------------- Wiederbelebung (Nähe + Halten)
+  // Host-autoritativ: genau ein Gefallener kann vom lebenden Mate wiederbelebt werden.
+  _tickRevive(dt) {
+    let downed = null, reviver = null, held = false;
+    if (this.player.dead && !this.remotePlayer.dead) { downed = this.player; reviver = this.remotePlayer; held = !!this.remoteInput.reviving; }
+    else if (this.remotePlayer.dead && !this.player.dead) { downed = this.remotePlayer; reviver = this.player; held = this.input.isDown('KeyE'); }
+    if (!downed) { this._reviveProg = 0; return; }
+    const near = Math.hypot(reviver.position.x - downed.position.x, reviver.position.z - downed.position.z) < REVIVE_RANGE;
+    if (near && held) this._reviveProg = Math.min(1, (this._reviveProg || 0) + dt / REVIVE_TIME);
+    else this._reviveProg = Math.max(0, (this._reviveProg || 0) - dt / REVIVE_TIME * 0.7); // Abbruch fällt langsam ab
+    if (this._reviveProg >= 1) {
+      downed.dead = false;
+      downed.hp = Math.max(1, Math.round(downed.maxHp * 0.5));
+      downed.iframe = 2.0; // kurzer Schutz nach dem Aufstehen
+      downed.group.rotation.z = 0;
+      this._reviveProg = 0;
+      this.audio.levelup();
+      this.hud.toast('Mitspieler wiederbelebt! 💚', 'gold');
+    }
+  }
+
+  // Linkes Mitspieler-Panel: HP, Level, Waffen & Upgrades des Partners
+  _updateAllyPanel() {
+    const rp = this.remotePlayer;
+    const prog = rp.dead ? (this.role === 'client' ? (this._clientRevive || 0) : (this._reviveProg || 0)) : 0;
+    this.hud.setAlly({
+      level: rp.level,
+      hp: rp.hp, maxHp: rp.maxHp,
+      dead: rp.dead,
+      weapons: this.weapons2 ? this.weapons2.ownedList() : [],
+      passives: rp.passiveCounts || {},
+      reviveProg: prog,
+    });
+  }
+
+  // Zentraler Hinweis: entweder „Halte E zum Wiederbeleben" (Retter) oder „Du wirst wiederbelebt…" (Gefallener)
+  _updateRevivePrompt() {
+    const me = this.player, ally = this.remotePlayer;
+    const prog = this.role === 'client' ? (this._clientRevive || 0) : (this._reviveProg || 0);
+    if (me.dead && ally && !ally.dead) { this.hud.setRevivePrompt({ prog, downed: true }); return; }
+    const canRevive = ally && ally.dead && !me.dead &&
+      Math.hypot(me.position.x - ally.position.x, me.position.z - ally.position.z) < REVIVE_RANGE;
+    this.hud.setRevivePrompt(canRevive ? { prog, downed: false } : null);
+  }
+
+  // Koop-Buffs: Last-Stand (Mate am Boden -> stärker) + Nähe-Aura (nah beieinander -> Bonus)
+  _updateBuffs() {
+    const a = this.player, b = this.remotePlayer;
+    const near = !a.dead && !b.dead && Math.hypot(a.position.x - b.position.x, a.position.z - b.position.z) < AURA_RANGE;
+    for (const [self, other] of [[a, b], [b, a]]) {
+      const lastStand = !self.dead && other.dead;
+      self.dmgMult = (lastStand ? 1.3 : 1) * (near ? 1.12 : 1);
+      self.speedMult = lastStand ? 1.25 : 1;
+      self.aura = near;
+      self.lastStand = lastStand;
+    }
+    const mine = this.player.lastStand;
+    if (mine && !this._lastStandActive) this.hud.toast('🔥 Last Stand — verstärkt, bis dein Mate wieder steht!', 'gold');
+    this._lastStandActive = mine;
+  }
+
+  // Richtungspfeil zum Mitspieler (nur wenn er off-screen oder gefallen ist)
+  _updateMateArrow() {
+    const mate = this.remotePlayer;
+    const w = window.innerWidth, h = window.innerHeight;
+    const v = this._projMate || (this._projMate = new THREE.Vector3());
+    v.set(mate.position.x, mate.position.y + 1.2, mate.position.z).project(this.camera);
+    let bx = v.x, by = v.y;
+    const behind = v.z > 1;
+    if (behind) { bx = -bx; by = -by; }
+    const onScreen = !behind && Math.abs(bx) < 0.9 && Math.abs(by) < 0.9;
+    if (onScreen && !mate.dead) { this.hud.setMateArrow(null); return; } // sichtbar & lebendig -> kein Pfeil nötig
+    const m = Math.max(Math.abs(bx), Math.abs(by)) || 1;
+    const ex = bx / m, ey = by / m;
+    const margin = 0.82;
+    const sx = (ex * margin * 0.5 + 0.5) * w;
+    const sy = (-ey * margin * 0.5 + 0.5) * h;
+    const angle = Math.atan2(-ey, ex); // Bildschirm-Radiant (0 = rechts, y nach unten)
+    const dist = Math.round(Math.hypot(mate.position.x - this.player.position.x, mate.position.z - this.player.position.z));
+    this.hud.setMateArrow({ x: sx, y: sy, angle, dist, dead: mate.dead });
+  }
+
+  // Meldung, wenn der Mitspieler gerade fällt
+  _coopDeathWatch() {
+    const rd = this.remotePlayer.dead;
+    if (rd && !this._prevRemoteDead) {
+      this.hud.bossBanner('MITSPIELER GEFALLEN');
+      this.hud.toast('☠ Mitspieler gefallen — eile hin und belebe ihn (E)!', 'blood');
+      this.audio.hurt();
+    }
+    this._prevRemoteDead = rd;
+  }
+
+  // Ping (Q) + Emotes (1–4)
+  // Ping an die Maus-Position in der Landschaft (Linksklick oder Q) — Solo & Koop
+  _pingInput() {
+    if (this.input.clicked(0) || this.input.pressed('KeyQ')) {
+      const p = this._mouseWorld();
+      if (p) this._ping(p.x, p.z);
+    }
+  }
+  // Emotes nur im Koop (an den Mitspieler)
+  _coopInput() {
+    if (this.mode !== 'play') return;
+    for (let i = 1; i <= 4; i++) if (this.input.pressed('Digit' + i)) this._emote(i);
+  }
+  // Anzahl frischer Tastendrücke diesen Frame (fürs Losreißen aus dem Festwurzeln)
+  _mashCount() {
+    let n = 0;
+    for (const c of ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space']) if (this.input.pressed(c)) n++;
+    return n;
+  }
+  // Maus-Bildschirmposition -> Weltpunkt auf dem Boden (Strahl gegen Ebene y=0)
+  _mouseWorld() {
+    const w = window.innerWidth, h = window.innerHeight;
+    const ndc = this._ndc || (this._ndc = new THREE.Vector2());
+    ndc.set((this.input.mouse.x / w) * 2 - 1, -(this.input.mouse.y / h) * 2 + 1);
+    const ray = this._ray || (this._ray = new THREE.Raycaster());
+    ray.setFromCamera(ndc, this.camera);
+    const plane = this._groundPlane || (this._groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
+    const pt = this._rayPt || (this._rayPt = new THREE.Vector3());
+    if (ray.ray.intersectPlane(plane, pt)) return { x: pt.x, z: pt.z };
+    return null;
+  }
+  _ping(x, z) { this._addPing(x, z); if (this.role) this.net.send({ k: 'ping', x, z }); }
+  _addPing(x, z) {
+    (this._pings || (this._pings = [])).push({ x, z, t: 3.5 });
+    this.hud.toast('📍 Team-Ping', 'gold');
+    this.audio.pickup();
+    if (this.fx) { const was = this.fx.record; this.fx.record = false; this.fx.ring(x, z, 5.5, 0x49e0ff); this.fx.record = was; }
+  }
+  _decayPings(dt) {
+    if (!this._pings || !this._pings.length) return;
+    for (const p of this._pings) p.t -= dt;
+    this._pings = this._pings.filter((p) => p.t > 0);
+  }
+  _emote(i) { this._showEmote('self', i); this.net.send({ k: 'emote', i }); }
+  _showEmote(who, i) {
+    const txt = EMOTES[(i | 0) - 1] || '…';
+    this.hud.toast((who === 'mate' ? '🗨 Mitspieler: ' : '🗨 Du: ') + txt, 'gold');
+    this.audio.pickup();
   }
 
   _collectXp(value, who) {
@@ -1041,6 +1380,7 @@ export class Game {
     this.mode = 'dead';
     this.input.enabled = false;
     this.hud.setSpectate(null);
+    this._recordScore(false);
     this._clearSave(); // beendeter Run ist nicht mehr fortsetzbar
     const earned = Math.floor(this.player.gold);
     this.meta.addGold(earned);
@@ -1067,6 +1407,10 @@ export class Game {
     this.mode = 'dead';
     this.input.enabled = false;
     this.hud.setSpectate(null);
+    this.weapons.hideGhosts();
+    this.enemies.hideBolts();
+    this.runElapsed = d.t || this.runElapsed;
+    this._recordScore(false);
     const earned = Math.floor(this.player.gold);
     this.meta.addGold(earned);
     const m = Math.floor((d.t || 0) / 60);
@@ -1099,7 +1443,7 @@ export class Game {
 
   // -------------------------------------------------- Snapshot
   _sendSnapshot() {
-    const enc = (p) => [Math.round(p.position.x * 20) / 20, Math.round(p.position.z * 20) / 20, Math.round(p.yaw * 100) / 100, Math.round(p.hp), p.maxHp, p.dead ? 1 : 0];
+    const enc = (p) => [Math.round(p.position.x * 20) / 20, Math.round(p.position.z * 20) / 20, Math.round(p.yaw * 100) / 100, Math.round(p.hp), p.maxHp, p.dead ? 1 : 0, Math.round((p.rooted || 0) * 10) / 10];
     const stat = (p) => [p.level, p.xp, p.xpToNext, p.kills, Math.floor(p.gold)];
     const ld = (w) => w.ownedList().map((x) => ({ id: x.id, l: x.level, e: x.evolved ? 1 : 0 }));
     this.net.send({
@@ -1109,16 +1453,21 @@ export class Game {
       gm: this.gems.snapshot(),
       pk: this.pickups.snapshot(),
       fx: this.fx.drain(),
+      pj: this.weapons.projSnapshot().concat(this.weapons2.projSnapshot()), // fliegende Projektile beider Spieler
+      bo: this.enemies.boltSnapshot(), // Boss-Kugeln
       p1: stat(this.player),
       p2: stat(this.remotePlayer),
       ld1: ld(this.weapons),
       ld2: ld(this.weapons2),
+      pa1: this.player.passiveCounts, // Host-Passive (fürs Mitspieler-Panel beim Gast)
       pa2: this.remotePlayer.passiveCounts,
       ph: this.phaseIndex,
-      pk: this._phaseKills,
+      phk: this._phaseKills, // eigener Key — nicht mehr mit Pickups (pk) kollidieren
+      rv: Math.round((this._reviveProg || 0) * 100) / 100, // Wiederbelebungs-Fortschritt
       bp: this.bossPhase ? 1 : 0,
       st: this.phaseStage,
       dg: this.enemies._aoes.some((a) => a.type === 'safe') ? 1 : 0,
+      wr: Math.round(this.enemies.wrathFrac() * 100) / 100,
       t: Math.round(this.runElapsed),
     });
   }
@@ -1128,17 +1477,22 @@ export class Game {
     const self = d.pl[1]; // P2 = ich
     this._authRemote = { x: host[0], z: host[1], yaw: host[2] };
     this.remotePlayer.hp = host[3]; this.remotePlayer.maxHp = host[4]; this.remotePlayer.dead = host[5] === 1;
+    this.remotePlayer.rooted = host[6] || 0;
     this._authSelf = { x: self[0], z: self[1] };
     this.player.hp = self[3]; this.player.maxHp = self[4]; this.player.dead = self[5] === 1;
+    this.player.rooted = self[6] || 0;
     this.runElapsed = d.t || 0;
     if (d.p2) { this.player.level = d.p2[0]; this.player.xp = d.p2[1]; this.player.xpToNext = d.p2[2]; this.player.kills = d.p2[3]; this.player.gold = d.p2[4]; }
     if (d.p1) { this.remotePlayer.level = d.p1[0]; this.remotePlayer.kills = d.p1[3]; }
     if (d.pa2) this.player.passiveCounts = d.pa2; // eigene Passive im HUD
+    if (d.pa1) this.remotePlayer.passiveCounts = d.pa1; // Host-Passive fürs Mitspieler-Panel
+    this._clientRevive = d.rv || 0; // Wiederbelebungs-Fortschritt (vom Host)
     if (d.ph != null) this.phaseIndex = d.ph;
-    if (d.pk != null) this._phaseKills = d.pk;
+    if (d.phk != null) this._phaseKills = d.phk;
     this.bossPhase = !!d.bp;
     if (d.st) this.phaseStage = d.st;
     this._clientDanger = !!d.dg;
+    this._clientWrath = d.wr || 0;
     // eigene Waffen = ld2, Host-Waffen = ld1
     if (d.ld2) this.weapons.setLoadout(d.ld2.map((w) => ({ id: w.id, level: w.l, evolved: !!w.e })));
     if (d.ld1) this.weapons2.setLoadout(d.ld1.map((w) => ({ id: w.id, level: w.l, evolved: !!w.e })));
@@ -1146,6 +1500,8 @@ export class Game {
     this.gems.applySnapshot(d.gm || [], 0);
     this.pickups.applySnapshot(d.pk || []);
     if (d.fx) this.fx.replay(d.fx);
+    this._ghostProj = d.pj || []; // fliegende Projektile für die Ghost-Anzeige
+    this._ghostBolts = d.bo || []; // Boss-Kugeln
   }
 
   _camTarget() {
@@ -1160,7 +1516,7 @@ export class Game {
     if (this.role === 'client') enemies = (this.enemies._ghostList || []).map((g) => ({ x: g.x, z: g.z, boss: g.def && g.def.boss }));
     else enemies = this.enemies.enemies.filter((e) => e.alive).map((e) => ({ x: e.x, z: e.z, boss: e.def.boss }));
     const pickups = this.pickups.items.filter((it) => it.alive).map((it) => ({ x: it.x, z: it.z }));
-    this.hud.drawMinimap(self, allies, enemies, pickups);
+    this.hud.drawMinimap(self, allies, enemies, pickups, this._pings);
   }
 
   // Lebensbalken über beschädigten Gegnern + Boss-Balken oben
@@ -1206,6 +1562,7 @@ export class Game {
   // -------------------------------------------------- Loop
   update() {
     const dt = Math.min(0.05, this.clock.getDelta());
+    if (this._introT > 0) { this._introT = Math.max(0, this._introT - dt); this.camCtrl.zoom = 1 + 1.2 * (this._introT / INTRO_DUR); }
     this.world.update(dt, this.world.time + dt);
     const camp = this._camTarget ? this._camTarget() : this.player.position;
     if (this.player && this.playerLight) {
@@ -1213,17 +1570,45 @@ export class Game {
       this.playerFill.position.set(camp.x + 6, camp.y + 14, camp.z + 6);
       this.playerFill.target.position.set(camp.x, camp.y, camp.z);
     }
-    if (this.fx) this.fx.update(dt);
+    // Bei offenem Level-Up-/Pause-Menü Simulation einfrieren -> Boss-Telegraphen (Einschläge/Safe-Zonen)
+    // bleiben sichtbar stehen, statt in der Menüzeit auszulaufen.
+    const frozen = this.mode === 'levelup' || this.mode === 'paused' || (this.role === 'client' && this._clientPaused);
+    if (this.fx) this.fx.update(frozen ? 0 : dt);
 
     if (this.mode === 'play' && this.role !== 'client') this._updatePlayHost(dt);
     else if (this.mode === 'play' && this.role === 'client') this._updatePlayClient(dt);
     else {
       if (this.player) {
         this.player.mixer.update(dt);
-        if (this.remotePlayer && this.remotePlayer.group.visible) this.remotePlayer.mixer.update(dt);
+        if (this.role && this.remotePlayer) this.remotePlayer.mixer.update(dt);
         this.camCtrl.update(dt, null, this._camTarget());
       }
       this.hud.setDanger(false);
+      this.hud.setWrath(0);
+    }
+
+    // Koop-Features: Buffs, Panel, Revive-Hinweis, Mate-Pfeil, Tod-Meldung, Ping/Emote-Eingabe
+    // Ping funktioniert in Solo UND Koop
+    if (this.mode === 'play') this._pingInput();
+    this._decayPings(dt);
+    this.hud.setRoot(this.mode === 'play' && this.player.rooted > 0 ? this.player.rooted / ROOT_MAX : 0);
+
+    if (this.role && this.remotePlayer) {
+      this._updateBuffs();
+      const buffs = [];
+      if (this.player.lastStand) buffs.push({ icon: '🔥', name: 'Last Stand', desc: '+30% Schaden, +25% Tempo — bis dein Mate wieder steht' });
+      if (this.player.aura) buffs.push({ icon: '✨', name: 'Nähe-Bonus', desc: '+12% Schaden & Extra-Regeneration in Mate-Nähe' });
+      this.hud.setBuffs(buffs);
+      this._updateAllyPanel();
+      this._updateRevivePrompt();
+      this._updateMateArrow();
+      this._coopDeathWatch();
+      this._coopInput();
+    } else {
+      this.hud.setAlly(null);
+      this.hud.setRevivePrompt(null);
+      this.hud.setMateArrow(null);
+      this.hud.setBuffs(null);
     }
 
     // Verletzungs-Sound + Dash-Feedback
@@ -1247,14 +1632,21 @@ export class Game {
     this.runElapsed += dt;
     const co = this.role === 'host';
     this.player.update(dt, this.input);
+    if (this.player.rooted > 0) this.player.mashFree(0.34 * this._mashCount());
     if (co) this.remotePlayer.update(dt, this.remoteInput);
+    if (co) this._tickRevive(dt);
     this.camCtrl.update(dt, this.input, this._camTarget());
     this._updateCamRight();
 
     const ps = this._players();
     this.enemies.update(dt, ps, null);
-    this.weapons.update(dt, this.player, this.enemies, this._onKillP1);
-    if (co) this.weapons2.update(dt, this.remotePlayer, this.enemies, this._onKillP2);
+    // Gefallene Spieler greifen NICHT an (Waffen aus, Visuals versteckt)
+    this.weapons.group.visible = !this.player.dead;
+    if (!this.player.dead) this.weapons.update(dt, this.player, this.enemies, this._onKillP1);
+    if (co) {
+      this.weapons2.group.visible = !this.remotePlayer.dead;
+      if (!this.remotePlayer.dead) this.weapons2.update(dt, this.remotePlayer, this.enemies, this._onKillP2);
+    }
     this.gems.update(dt, ps, (v, who) => this._collectXp(v, who));
     this.pickups.update(dt, ps);
 
@@ -1266,8 +1658,9 @@ export class Game {
     this.hud.setPhase(this._phaseText());
     this.hud.setDodge(this.player.dodgeCharges, this.player.dodgeMax, this.player.dodgeTimer / this.player.dodgeRecharge);
     this.hud.setDanger(this.enemies._aoes.some((a) => a.type === 'safe'));
+    this.hud.setWrath(this.enemies.wrathFrac());
     this._updateHeroSprites();
-    this._updateDps(dt, this.weapons._dealt);
+    this._updateDps(dt, this.weapons._dealt, this.weapons);
     if (this.role === 'host') {
       this._dpsSendAcc = (this._dpsSendAcc || 0) + dt;
       if (this._dpsSendAcc >= 0.5) { this._dpsSendAcc = 0; this.net.send({ k: 'dps', d: this.weapons2._dealt }); }
@@ -1324,8 +1717,12 @@ export class Game {
     // Gegner flüssig interpolieren + Waffen-Visuals beider Spieler
     this._updateCamRight();
     this.enemies.clientRender(dt);
-    this.weapons.renderVisualsOnly(dt, this.player);
-    this.weapons2.renderVisualsOnly(dt, this.remotePlayer);
+    this.weapons.group.visible = !this.player.dead;
+    if (!this.player.dead) this.weapons.renderVisualsOnly(dt, this.player);
+    this.weapons2.group.visible = !this.remotePlayer.dead;
+    if (!this.remotePlayer.dead) this.weapons2.renderVisualsOnly(dt, this.remotePlayer);
+    this.weapons.renderGhostProjectiles(this._ghostProj || [], dt); // fliegende Projektile beider Spieler
+    this.enemies.renderBoltGhosts(this._ghostBolts || [], dt); // Boss-Kugeln
     this.pickups.animate(dt);
 
     this.hud.setSpectate(spectating ? 'deinen Mitspieler' : null);
@@ -1334,20 +1731,25 @@ export class Game {
     this.hud.setPhase(this._phaseText());
     this.hud.setDodge(this.player.dodgeCharges, this.player.dodgeMax, this.player.dodgeTimer / this.player.dodgeRecharge);
     this.hud.setDanger(!!this._clientDanger);
+    this.hud.setWrath(this._clientWrath || 0);
     this._updateHeroSprites();
     if (this._clientDanger && !this._prevClientDanger) this._warnSafeZones();
     this._prevClientDanger = this._clientDanger;
-    this._updateDps(dt, this._clientDealt || {});
+    this._updateDps(dt, this._clientDealt || {}, this.weapons);
     this._drawMinimap();
     this._drawCombatUI();
 
     if (!this._clientPaused && !this.player.dead && this.input.pressed('Space')) this._pendingDodge = true;
+    // Festwurzeln: Tastenhämmern lokal (Vorhersage) + gesammelt an den Host senden
+    if (this.player.rooted > 0) { const m = this._mashCount(); if (m) { this.player.mashFree(0.34 * m); this._mashAcc = (this._mashAcc || 0) + m; } }
     this._inAcc += dt;
     if (this._inAcc >= 1 / INPUT_HZ) {
       this._inAcc = 0;
       const ax = this._clientPaused || this.player.dead ? { x: 0, z: 0 } : this.input.axis();
-      this.net.send({ k: 'in', x: ax.x, z: ax.z, dodge: this._pendingDodge ? 1 : 0 });
+      const rv = !this._clientPaused && !this.player.dead && this.input.isDown('KeyE') ? 1 : 0;
+      this.net.send({ k: 'in', x: ax.x, z: ax.z, dodge: this._pendingDodge ? 1 : 0, rv, mash: this._mashAcc || 0 });
       this._pendingDodge = false;
+      this._mashAcc = 0;
     }
   }
 

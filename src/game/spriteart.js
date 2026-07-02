@@ -8,16 +8,16 @@ export const SPRITE_FRAMES = 4;
 
 // Gegnertyp -> 0x72-Charakter (Dateien in public/sprites/<char>_f0..3.png)
 const TYPE2CHAR = {
-  scavenger: 'goblin',
+  scavenger: 'goblin', // Gobbo
   bloodfly: 'imp',
   wolf: 'wogol',
   molerat: 'muddy',
   skeleton: 'skelet',
-  ghoul: 'zombie',
+  ghoul: 'masked_orc', // Ork statt grünem Zombie
   gargoyle: 'chort',
-  demon: 'orc_warrior',
+  demon: 'orc_warrior', // Ork-Krieger
   troll: 'ogre',
-  boss: 'big_zombie',
+  boss: 'orc_shaman', // Ork-Schamane als Boss
   boss_bone: 'necromancer',
   boss_demon: 'big_demon',
   player: 'knight_m',
@@ -159,10 +159,67 @@ function drawDeadTree(g, S) {
 
 function drawRock(g, S) {
   const cx = S / 2, by = S - 2;
-  pr(g, cx - 11, by - 12, 22, 12, '#0f1112'); // Outline
-  pr(g, cx - 10, by - 11, 20, 11, '#4a4f55');
-  pr(g, cx - 7, by - 9, 12, 4, '#5c626a'); // Highlight
-  pr(g, cx - 9, by - 4, 18, 3, '#33373c'); // Schatten unten
+  pr(g, cx - 11, by - 13, 22, 13, '#2c3034'); // Outline (heller als zuvor)
+  pr(g, cx - 10, by - 12, 20, 12, '#6b727a'); // Basis
+  pr(g, cx - 7, by - 10, 12, 5, '#868d96'); // Highlight
+  pr(g, cx - 9, by - 4, 18, 3, '#4a4f55'); // Schatten unten
+}
+
+function drawMenhir(g, S) {
+  const cx = S / 2, by = S - 2;
+  pr(g, cx - 8, by - 6, 16, 6, '#23262b'); // Sockel
+  pr(g, cx - 7, by - 50, 14, 46, '#16181c'); // Outline
+  pr(g, cx - 6, by - 50, 12, 46, '#3e444c'); // Stein
+  pr(g, cx - 6, by - 50, 3, 46, '#565d66'); // Lichtkante
+  pr(g, cx - 5, by - 52, 10, 4, '#3e444c'); // gerundete Spitze
+  // glühende Rune
+  pr(g, cx - 2, by - 34, 4, 1, '#3aa0ff');
+  pr(g, cx - 1, by - 36, 2, 6, '#3aa0ff');
+  pr(g, cx - 3, by - 30, 6, 1, '#6ac0ff');
+}
+
+function drawOre(g, S) {
+  const cx = S / 2, by = S - 2;
+  pr(g, cx - 12, by - 13, 24, 13, '#2a2e33'); // Fels-Outline
+  pr(g, cx - 11, by - 12, 22, 12, '#555b62');
+  pr(g, cx - 8, by - 10, 10, 4, '#6e757d');
+  // glühende Magie-Erz-Adern (Gothic-Blau/Cyan)
+  pr(g, cx - 6, by - 9, 2, 5, '#28d0ff');
+  pr(g, cx + 1, by - 11, 2, 6, '#28d0ff');
+  pr(g, cx + 5, by - 7, 2, 4, '#7ae6ff');
+  pr(g, cx - 2, by - 6, 2, 3, '#7ae6ff');
+}
+
+function drawPalisade(g, S) {
+  const by = S - 2;
+  const cols = ['#2a1c10', '#33240f', '#241a12'];
+  for (let i = 0; i < 5; i++) {
+    const x = 3 + i * 9;
+    pr(g, x, by - 30, 7, 30, '#140c06'); // Outline/Pfahl
+    pr(g, x + 1, by - 29, 5, 29, cols[i % 3]);
+    pr(g, x + 1, by - 29, 1, 29, '#3a2a18'); // Lichtkante
+    // angespitzte Spitze
+    pr(g, x + 1, by - 32, 5, 2, '#140c06');
+    pr(g, x + 2, by - 34, 3, 2, '#140c06');
+  }
+  // Querbalken
+  pr(g, 2, by - 14, S - 4, 3, '#1c1209');
+}
+
+function drawTower(g, S) {
+  const cx = S / 2, by = S - 2;
+  // Beine
+  pr(g, cx - 12, by - 34, 4, 34, '#241a12'); pr(g, cx + 8, by - 34, 4, 34, '#241a12');
+  pr(g, cx - 11, by - 34, 1, 34, '#3a2a18'); pr(g, cx + 9, by - 34, 1, 34, '#3a2a18');
+  // Querstreben
+  pr(g, cx - 12, by - 22, 24, 3, '#1c1209'); pr(g, cx - 12, by - 12, 24, 3, '#1c1209');
+  // Plattform
+  pr(g, cx - 16, by - 48, 32, 6, '#14110a');
+  pr(g, cx - 15, by - 47, 30, 4, '#3a2a18');
+  // Brüstung
+  for (let i = 0; i < 6; i++) pr(g, cx - 15 + i * 5, by - 52, 3, 4, '#2a1c10');
+  // Spitzdach
+  for (let r = 0; r < 10; r++) pr(g, cx - 12 + r, by - 62 + r, (12 - r) * 2, 1, '#3a1410');
 }
 
 function drawGrave(g, S) {
@@ -188,8 +245,91 @@ function drawCross(g, S) {
   pr(g, cx - 1, by - 32, 1, 30, '#6e747c');
 }
 
-const PROP_DRAW = { pine: drawPine, deadtree: drawDeadTree, rock: drawRock, grave: drawGrave, cross: drawCross };
-const PROP_SIZE = { pine: 64, deadtree: 64, rock: 32, grave: 48, cross: 48 };
+function drawRuin(g, S) {
+  const by = S - 2;
+  // verfallene Steinmauer: Ziegelreihen mit gezackter Oberkante
+  const rows = 5, bw = 6, bh = 4;
+  for (let r = 0; r < rows; r++) {
+    const ry = by - (r + 1) * bh;
+    const off = (r % 2) * (bw / 2);
+    const cnt = 5 - (r > 2 ? r - 2 : 0); // oben weniger (zerfallen)
+    for (let c = 0; c < cnt; c++) {
+      const x = 4 + off + c * bw;
+      if (x + bw > S - 2) continue;
+      pr(g, x, ry, bw, bh, '#0f1012');
+      pr(g, x + 1, ry + 1, bw - 2, bh - 2, c % 2 ? '#565b62' : '#4a4f55');
+    }
+  }
+}
+
+function drawPillar(g, S) {
+  const cx = S / 2, by = S - 2;
+  pr(g, cx - 9, by - 4, 18, 4, '#3a3e44'); // Sockel
+  pr(g, cx - 7, by - 44, 14, 40, '#0f1012'); // Outline
+  pr(g, cx - 6, by - 44, 12, 40, '#565b62');
+  pr(g, cx - 6, by - 44, 3, 40, '#6e747c'); // Lichtkante
+  pr(g, cx - 1, by - 44, 2, 40, '#3e4248'); // Riefe
+  // gebrochene Spitze (gezackt)
+  pr(g, cx - 7, by - 46, 6, 3, '#565b62');
+  pr(g, cx + 1, by - 47, 5, 4, '#565b62');
+}
+
+function drawTorchPost(g, S) {
+  const cx = S / 2, by = S - 2;
+  pr(g, cx - 2, by - 30, 4, 30, '#2a1c10'); // Holzpfosten
+  pr(g, cx - 3, by - 30, 1, 30, '#160d06');
+  pr(g, cx + 2, by - 30, 1, 30, '#3a2a18');
+  pr(g, cx - 3, by - 32, 6, 3, '#1a1a1e'); // Eisenkorb
+}
+
+function drawStake(g, S) {
+  const cx = S / 2, by = S - 2;
+  pr(g, cx - 2, by - 26, 4, 26, '#2a2014');
+  pr(g, cx - 3, by - 26, 1, 26, '#160d06');
+  pr(g, cx + 2, by - 26, 1, 26, '#3a2a1a');
+  pr(g, cx - 2, by - 30, 4, 4, '#160d06'); // angespitzt
+  pr(g, cx - 1, by - 31, 2, 2, '#160d06');
+}
+
+function drawBlock(g, S) {
+  const cx = S / 2, by = S - 2;
+  pr(g, cx - 13, by - 18, 26, 18, '#0f1012');
+  pr(g, cx - 12, by - 17, 24, 16, '#4a4f55');
+  pr(g, cx - 12, by - 17, 24, 4, '#3a5a30'); // Moos oben
+  pr(g, cx - 10, by - 13, 4, 9, '#5c626a'); // Highlight
+  pr(g, cx + 4, by - 12, 1, 10, '#2e3236'); // Riss
+}
+
+function drawFlame(g, S) {
+  const cx = S / 2, by = S - 2;
+  // pixelige Flamme: außen orange, innen gelb, oben spitz
+  const layers = [
+    { y: by - 4, w: 12, c: '#c83a10' },
+    { y: by - 9, w: 11, c: '#e8641a' },
+    { y: by - 14, w: 9, c: '#ff9a2a' },
+    { y: by - 18, w: 6, c: '#ffd23a' },
+    { y: by - 22, w: 3, c: '#fff0a0' },
+  ];
+  for (const L of layers) pr(g, cx - L.w / 2, L.y, L.w, 5, L.c);
+  pr(g, cx - 1, by - 25, 2, 3, '#fff0a0'); // Spitze
+}
+
+function drawLogs(g, S) {
+  const cx = S / 2, by = S - 2;
+  // Steinring
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; pr(g, cx + Math.cos(a) * 12 - 2, by - 4 + Math.sin(a) * 5, 4, 4, '#3a3e44'); }
+  // gekreuzte Holzscheite
+  pr(g, cx - 10, by - 8, 20, 3, '#241a12'); pr(g, cx - 10, by - 8, 20, 1, '#3a2a18');
+  pr(g, cx - 2, by - 13, 4, 12, '#2a1c10');
+  pr(g, cx - 9, by - 6, 18, 2, '#160d08');
+}
+
+const PROP_DRAW = {
+  pine: drawPine, deadtree: drawDeadTree, rock: drawRock, grave: drawGrave, cross: drawCross,
+  ruin: drawRuin, pillar: drawPillar, torchpost: drawTorchPost, stake: drawStake, block: drawBlock, flame: drawFlame, logs: drawLogs,
+  menhir: drawMenhir, ore: drawOre, palisade: drawPalisade, tower: drawTower,
+};
+const PROP_SIZE = { pine: 64, deadtree: 64, rock: 32, grave: 48, cross: 48, ruin: 48, pillar: 64, torchpost: 48, stake: 48, block: 48, flame: 32, logs: 48, menhir: 64, ore: 40, palisade: 48, tower: 80 };
 
 // Pixel-Boden: kachelbares Graustufen-Muster (multipliziert mit Vertex-Farbe -> Pixel-Körnung)
 let _ground = null;

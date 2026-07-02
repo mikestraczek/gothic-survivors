@@ -4,7 +4,7 @@ export class Input {
     this.canvas = canvas;
     this.keys = new Set();
     this.justPressed = new Set();
-    this.mouse = { dx: 0, dy: 0, wheel: 0 };
+    this.mouse = { dx: 0, dy: 0, wheel: 0, x: window.innerWidth / 2, y: window.innerHeight / 2 };
     this.buttons = new Set(); // 0 = links, 2 = rechts
     this.justClicked = new Set();
     this.locked = false;
@@ -21,6 +21,8 @@ export class Input {
     this._onKeyUp = (e) => this.keys.delete(e.code);
 
     this._onMouseMove = (e) => {
+      this.mouse.x = e.clientX;
+      this.mouse.y = e.clientY;
       if (this.locked) {
         this.mouse.dx += e.movementX;
         this.mouse.dy += e.movementY;

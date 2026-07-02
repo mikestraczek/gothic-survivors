@@ -2,7 +2,7 @@ import { WEAPON_DEFS } from './Weapons.js';
 import { PASSIVE_INFO } from './Upgrades.js';
 
 const WICON = { whirl: '🌀', axe: '🪓', fireball: '🔥', orbit: '✦', lightning: '⚡', frost: '❄️', spear: '🦴', poison: '☠️', holy: '✝️', daggers: '🗡️', meteor: '☄️' };
-const PICON = { might: '💪', speed: '👟', hp: '❤', armor: '🛡', cd: '⏱', area: '💥', pickup: '🧲', regen: '✚', proj: '➹', amount: '✛' };
+const PICON = { might: '💪', speed: '👟', hp: '❤', armor: '🛡', cd: '⏱', area: '💥', pickup: '🧲', regen: '✚', proj: '➹', dash: '💨', amount: '✛' };
 
 // kompakte Zahl (1234 -> 1,2k)
 function fmt(n) {
@@ -19,10 +19,12 @@ export class HUD {
       <canvas id="hpbars"></canvas>
       <div id="xp-bar"><div id="xp-fill"></div><div id="xp-label"></div></div>
       <div id="top-center"><span id="timer">00:00</span><div id="phase-label"></div></div>
+      <div id="wrath-meter" class="hidden"><span class="wrath-label">🔥 ZORN — töte Gegner!</span><div class="wrath-bar"><div class="wrath-fill"></div></div></div>
       <div id="top-right"><span id="kills">☠ 0</span> &nbsp; <span id="gold">⛏ 0</span> &nbsp; <span id="enemies"></span></div>
       <div id="boss-bar" class="hidden"><div id="boss-name"></div><div id="boss-hp"><div id="boss-hp-fill"></div></div></div>
       <div id="boss-banner" class="hidden"></div>
       <div id="bottom-left">
+        <div id="buff-row" class="hidden"></div>
         <div id="weapon-row"></div>
         <div id="passive-row"></div>
         <div class="bar hp"><div class="bar-fill" id="hp-fill"></div><div class="bar-label" id="hp-label"></div></div>
@@ -33,6 +35,11 @@ export class HUD {
       <div id="dps-panel"></div>
       <div id="hud-tooltip" class="hidden"></div>
       <div id="spectate-banner" class="hidden"></div>
+      <div id="ally-panel" class="hidden"></div>
+      <div id="revive-prompt" class="hidden"></div>
+      <div id="mate-arrow" class="hidden"><span class="ma-icon">➤</span><span class="ma-dist"></span></div>
+      <div id="peer-pause" class="hidden">⏸ Mitspieler ist im Menü — pausiert</div>
+      <div id="root-prompt" class="hidden"><div class="root-txt">🌿 FESTGEWURZELT — Tasten hämmern!</div><div class="root-bar"><div class="root-fill"></div></div></div>
       <canvas id="minimap" width="170" height="170"></canvas>
       <div id="message-log"></div>
     `;
@@ -62,7 +69,7 @@ export class HUD {
       tip.style.left = Math.max(8, x) + 'px';
       tip.style.top = Math.max(8, y) + 'px';
     };
-    for (const id of ['weapon-row', 'passive-row', 'dps-panel']) {
+    for (const id of ['weapon-row', 'passive-row', 'dps-panel', 'ally-panel', 'buff-row']) {
       const c = this.$(id);
       c.addEventListener('mousemove', onMove);
       c.addEventListener('mouseleave', hide);
@@ -115,6 +122,105 @@ export class HUD {
     const el = this.$('spectate-banner');
     if (name) { el.classList.remove('hidden'); el.textContent = `Du bist gefallen — du beobachtest ${name}`; }
     else el.classList.add('hidden');
+  }
+
+  // Linkes Mitspieler-Panel: HP, Level, Waffen & Upgrades des Partners (Koop)
+  setAlly(data) {
+    const el = this.$('ally-panel');
+    if (!data) { el.classList.add('hidden'); this._allySig = null; return; }
+    el.classList.remove('hidden');
+    const weapons = data.weapons || [];
+    const pc = data.passives || {};
+    const wsig = weapons.map((w) => w.id + w.level + (w.evolved ? 'e' : '')).join(',');
+    const psig = Object.keys(pc).map((k) => k + pc[k]).join(',');
+    const sig = `${data.level}|${wsig}|${psig}|${data.dead ? 1 : 0}`;
+    if (sig !== this._allySig) {
+      this._allySig = sig;
+      const wIcons = weapons.map((w) => {
+        const def = WEAPON_DEFS[w.id] || {};
+        return `<div class="wicon sm" data-tip="<b>${def.name || w.id}</b> · ${w.evolved ? 'verschmolzen ★' : 'Stufe ' + w.level}"><span class="wi-emoji">${WICON[w.id] || '◆'}</span><span class="wi-lv">${w.evolved ? '★' : w.level}</span></div>`;
+      }).join('');
+      const pIcons = Object.keys(pc).map((k) => {
+        const pi = PASSIVE_INFO[k] || {};
+        return `<div class="picon" data-tip="<b>${pi.name || k}</b> ×${pc[k]}"><span class="wi-emoji">${PICON[k] || '◆'}</span><span class="wi-lv">${pc[k]}</span></div>`;
+      }).join('');
+      el.innerHTML = `
+        <div class="ally-head">🤝 Mitspieler · Stufe <b class="ally-lv">${data.level}</b></div>
+        <div class="bar hp ally-hpbar"><div class="bar-fill ally-hp-fill"></div><div class="bar-label ally-hp-label"></div></div>
+        <div class="ally-weapons">${wIcons || '<span class="ally-empty">—</span>'}</div>
+        <div class="ally-passives">${pIcons}</div>
+        <div class="ally-downed${data.dead ? '' : ' hidden'}"><span>⚰ GEFALLEN — Wiederbeleben</span><div class="revive-bar"><div class="revive-fill"></div></div></div>`;
+    }
+    const pct = Math.max(0, Math.min(100, (data.hp / data.maxHp) * 100));
+    const fill = el.querySelector('.ally-hp-fill');
+    if (fill) fill.style.width = pct + '%';
+    const lab = el.querySelector('.ally-hp-label');
+    if (lab) lab.textContent = `${Math.ceil(Math.max(0, data.hp))} / ${data.maxHp}`;
+    el.classList.toggle('is-dead', !!data.dead);
+    const rf = el.querySelector('.ally-downed .revive-fill');
+    if (rf) rf.style.width = Math.round((data.reviveProg || 0) * 100) + '%';
+  }
+
+  // Zentraler Wiederbelebungs-Hinweis (Retter: „Halte E"; Gefallener: „Du wirst wiederbelebt…")
+  setRevivePrompt(data) {
+    const el = this.$('revive-prompt');
+    if (!data) { el.classList.add('hidden'); this._revSig = null; return; }
+    el.classList.remove('hidden');
+    const sig = data.downed ? 'd' : 'r';
+    if (sig !== this._revSig) {
+      this._revSig = sig;
+      const txt = data.downed ? '⏳ Du wirst wiederbelebt…' : '💚 Halte <b>E</b> — Mitspieler wiederbeleben';
+      el.innerHTML = `<div class="revive-txt">${txt}</div><div class="revive-bar big"><div class="revive-fill"></div></div>`;
+    }
+    const rf = el.querySelector('.revive-fill');
+    if (rf) rf.style.width = Math.round((data.prog || 0) * 100) + '%';
+  }
+
+  // Aktive Koop-Buffs (Last Stand, Nähe-Bonus …)
+  setBuffs(list) {
+    const el = this.$('buff-row');
+    if (!list || !list.length) { if (this._buffSig !== '') { el.innerHTML = ''; el.classList.add('hidden'); this._buffSig = ''; } return; }
+    const sig = list.map((b) => b.icon).join(',');
+    if (sig === this._buffSig) return;
+    this._buffSig = sig;
+    el.classList.remove('hidden');
+    el.innerHTML = list.map((b) => `<div class="buff" data-tip="<b>${b.name}</b><br>${b.desc || ''}"><span class="buff-ic">${b.icon}</span>${b.name}</div>`).join('');
+  }
+
+  // Host-Hinweis: der Gast ist gerade in seinem Menü (Spiel pausiert)
+  setPeerPause(on) {
+    this.$('peer-pause').classList.toggle('hidden', !on);
+  }
+
+  // Festwurzeln: Prompt + schrumpfender Balken (frac 1 = voll gewurzelt, 0 = frei)
+  setRoot(frac) {
+    const el = this.$('root-prompt');
+    if (!frac || frac <= 0.01) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    el.querySelector('.root-fill').style.width = Math.round(Math.min(1, frac) * 100) + '%';
+  }
+
+  // Anti-Kiting: „Zorn"-Anzeige (frac 0..1). Gegner werden schneller, wenn zu lange kein Kill fällt.
+  setWrath(frac) {
+    const el = this.$('wrath-meter');
+    if (!frac || frac <= 0.01) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    el.querySelector('.wrath-fill').style.width = Math.round(Math.min(1, frac) * 100) + '%';
+    el.classList.toggle('high', frac > 0.6);
+  }
+
+  // Richtungspfeil zum Mitspieler (Bildschirmrand), Distanz in Metern
+  setMateArrow(data) {
+    const el = this.$('mate-arrow');
+    if (!data) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    el.classList.toggle('dead', !!data.dead);
+    el.style.left = data.x + 'px';
+    el.style.top = data.y + 'px';
+    const icon = el.querySelector('.ma-icon');
+    if (icon) icon.style.transform = `rotate(${(data.angle * 180 / Math.PI).toFixed(1)}deg)`;
+    const dist = el.querySelector('.ma-dist');
+    if (dist) dist.textContent = `${data.dist}m`;
   }
 
   bossBanner(name) {
@@ -208,8 +314,8 @@ export class HUD {
     while (log.children.length > 4) log.removeChild(log.firstChild);
   }
 
-  // self {x,z}, allies, enemies, pickups
-  drawMinimap(self, allies, enemies, pickups) {
+  // self {x,z}, allies, enemies, pickups, pings
+  drawMinimap(self, allies, enemies, pickups, pings) {
     const c = this.mm, S = 170, R = 75;
     c.clearRect(0, 0, S, S);
     c.fillStyle = 'rgba(8,10,14,0.6)';
@@ -220,6 +326,7 @@ export class HUD {
     for (const e of enemies) dot(e.x, e.z, e.boss ? '#ff3030' : '#d05a4a', e.boss ? 4 : 1.6);
     for (const p of pickups) dot(p.x, p.z, '#49e06a', 2.2);
     for (const a of allies) dot(a.x, a.z, a.dead ? '#777' : '#6aa6e6', 3.2);
+    if (pings) for (const p of pings) { const r = 4 + (1 - Math.min(1, p.t / 3.5)) * 4; dot(p.x, p.z, '#49e0ff', r); }
     c.fillStyle = '#fff'; c.beginPath(); c.arc(S / 2, S / 2, 3.5, 0, Math.PI * 2); c.fill();
   }
 }

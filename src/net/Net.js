@@ -13,11 +13,16 @@ export class Net {
     this.onPeerLeft = null;
     this.onError = null;
     this.onData = null;
+    this.onLobbyList = null; // Liste offener Lobbys (Browser)
   }
 
   static defaultUrl() {
-    const host = (typeof location !== 'undefined' && location.hostname) || 'localhost';
-    return `ws://${host}:8080`;
+    // Gleicher Origin wie die Seite -> funktioniert hinter dem Coolify-Proxy (wss bei HTTPS).
+    if (typeof location !== 'undefined' && location.host) {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      return `${proto}://${location.host}/ws`;
+    }
+    return 'ws://localhost:3000/ws';
   }
 
   connect(url) {
@@ -70,16 +75,24 @@ export class Net {
       if (this.onPeerLeft) this.onPeerLeft();
     } else if (m.t === 'error') {
       if (this.onError) this.onError(m.msg);
+    } else if (m.t === 'lobbies') {
+      if (this.onLobbyList) this.onLobbyList(m.list || []);
     } else if (m.t === 'msg') {
       if (this.onData) this.onData(m.data);
     }
   }
 
-  create() {
-    this.ws.send(JSON.stringify({ t: 'create' }));
+  create(map, diff) {
+    this.ws.send(JSON.stringify({ t: 'create', map, diff }));
   }
-  join(code) {
-    this.ws.send(JSON.stringify({ t: 'join', code }));
+  join(id) {
+    this.ws.send(JSON.stringify({ t: 'join', id }));
+  }
+  list() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: 'list' }));
+  }
+  updateLobby(map, diff) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: 'update', map, diff }));
   }
   send(data) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: 'msg', data }));

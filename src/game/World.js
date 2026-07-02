@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { bumpTexture, groundBumpTexture } from './textures.js';
-import { propMaterial, spriteQuad, groundTexture } from './spriteart.js';
 
 // ---- Terrain-Höhe (deterministisch; variantenabhängig pro Karte) ----
 let _variant = 'valley';
@@ -47,7 +46,7 @@ export const THEMES = {
     grass: 0x3c4a2a, grass2: 0x2d3a22, dirt: 0x5a4a30, rock: 0x47433c,
     barrierA: 0x6a2fa0, barrierB: 0x2f7aa0,
     trunk: 0x3a2a1a, foliage: 0x24341c, rockMat: 0x575250, grassMat: 0x4a5a30, stone: 0x6b6358,
-    terrain: 'valley', vegStyle: 'pine', layout: 'ruins', treeCount: 140, rockCount: 70, grassCount: 600, water: false,
+    terrain: 'valley', vegStyle: 'pine', layout: 'ruins', treeCount: 70, rockCount: 26, grassCount: 600, water: false,
     finalBoss: 'boss',
   },
   swamp: {
@@ -59,7 +58,7 @@ export const THEMES = {
     grass: 0x2f3a22, grass2: 0x24301a, dirt: 0x3a3422, rock: 0x3a3e30,
     barrierA: 0x2f8a5a, barrierB: 0x6a8a2f,
     trunk: 0x241c12, foliage: 0x2a3a22, rockMat: 0x444a38, grassMat: 0x3a4a28, stone: 0x4a4e40,
-    terrain: 'swamp', vegStyle: 'dead', layout: 'bog', treeCount: 120, rockCount: 40, grassCount: 360, water: true, waterColor: 0x16321f,
+    terrain: 'swamp', vegStyle: 'dead', layout: 'bog', treeCount: 70, rockCount: 18, grassCount: 360, water: true, waterColor: 0x16321f,
     finalBoss: 'boss_demon',
   },
 };
@@ -93,44 +92,94 @@ export class World {
     this._buildCamp();
     this._buildVegetation();
     this._buildGraveyard();
+    if (this.theme.layout !== 'bog') this._buildOldCamp();
   }
 
-  // Pixel-Billboard-Feld (Bäume/Felsen/Grabsteine), Füße am Boden, zufällige Spiegelung/Größe.
-  _propField(key, count, smin, smax, dmin, dmax, colliderR, rnd) {
-    const geo = spriteQuad(count);
-    const mat = propMaterial(key);
-    const im = new THREE.InstancedMesh(geo, mat, count);
-    im.frustumCulled = false;
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
-    const aFrame = geo.getAttribute('aFrame'), aFlip = geo.getAttribute('aFlip');
-    let placed = 0;
-    for (let i = 0; i < count; i++) {
-      const a = rnd() * Math.PI * 2;
-      const dist = dmin + rnd() * (dmax - dmin);
-      const x = Math.cos(a) * dist, z = Math.sin(a) * dist;
-      if (Math.hypot(x, z) > BARRIER_RADIUS - 6) continue;
-      const y = terrainHeight(x, z);
-      const sc = smin + rnd() * (smax - smin);
-      p.set(x, y, z); s.set(sc, sc, sc); m.compose(p, q, s);
-      im.setMatrixAt(placed, m);
-      aFrame.setX(placed, 0);
-      aFlip.setX(placed, rnd() < 0.5 ? -1 : 1);
-      if (colliderR) this.colliders.push({ x, z, r: colliderR });
-      placed++;
-    }
-    im.count = placed;
-    aFrame.needsUpdate = true;
-    aFlip.needsUpdate = true;
-    this.group.add(im);
-    return im;
+  // Magie-Erz-Brocken (glühendes Gothic-Erz) — 3D, wiederverwendbar.
+  _placeOre(x, z, sc) {
+    if (!this._oreGeo) this._oreGeo = new THREE.DodecahedronGeometry(1.0, 0);
+    if (!this._oreMat) this._oreMat = new THREE.MeshStandardMaterial({ color: 0x3a4650, roughness: 0.8, emissive: 0x1e90b4, emissiveIntensity: 0.9 });
+    const o = new THREE.Mesh(this._oreGeo, this._oreMat);
+    o.scale.set(sc, sc * 0.8, sc);
+    o.rotation.set(Math.random() * 3, Math.random() * 6, Math.random() * 3);
+    this._place(o, x, z, sc * 0.35);
+    if (sc > 1.0) this.colliders.push({ x, z, r: sc * 0.8 });
   }
 
-  // Gotischer Friedhof: Grabsteine + Steinkreuze als Pixel-Billboards.
+  // Gothic-Relikte (3D): Menhire (Steinmonolithen), Magie-Erz-Brocken, ein paar alte Gräber.
   _buildGraveyard() {
     let seed = 1337;
     const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-    this._propField('grave', 60, 1.6, 2.4, 16, 112, 0.5, rnd);
-    this._propField('cross', 16, 2.0, 3.0, 20, 108, 0.5, rnd);
+    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x3e444c, roughness: 1, bumpMap: bumpTexture(), bumpScale: 0.4 });
+    const graveMat = new THREE.MeshStandardMaterial({ color: 0x555b62, roughness: 1, bumpMap: bumpTexture(), bumpScale: 0.4 });
+    const menhirGeo = new THREE.CylinderGeometry(0.5, 0.8, 5.0, 5);
+    const graveGeo = new THREE.BoxGeometry(0.9, 1.2, 0.25);
+    for (let i = 0; i < 14; i++) {
+      const a = rnd() * Math.PI * 2, dist = 18 + rnd() * 94;
+      const x = Math.cos(a) * dist, z = Math.sin(a) * dist;
+      if (Math.hypot(x, z) > BARRIER_RADIUS - 6) continue;
+      const sc = 0.8 + rnd() * 0.6;
+      const mh = new THREE.Mesh(menhirGeo, stoneMat);
+      mh.scale.setScalar(sc); mh.rotation.y = rnd() * Math.PI; mh.rotation.z = (rnd() - 0.5) * 0.12;
+      this._place(mh, x, z, 2.5 * sc);
+      this.colliders.push({ x, z, r: 0.7 * sc });
+    }
+    for (let i = 0; i < 18; i++) {
+      const a = rnd() * Math.PI * 2, dist = 16 + rnd() * 98;
+      const x = Math.cos(a) * dist, z = Math.sin(a) * dist;
+      if (Math.hypot(x, z) > BARRIER_RADIUS - 6) continue;
+      this._placeOre(x, z, 0.7 + rnd() * 0.7);
+    }
+    for (let i = 0; i < 16; i++) {
+      const a = rnd() * Math.PI * 2, dist = 24 + rnd() * 86;
+      const x = Math.cos(a) * dist, z = Math.sin(a) * dist;
+      if (Math.hypot(x, z) > BARRIER_RADIUS - 6) continue;
+      const gr = new THREE.Mesh(graveGeo, graveMat);
+      gr.rotation.y = rnd() * Math.PI; gr.rotation.z = (rnd() - 0.5) * 0.15;
+      this._place(gr, x, z, 0.6);
+    }
+  }
+
+  // Das „Alte Lager" (3D): Palisaden-Bogen, Wachtürme, Erzhaufen (nur Tal/Ruinen-Layout).
+  _buildOldCamp() {
+    const wood = new THREE.MeshStandardMaterial({ color: 0x2a1c10, roughness: 1, bumpMap: bumpTexture(), bumpScale: 0.4 });
+    const woodTip = new THREE.MeshStandardMaterial({ color: 0x3a2a18, roughness: 1 });
+    const stakeGeo = new THREE.CylinderGeometry(0.22, 0.28, 3.2, 6);
+    const tipGeo = new THREE.ConeGeometry(0.26, 0.5, 6);
+    for (let i = 0; i < 26; i++) {
+      const ang = -1.35 + i * 0.105, r = 32;
+      const x = Math.cos(ang) * r, z = Math.sin(ang) * r + 8;
+      const yb = terrainHeight(x, z);
+      const stk = new THREE.Mesh(stakeGeo, wood); stk.position.set(x, yb + 1.6, z); stk.castShadow = true; this.group.add(stk);
+      const tip = new THREE.Mesh(tipGeo, woodTip); tip.position.set(x, yb + 3.4, z); this.group.add(tip);
+      this.colliders.push({ x, z, r: 0.4 });
+    }
+    this._buildWatchtower(-22, 6);
+    this._buildWatchtower(24, 10);
+    this._placeOre(8, 2, 1.3);
+    this._placeOre(-6, 12, 1.2);
+    this._placeOre(14, -2, 1.2);
+  }
+
+  // Holz-Wachturm (3D)
+  _buildWatchtower(x, z) {
+    const wood = new THREE.MeshStandardMaterial({ color: 0x2a1c10, roughness: 1 });
+    const rail = new THREE.MeshStandardMaterial({ color: 0x241a12, roughness: 1 });
+    const y = terrainHeight(x, z);
+    const g = new THREE.Group();
+    const legGeo = new THREE.BoxGeometry(0.3, 7, 0.3);
+    for (const [lx, lz] of [[-1.4, -1.4], [1.4, -1.4], [-1.4, 1.4], [1.4, 1.4]]) {
+      const leg = new THREE.Mesh(legGeo, wood); leg.position.set(lx, 3.5, lz); leg.castShadow = true; g.add(leg);
+    }
+    const plat = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.4, 3.6), wood); plat.position.y = 7; plat.castShadow = true; g.add(plat);
+    for (const [rx, rz, rw, rd] of [[0, -1.7, 3.6, 0.25], [0, 1.7, 3.6, 0.25], [-1.7, 0, 0.25, 3.6], [1.7, 0, 0.25, 3.6]]) {
+      const rr = new THREE.Mesh(new THREE.BoxGeometry(rw, 0.7, rd), rail); rr.position.set(rx, 7.55, rz); g.add(rr);
+    }
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(2.9, 2.3, 4), new THREE.MeshStandardMaterial({ color: 0x3a1410, roughness: 1 }));
+    roof.position.y = 9.2; roof.rotation.y = Math.PI / 4; roof.castShadow = true; g.add(roof);
+    g.position.set(x, y, z);
+    this.group.add(g);
+    this.colliders.push({ x, z, r: 2.0 });
   }
 
   // Karte wechseln: alte Welt entsorgen und mit neuem Theme neu aufbauen
@@ -283,7 +332,8 @@ export class World {
       roughness: 1.0,
       metalness: 0.0,
       flatShading: false,
-      map: groundTexture(), // Pixel-Körnung passend zu den Sprites
+      bumpMap: groundBumpTexture(),
+      bumpScale: 0.5,
     });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
@@ -330,7 +380,7 @@ export class World {
                      + sin(atan(vPos.z, vPos.x) * 8.0 + uTime * 1.4) * 0.5;
           band = smoothstep(0.4, 1.0, abs(band));
           vec3 col = mix(uColorA, uColorB, 0.5 + 0.5*sin(vPos.y*0.05 + uTime*0.3));
-          float a = fres * 0.45 + band * 0.18;
+          float a = fres * 0.85 + band * 0.4 + 0.06;
           // nur obere Halbkugel sichtbar machen (Kuppel)
           a *= smoothstep(-20.0, 30.0, vPos.y);
           gl_FragColor = vec4(col, a);
@@ -366,110 +416,83 @@ export class World {
     for (const [tx, tz] of torchSpots) this._buildTorch(tx, tz);
   }
 
-  // Tal: Stein-Ruinen & Monolithen
+  // Tal: Stein-Ruinen & Pfeiler (3D)
   _ruinFeatures() {
     const stone = new THREE.MeshStandardMaterial({ color: this.theme.stone, roughness: 1.0, bumpMap: bumpTexture(), bumpScale: 0.5 });
-    const ruins = [
-      [-22, 10, 0.5, 6], [18, 16, 1.2, 5], [-30, -14, 0.3, 7], [26, -10, 2.0, 6],
-      [8, -28, 0.8, 5], [-14, 30, 1.6, 5], [34, 20, 0.4, 6], [-36, 22, 1.1, 5],
-    ];
+    const ruins = [[-22, 10, 0.5, 6], [18, 16, 1.2, 5], [-30, -14, 0.3, 7], [26, -10, 2.0, 6], [8, -28, 0.8, 5], [-14, 30, 1.6, 5], [34, 20, 0.4, 6], [-36, 22, 1.1, 5]];
     for (const [rx, rz, rot, len] of ruins) {
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(len, 2.6, 1.2), stone.clone());
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(len, 2.6, 1.2), stone);
       wall.rotation.y = rot;
-      this._place(wall, rx, rz, 1.0);
+      this._place(wall, rx, rz, 1.3);
       this.colliders.push({ x: rx, z: rz, r: 1.8 });
     }
-    const stones = [
-      [-8, -6, 1.0], [10, 4, 1.4], [0, 18, 1.1], [-18, -2, 1.2], [20, 8, 0.9],
-      [-26, 14, 1.3], [16, -18, 1.1], [-6, -22, 1.0], [28, 0, 1.2], [-32, 4, 0.9],
-    ];
-    for (const [sx, sz, sc] of stones) {
-      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.9 * sc, 1.2 * sc, 3.6 * sc, 6), stone.clone());
-      this._place(pillar, sx, sz, 1.8 * sc);
-      const cap = new THREE.Mesh(new THREE.ConeGeometry(1.1 * sc, 1.0, 6), stone.clone());
-      this._place(cap, sx, sz, 3.6 * sc + 0.4);
-      this.colliders.push({ x: sx, z: sz, r: 1.1 * sc });
+    const pillars = [[-8, -6, 1.0], [10, 4, 1.4], [0, 18, 1.1], [-18, -2, 1.2], [20, 8, 0.9], [-26, 14, 1.3], [16, -18, 1.1], [-6, -22, 1.0], [28, 0, 1.2], [-32, 4, 0.9]];
+    for (const [sx, sz, sc] of pillars) {
+      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.5 * sc, 0.65 * sc, 4.2 * sc, 8), stone);
+      this._place(pillar, sx, sz, 2.1 * sc);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(1.4 * sc, 0.5, 1.4 * sc), stone);
+      this._place(cap, sx, sz, 4.2 * sc + 0.25);
+      this.colliders.push({ x: sx, z: sz, r: 0.8 * sc });
     }
   }
 
-  // Sumpf: Wassertümpel, Holzpfähle, versunkene Steinblöcke
+  // Sumpf: Wassertümpel, Holzpfähle, versunkene Steinblöcke (3D)
   _bogFeatures() {
     const wood = new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 1, bumpMap: bumpTexture(), bumpScale: 0.4 });
     const stone = new THREE.MeshStandardMaterial({ color: this.theme.stone, roughness: 1, bumpMap: bumpTexture(), bumpScale: 0.5 });
     const water = new THREE.MeshStandardMaterial({ color: this.theme.waterColor || 0x16321f, roughness: 0.2, metalness: 0.35, transparent: true, opacity: 0.82 });
-
-    // Wassertümpel (flache Scheiben knapp über dem Boden)
     const pools = [[-14, 8, 5], [16, -6, 6], [-26, -16, 7], [26, 16, 5], [2, 28, 6], [-30, 22, 4.5], [12, -26, 5.5], [-4, -6, 4]];
-    for (const [px, pz, pr] of pools) {
-      const w = new THREE.Mesh(new THREE.CircleGeometry(pr, 22), water);
+    for (const [px, pz, prr] of pools) {
+      const w = new THREE.Mesh(new THREE.CircleGeometry(prr, 22), water);
       w.rotation.x = -Math.PI / 2;
       w.position.set(px, terrainHeight(px, pz) + 0.15, pz);
-      w.receiveShadow = false;
       this.group.add(w);
     }
-
-    // Holzpfähle / tote Stümpfe (leichte Hindernisse)
     const stakes = [[-8, 14, 2.2], [10, 4, 1.8], [0, 20, 2.6], [-20, 2, 2.0], [22, 10, 2.3], [-28, 16, 1.7], [18, -16, 2.4], [-6, -20, 1.9], [30, -2, 2.1], [6, -30, 2.0]];
-    for (const [sx, sz, h] of stakes) {
-      const stk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.38, h, 6), wood.clone());
+    for (const [x, z, h] of stakes) {
+      const stk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.38, h, 6), wood);
       stk.rotation.z = (Math.random() - 0.5) * 0.25;
-      this._place(stk, sx, sz, h / 2);
-      this.colliders.push({ x: sx, z: sz, r: 0.5 });
+      this._place(stk, x, z, h / 2);
+      this.colliders.push({ x, z, r: 0.5 });
     }
-
-    // versunkene Steinblöcke
     const blocks = [[-20, 12], [22, -12], [6, -28], [-32, 24], [14, 22]];
-    for (const [bx, bz] of blocks) {
-      const b = new THREE.Mesh(new THREE.BoxGeometry(3, 2.2, 3), stone.clone());
+    for (const [x, z] of blocks) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(3, 2.2, 3), stone);
       b.rotation.y = Math.random() * Math.PI;
-      this._place(b, bx, bz, 0.5); // halb versunken
-      this.colliders.push({ x: bx, z: bz, r: 2 });
+      this._place(b, x, z, 0.5);
+      this.colliders.push({ x, z, r: 2 });
     }
   }
 
   _buildTorch(x, z) {
     const y = terrainHeight(x, z);
-    const post = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.18, 0.22, 3.2, 6),
-      new THREE.MeshStandardMaterial({ color: 0x3a2a18, roughness: 1 })
-    );
-    post.position.set(x, y + 1.6, z);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 3.0, 6), new THREE.MeshStandardMaterial({ color: 0x3a2a18, roughness: 1 }));
+    post.position.set(x, y + 1.5, z);
     post.castShadow = true;
     this.group.add(post);
-
-    const flame = new THREE.Mesh(
-      new THREE.ConeGeometry(0.4, 1.1, 8),
-      new THREE.MeshBasicMaterial({ color: 0xffae3a, fog: false })
-    );
-    flame.position.set(x, y + 3.5, z);
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.36, 1.0, 8), new THREE.MeshBasicMaterial({ color: 0xffae3a, fog: false }));
+    flame.position.set(x, y + 3.3, z);
     this.group.add(flame);
-
     const light = new THREE.PointLight(0xff9a3a, 2.4, 26, 2);
-    light.position.set(x, y + 3.6, z);
+    light.position.set(x, y + 3.4, z);
     this.group.add(light);
     this.torchLights.push({ light, flame, base: 2.4, x, z, seed: Math.random() * 10 });
   }
 
   _buildCampfire(x, z) {
     const y = terrainHeight(x, z);
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(1.6, 0.3, 6, 16),
-      new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 1 })
-    );
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.28, 6, 16), new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 1 }));
     ring.rotation.x = Math.PI / 2;
     ring.position.set(x, y + 0.2, z);
     this.group.add(ring);
-    const fire = new THREE.Mesh(
-      new THREE.ConeGeometry(1.1, 2.4, 8),
-      new THREE.MeshBasicMaterial({ color: 0xffb347, fog: false })
-    );
-    fire.position.set(x, y + 1.3, z);
+    const fire = new THREE.Mesh(new THREE.ConeGeometry(1.0, 2.2, 8), new THREE.MeshBasicMaterial({ color: 0xffb347, fog: false }));
+    fire.position.set(x, y + 1.2, z);
     this.group.add(fire);
     const light = new THREE.PointLight(0xff8a2a, 4.5, 40, 2);
-    light.position.set(x, y + 2.2, z);
+    light.position.set(x, y + 2.0, z);
     this.group.add(light);
     this.torchLights.push({ light, flame: fire, base: 4.5, x, z, seed: 5.5 });
-    this.colliders.push({ x, z, r: 1.8 });
+    this.colliders.push({ x, z, r: 1.6 });
   }
 
   // --------------------------------------------------------------- Vegetation
@@ -486,9 +509,60 @@ export class World {
     const s = new THREE.Vector3();
     const p = new THREE.Vector3();
 
-    // Bäume & Felsen als Pixel-Billboards (HD-2D, passend zu den Sprites)
-    this._propField(dead ? 'deadtree' : 'pine', this.theme.treeCount, dead ? 4.5 : 6.0, dead ? 7.5 : 9.5, 30, 127, 0.8, rnd);
-    this._propField('rock', this.theme.rockCount, 1.6, 3.4, 28, 130, 0.9, rnd);
+    // Bäume (3D): Tal = breite Nadelbäume; Sumpf = hohe kahle Bäume
+    const treeCount = this.theme.treeCount;
+    const trunkGeo = dead ? new THREE.CylinderGeometry(0.18, 0.4, 9, 6) : new THREE.CylinderGeometry(0.4, 0.6, 6, 6);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: this.theme.trunk, roughness: 1, bumpMap: bumpTexture(), bumpScale: 0.45 });
+    const folGeo = dead ? new THREE.ConeGeometry(1.5, 2.6, 6) : new THREE.ConeGeometry(3, 8, 7);
+    const folMat = new THREE.MeshStandardMaterial({ color: this.theme.foliage, roughness: 1 });
+    const trunkY = dead ? 4.5 : 3;
+    const folY = dead ? 8.4 : 9;
+    const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCount);
+    const foliage = new THREE.InstancedMesh(folGeo, folMat, treeCount);
+    trunks.castShadow = true;
+    foliage.castShadow = true;
+    let placed = 0, tries = 0;
+    while (placed < treeCount && tries < treeCount * 8) {
+      tries++;
+      const a = rnd() * Math.PI * 2;
+      const dist = 32 + rnd() * 95;
+      const x = Math.cos(a) * dist, z = Math.sin(a) * dist;
+      if (Math.hypot(x, z) > BARRIER_RADIUS - 8) continue;
+      const y = terrainHeight(x, z);
+      const sc = 0.7 + rnd() * 0.9;
+      q.identity(); s.set(sc, sc, sc);
+      p.set(x, y + trunkY * sc, z); m.compose(p, q, s); trunks.setMatrixAt(placed, m);
+      p.set(x, y + folY * sc, z); m.compose(p, q, s); foliage.setMatrixAt(placed, m);
+      this.colliders.push({ x, z, r: 0.7 * sc });
+      placed++;
+    }
+    trunks.count = placed; foliage.count = placed;
+    this.group.add(trunks, foliage);
+
+    // Felsen (3D)
+    const rockCount = this.theme.rockCount;
+    const rockGeo = new THREE.DodecahedronGeometry(1.4, 0);
+    const rockMat = new THREE.MeshStandardMaterial({ color: this.theme.rockMat, roughness: 1, flatShading: true, bumpMap: bumpTexture(), bumpScale: 0.5 });
+    const rocks = new THREE.InstancedMesh(rockGeo, rockMat, rockCount);
+    rocks.castShadow = true; rocks.receiveShadow = true;
+    let rp = 0;
+    for (let i = 0; i < rockCount; i++) {
+      const a = rnd() * Math.PI * 2;
+      const dist = 30 + rnd() * 100;
+      const x = Math.cos(a) * dist, z = Math.sin(a) * dist;
+      if (Math.hypot(x, z) > BARRIER_RADIUS - 5) continue;
+      const y = terrainHeight(x, z);
+      const sc = 0.6 + rnd() * 1.5;
+      p.set(x, y + sc * 0.4, z);
+      q.setFromEuler(new THREE.Euler(rnd() * 3, rnd() * 6, rnd() * 3));
+      s.set(sc, sc * 0.8, sc);
+      m.compose(p, q, s);
+      rocks.setMatrixAt(rp, m);
+      if (sc > 1.1) this.colliders.push({ x, z, r: sc });
+      rp++;
+    }
+    rocks.count = rp;
+    this.group.add(rocks);
 
     // Grasbüschel / Schilf (Billboards, instanziert, kein Schatten)
     const grassCount = this.theme.grassCount;

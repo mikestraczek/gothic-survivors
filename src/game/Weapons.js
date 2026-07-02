@@ -104,10 +104,15 @@ export class Weapons {
 
     this.owned = {}; // id -> { id, level, cdTimer }
     this.projectiles = [];
+    // Client: reine Anzeige-Kopien der Host-Projektile (eigene Gruppe, nicht vom Tod-Ausblenden betroffen)
+    this.projGhosts = [];
+    this.ghostGroup = new THREE.Group();
+    scene.add(this.ghostGroup);
     this.orbs = [];
     this.elapsed = 0;
     this.fx = null; // wird vom Game gesetzt (Effects.js)
     this._dealt = {}; // Schaden pro Waffe (für Endstatistik)
+    this.ownedSince = {}; // id -> elapsed beim Erwerb (für DPS = Gesamtschaden / Besitzdauer)
 
     // ---- Persistenter Klingenwirbel (dezent, gibt den Helden frei) ----
     this.whirlBlades = [];
@@ -148,7 +153,8 @@ export class Weapons {
   }
   loadSave(data) {
     this.owned = {};
-    for (const w of data.owned || []) this.owned[w.id] = { id: w.id, level: w.level, evolved: !!w.evolved, cdTimer: 0.3 };
+    this.ownedSince = {};
+    for (const w of data.owned || []) { this.owned[w.id] = { id: w.id, level: w.level, evolved: !!w.evolved, cdTimer: 0.3 }; this.ownedSince[w.id] = 0; }
     this._dealt = { ...(data.dealt || {}) };
     this._rebuildWhirl();
     this._rebuildOrbs();
@@ -160,7 +166,10 @@ export class Weapons {
     if (sig === this._ldSig) return;
     this._ldSig = sig;
     this.owned = {};
-    for (const w of ld) this.owned[w.id] = { id: w.id, level: w.level, evolved: !!w.evolved, cdTimer: 0 };
+    for (const w of ld) {
+      this.owned[w.id] = { id: w.id, level: w.level, evolved: !!w.evolved, cdTimer: 0 };
+      if (this.ownedSince[w.id] == null) this.ownedSince[w.id] = this.elapsed; // Client: Besitz-Zeitpunkt
+    }
     this._rebuildWhirl();
     this._rebuildOrbs();
   }
@@ -236,6 +245,7 @@ export class Weapons {
   reset() {
     this.owned = {};
     this._dealt = {};
+    this.ownedSince = {};
     for (const p of this.projectiles) {
       p.alive = false;
       p.mesh.visible = false;
@@ -249,6 +259,7 @@ export class Weapons {
       c.mesh.visible = false;
     }
     this.holyRing.visible = false;
+    this.hideGhosts();
     this.elapsed = 0;
   }
 
@@ -270,6 +281,7 @@ export class Weapons {
       if (this.owned[id].level < WEAPON_DEFS[id].maxLevel) this.owned[id].level++;
     } else {
       this.owned[id] = { id, level: 1, cdTimer: 0.3 };
+      if (this.ownedSince[id] == null) this.ownedSince[id] = this.elapsed; // Besitz-Zeitpunkt merken
     }
     if (id === 'orbit') this._rebuildOrbs();
     if (id === 'whirl') this._rebuildWhirl();
@@ -363,9 +375,46 @@ export class Weapons {
     return p;
   }
 
+  // ---- Multiplayer: Projektile serialisieren (Host) / als Ghosts anzeigen (Client) ----
+  // Kompaktes Format je Projektil: [x, z, kindCode]  (axe=0, fire=1, spear=2)
+  projSnapshot() {
+    const out = [];
+    for (const p of this.projectiles) {
+      if (!p.alive) continue;
+      out.push([Math.round(p.x * 10) / 10, Math.round(p.z * 10) / 10, p.kind === 'fire' ? 1 : p.kind === 'spear' ? 2 : 0]);
+    }
+    return out;
+  }
+  renderGhostProjectiles(list, dt) {
+    const KINDS = ['axe', 'fire', 'spear'];
+    let i = 0;
+    for (; i < list.length; i++) {
+      const x = list[i][0], z = list[i][1], kind = KINDS[list[i][2]] || 'axe';
+      let g = this.projGhosts[i];
+      if (!g) {
+        g = { mesh: new THREE.Mesh(this._projGeo(kind), this._projMat(kind)), kind };
+        g.mesh.castShadow = true;
+        this.ghostGroup.add(g.mesh);
+        this.projGhosts.push(g);
+      } else if (g.kind !== kind) {
+        g.mesh.geometry = this._projGeo(kind);
+        g.mesh.material = this._projMat(kind);
+        g.kind = kind;
+      }
+      g.mesh.visible = true;
+      g.mesh.position.set(x, 1.1, z);
+      g.mesh.rotation.y += dt * 18; // lokale Rotation fürs Auge (wie beim Host)
+      g.mesh.rotation.x += dt * 12;
+    }
+    for (; i < this.projGhosts.length; i++) this.projGhosts[i].mesh.visible = false;
+  }
+  hideGhosts() {
+    for (const g of this.projGhosts) g.mesh.visible = false;
+  }
+
   update(dt, player, enemies, onKill) {
     this.elapsed += dt;
-    const might = player.might;
+    const might = player.might * (player.dmgMult || 1); // dmgMult: Koop-Buffs (Last-Stand/Aura)
     const areaMult = player.area;
     const cdMult = player.cooldownMult;
     const extra = player.amount;

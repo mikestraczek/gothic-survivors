@@ -12,11 +12,16 @@ const PASSIVES = [
   { id: 'pickup', name: 'Gier', sub: '+1 Aufnahmeradius', apply: (p) => (p.pickupRadius += 1) },
   { id: 'regen', name: 'Regeneration', sub: '+0,6 Leben/s', apply: (p) => (p.hpRegen += 0.6) },
   { id: 'proj', name: 'Geschwindigkeit', sub: '+15% Projektiltempo', apply: (p) => (p.projSpeedMult += 0.15) },
+  { id: 'dash', name: 'Windschritt', sub: '−15% Ausweich-Cooldown, +Ladung (Stufe 1 & 3)', apply: (p) => {
+      p.dodgeRecharge = Math.max(1.6, p.dodgeRecharge * 0.85);
+      const taken = p.passiveCounts['dash'] || 0; // Anzahl VOR diesem Pick
+      if (taken === 0 || taken === 2) { p.dodgeMax += 1; p.dodgeCharges += 1; }
+    } },
   { id: 'amount', name: 'Vielzahl', sub: '+1 Projektil', rare: true, apply: (p) => (p.amount += 1) },
 ];
 
 const WEAPON_ICON = { whirl: '🌀', axe: '🪓', fireball: '🔥', orbit: '✦', lightning: '⚡', frost: '❄️', spear: '🦴', poison: '☠️', holy: '✝️', daggers: '🗡️', meteor: '☄️' };
-const PASSIVE_ICON = { might: '💪', speed: '👟', hp: '❤', armor: '🛡', cd: '⏱', area: '💥', pickup: '🧲', regen: '✚', proj: '➹', amount: '✛' };
+const PASSIVE_ICON = { might: '💪', speed: '👟', hp: '❤', armor: '🛡', cd: '⏱', area: '💥', pickup: '🧲', regen: '✚', proj: '➹', dash: '💨', amount: '✛' };
 
 // für HUD-Tooltips
 export const PASSIVE_INFO = Object.fromEntries(PASSIVES.map((p) => [p.id, { name: p.name, sub: p.sub, icon: PASSIVE_ICON[p.id] || '◆' }]));

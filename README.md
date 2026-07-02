@@ -138,7 +138,7 @@ Schatten werden über **Achievements** freigeschaltet.
 
 ---
 
-## Waffen (automatisch, je 5 Stufen, max. 4 Slots)
+## Waffen (automatisch, je 10 Stufen, max. 4 Slots)
 
 | Waffe | Wirkung |
 | ----- | ------- |
@@ -175,8 +175,9 @@ die Helden, Waffen und die Sumpf-Karte freischalten (🎖 Erfolge im Menü).
 
 ## Optionen & Komfort
 
-⚙ **Optionen** (Menü & Pause): Musik-/Effekt-Lautstärke, Screen Shake,
-Schadenszahlen, Schatten, Bloom, Retro-Pixel-Filter — persistent gespeichert.
+⚙ **Optionen** (Menü & Pause): Musik-/Effekt-Lautstärke, **Renderauflösung**
+(50–100 %, für schwächere Geräte), Screen Shake, Schadenszahlen, Schatten,
+Bloom, Retro-Pixel-Filter — persistent gespeichert.
 Prozedurale **Musik** (Karten-Themes + Boss-Theme) und SFX laufen komplett
 über die Web Audio API (keine Audiodateien). **Touch-Support**: virtueller
 Joystick + Ausweich-Button, das Spiel läuft auch auf Tablets/Smartphones.
@@ -188,8 +189,11 @@ Joystick + Ausweich-Button, das Spiel läuft auch auf Tablets/Smartphones.
 Three.js (WebGL) · Vite · reines JavaScript (ES-Module). Für **hunderte Gegner
 gleichzeitig** werden `InstancedMesh`-Horden mit einem Trennungs-Grid verwendet;
 der Held ist ein echtes animiertes glTF-Modell (`AnimationMixer`).
-Look: PBR, Echtzeit-Schatten, **Bloom** + **ACES-Tone-Mapping**, mitlaufender
-Lichtkreis um den Helden.
+Look: PBR, Echtzeit-Schatten, **MSAA** + **Bloom** + **ACES-Tone-Mapping** +
+**Cinematic Color-Grading** (Split-Toning je Karte, Vignette), Bodennebel,
+Wetter (Regen/Glühwürmchen), glühende Pilz-Cluster, mitlaufender Lichtkreis.
+Baumkronen nahe dem Helden **ducken sich weich weg** — die Top-Down-Sicht
+bleibt immer frei.
 
 ```
 public/models/Soldier.glb   # Helden-Modell (meshopt-komprimiert, ~0,55 MB)
@@ -198,7 +202,13 @@ src/
   main.js
   style.css
   game/
-    Game.js            # Orchestrierung: Loop, Run-/Menü-/Shop-Status, Netcode
+    Game.js            # schlanker Orchestrator: Konstruktion, Preload, Facade-Delegates
+    constants.js       # gemeinsame Spiel-Konstanten (Phasen, Koop, Schwierigkeiten)
+    Visuals.js         # Render-Pipeline (Composer/Bloom/Vignette) + Helden-Sprites
+    UiScreens.js       # Menüs, Optionen, Pause, Bestenliste, Karten-/Heldenwahl
+    Coop.js            # Netz/Lobby, Snapshots, Revive/Buffs/Pings (Online-Koop)
+    RunControl.js      # Run-Lebenszyklus, Phasen/Bosse, Level-Up-Flow, Run-Ende
+    MainLoop.js        # Frame-Loop (Host-/Client-Zweig), Minimap/Kampf-UI
     World.js           # Terrain, Barriere, Kulisse, Vegetation, Licht, Wetter
     Assets.js          # glTF-Loader (meshopt) + Ladefortschritt
     Player.js          # Held: Stats, Bewegung, Dodge, Root, Segen

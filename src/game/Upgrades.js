@@ -43,7 +43,7 @@ export class Upgrades {
       if (weapons.isMax(w.id)) continue;
       if (banned.has('up:' + w.id)) continue;
       const def = WEAPON_DEFS[w.id];
-      const toMax = w.level + 1 >= (def.maxLevel || 5);
+      const toMax = w.level + 1 >= (def.maxLevel || 10);
       out.push({
         weight: 5, bid: 'up:' + w.id, rarity: toMax ? 'rare' : 'uncommon',
         icon: WEAPON_ICON[w.id], title: `${def.name} → Stufe ${w.level + 1}`, sub: def.desc,

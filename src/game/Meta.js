@@ -38,6 +38,8 @@ export class Meta {
     this.el = el;
     this.toast = toast;
     this.data = this._load();
+    // Dev-Test: ?unlock in der URL schaltet Helden/Waffen/Karten frei (z. B. localhost:5173/?unlock)
+    this.devUnlock = typeof location !== 'undefined' && /[?&]unlock/.test(location.search);
   }
 
   _load() {
@@ -99,10 +101,12 @@ export class Meta {
     return !!this.data.achievements[id];
   }
   heroUnlocked(key) {
+    if (this.devUnlock) return true;
     const req = HERO_REQ[key];
     return !req || this.hasAchievement(req);
   }
   mapUnlocked(key) {
+    if (this.devUnlock) return true;
     const req = MAP_REQ[key];
     return !req || this.hasAchievement(req);
   }
@@ -116,6 +120,7 @@ export class Meta {
   }
   // Waffen, die noch NICHT freigeschaltet sind (für den Level-Up-Pool)
   lockedWeaponSet() {
+    if (this.devUnlock) return new Set();
     const out = new Set();
     for (const [wid, req] of Object.entries(WEAPON_REQ)) {
       if (!this.hasAchievement(req)) out.add(wid);

@@ -23,10 +23,11 @@ export class Effects {
     this.heightAt = null; // vom Game gesetzt: (x,z) => Geländehöhe
     this.zones = [];
 
-    // ---- Schadenszahlen (gepoolte Canvas-Sprites, steigen auf und verblassen) ----
+    // ---- Schadenszahlen (gepoolte Sprites, steigen auf und verblassen) ----
     this.showDmg = true; // per Settings abschaltbar
     this._dmgPool = [];
     this._dmgBudget = 14; // Neuspawns pro Frame begrenzen (GC/Overdraw)
+    this._dmgTexCache = new Map(); // "text|farbe|big" -> CanvasTexture (Werte wiederholen sich ständig)
 
     // ---- Funken (InstancedMesh) ----
     this.sparks = [];
@@ -104,20 +105,43 @@ export class Effects {
     let d = this._dmgPool.find((s) => !s.alive);
     if (!d) {
       if (this._dmgPool.length >= 48) return null;
-      const c = document.createElement('canvas');
-      c.width = 160;
-      c.height = 64;
-      const tex = new THREE.CanvasTexture(c);
-      tex.minFilter = THREE.LinearFilter;
-      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false });
+      const mat = new THREE.SpriteMaterial({ transparent: true, depthWrite: false, depthTest: false });
       const spr = new THREE.Sprite(mat);
       spr.renderOrder = 6;
       spr.visible = false;
       this.group.add(spr);
-      d = { spr, c, tex, alive: false };
+      d = { spr, alive: false };
       this._dmgPool.push(d);
     }
     return d;
+  }
+
+  // Zahl-Texturen cachen: gleiche Schadenswerte kommen ständig vor —
+  // spart Canvas-Redraws + GPU-Uploads pro Treffer (wichtig für schwache Geräte/Gast).
+  _dmgTexture(txt, color, big) {
+    const key = txt + '|' + color + (big ? '|b' : '');
+    let tex = this._dmgTexCache.get(key);
+    if (tex) return tex;
+    if (this._dmgTexCache.size >= 160) {
+      for (const t of this._dmgTexCache.values()) t.dispose();
+      this._dmgTexCache.clear();
+    }
+    const c = document.createElement('canvas');
+    c.width = 160;
+    c.height = 64;
+    const g = c.getContext('2d');
+    g.font = `bold ${big ? 46 : 34}px Georgia, serif`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.lineWidth = 7;
+    g.strokeStyle = 'rgba(12,7,3,0.9)';
+    g.strokeText(txt, 80, 34);
+    g.fillStyle = color;
+    g.fillText(txt, 80, 34);
+    tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;
+    this._dmgTexCache.set(key, tex);
+    return tex;
   }
 
   // Schadenszahl über dem Getroffenen. big = dicker Treffer (größer, langsamer)
@@ -127,18 +151,11 @@ export class Effects {
     if (this.record) this.events.push({ k: 'dmg', x, y, z, a: Math.round(amount), b: color, c: big ? 1 : 0 });
     const d = this._getDmgSprite();
     if (!d) return;
-    const g = d.c.getContext('2d');
-    g.clearRect(0, 0, d.c.width, d.c.height);
     const txt = String(Math.max(1, Math.round(amount)));
-    g.font = `bold ${big ? 46 : 34}px Georgia, serif`;
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.lineWidth = 7;
-    g.strokeStyle = 'rgba(12,7,3,0.9)';
-    g.strokeText(txt, 80, 34);
-    g.fillStyle = color;
-    g.fillText(txt, 80, 34);
-    d.tex.needsUpdate = true;
+    const mat = d.spr.material;
+    const hadMap = !!mat.map;
+    mat.map = this._dmgTexture(txt, color, big);
+    if (!hadMap) mat.needsUpdate = true; // erster map-Set braucht Programm-Update
     d.alive = true;
     d.t = 0;
     d.dur = big ? 0.9 : 0.65;

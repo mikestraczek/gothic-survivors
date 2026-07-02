@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { HEROES } from './Heroes.js';
 
 // HD-2D Pixel-Sprites aus echten CC0-Assets (0x72 "Dungeon Tileset II", via tomb_mates).
 // Pro Charakter 4 Lauf-Frames -> quadratische Strip-Textur (Füße unten verankert).
@@ -26,6 +27,8 @@ const TYPE2CHAR = {
   zombling: 'zombie',
   player: 'knight_m',
 };
+// jeder Held bekommt seinen eigenen Sprite (hero_<key> -> Charakter aus Heroes.js)
+for (const [k, h] of Object.entries(HEROES)) TYPE2CHAR['hero_' + k] = h.sprite || 'knight_m';
 
 const _tex = {}; // char -> THREE.CanvasTexture
 let _blank = null;

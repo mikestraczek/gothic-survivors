@@ -5,13 +5,13 @@ export const WEAPON_DEFS = {
   whirl: {
     name: 'Klingenwirbel',
     desc: 'Schaden an allen Feinden in der Nähe',
-    maxLevel: 5,
+    maxLevel: 10,
     stats: (lv) => ({ damage: 7 + lv * 5, radius: 2.8 + lv * 0.5, cd: Math.max(0.5, 1.4 - lv * 0.08) }),
   },
   axe: {
     name: 'Wurfaxt',
     desc: 'Wirbelnde Äxte durchbohren Feinde',
-    maxLevel: 5,
+    maxLevel: 10,
     stats: (lv) => ({
       damage: 10 + lv * 6,
       count: 1 + Math.floor(lv / 2),
@@ -23,7 +23,7 @@ export const WEAPON_DEFS = {
   fireball: {
     name: 'Feuerball',
     desc: 'Explodiert mit Flächenschaden',
-    maxLevel: 5,
+    maxLevel: 10,
     stats: (lv) => ({
       damage: 16 + lv * 9,
       count: 1 + Math.floor((lv - 1) / 3),
@@ -35,49 +35,49 @@ export const WEAPON_DEFS = {
   orbit: {
     name: 'Wächtergeister',
     desc: 'Kreisende Geister verletzen bei Berührung',
-    maxLevel: 5,
+    maxLevel: 10,
     stats: (lv) => ({ damage: 6 + lv * 4, count: 2 + Math.floor(lv / 2), radius: 2.8 + lv * 0.3, speed: 2 + lv * 0.15 }),
   },
   lightning: {
     name: 'Blitzschlag',
     desc: 'Schlägt zufällige Feinde mit Wucht',
-    maxLevel: 5,
+    maxLevel: 10,
     stats: (lv) => ({ damage: 22 + lv * 12, count: 1 + Math.floor(lv / 2), cd: Math.max(1.0, 2.4 - lv * 0.1), range: 17, area: 2.2 }),
   },
   frost: {
     name: 'Frostbann',
     desc: 'Frostwelle: Schaden + verlangsamt Feinde',
-    maxLevel: 5,
+    maxLevel: 10,
     stats: (lv) => ({ damage: 8 + lv * 5, radius: 3.2 + lv * 0.5, cd: Math.max(0.7, 1.8 - lv * 0.1), slow: 1.4 }),
   },
   spear: {
     name: 'Knochenspeer',
     desc: 'Schneller Speer durchbohrt viele Feinde',
-    maxLevel: 5,
+    maxLevel: 10,
     stats: (lv) => ({ damage: 14 + lv * 8, count: 1 + Math.floor(lv / 3), pierce: 3 + lv, cd: Math.max(0.5, 1.5 - lv * 0.09), speed: 30 }),
   },
   poison: {
     name: 'Giftwolke',
     desc: 'Hinterlässt ätzende Wolken (Schaden über Zeit)',
-    maxLevel: 5,
+    maxLevel: 10,
     stats: (lv) => ({ damage: 5 + lv * 3, radius: 2.0 + lv * 0.25, life: 3 + lv * 0.3, cd: Math.max(0.9, 2.2 - lv * 0.1) }),
   },
   holy: {
     name: 'Weihrauch',
     desc: 'Heilige Aura schadet nahen Feinden ständig',
-    maxLevel: 5,
+    maxLevel: 10,
     stats: (lv) => ({ damage: 6 + lv * 4, radius: 2.0 + lv * 0.35, cd: 0.5 }),
   },
   daggers: {
     name: 'Schattendolche',
     desc: 'Fächer schneller, durchbohrender Dolche',
-    maxLevel: 5,
+    maxLevel: 10,
     stats: (lv) => ({ damage: 7 + lv * 4, count: 3 + lv, pierce: 2 + Math.floor(lv / 2), cd: Math.max(0.4, 1.1 - lv * 0.07), speed: 26 }),
   },
   meteor: {
     name: 'Meteor',
     desc: 'Einschläge mit Flächenschaden auf Feinde',
-    maxLevel: 5,
+    maxLevel: 10,
     stats: (lv) => ({ damage: 20 + lv * 12, count: 1 + Math.floor(lv / 2), area: 2.6 + lv * 0.35, cd: Math.max(0.9, 2.2 - lv * 0.1), range: 22 }),
   },
 };

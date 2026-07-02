@@ -926,19 +926,26 @@ export class EnemyManager {
       e.alive = false;
       this.totalKills++;
       this._sinceKill = 0; // Kill beruhigt den Zorn (Anti-Kiting)
+      // WICHTIG: onKill zuerst und Todes-Werte VOR spawn() sichern — spawn() darf den
+      // soeben freigewordenen Pool-Slot von e sofort wiederverwenden und überschreibt
+      // dann e.def/e.x/e.z (war die Crash-Ursache: e.def.split.n auf dem Zombling-Def).
+      const split = e.def.split;
+      const boom = e.elite === 'boom';
+      const dx = e.x, dy = e.y, dz = e.z;
+      const dDmg = e.dmg, dType = e.type;
+      if (onKill) onKill(e);
       // Moderleib zerfällt in Modergänger
-      if (e.def.split) {
-        for (let i = 0; i < e.def.split.n; i++) {
-          this.spawn(e.def.split.type, e.x + (this._rnd() - 0.5) * 1.6, e.z + (this._rnd() - 0.5) * 1.6);
+      if (split) {
+        for (let i = 0; i < split.n; i++) {
+          this.spawn(split.type, dx + (this._rnd() - 0.5) * 1.6, dz + (this._rnd() - 0.5) * 1.6);
         }
-        if (this.fx) this.fx.sparksBurst(e.x, e.y + 0.8, e.z, 0x86c86a, 10, 4);
+        if (this.fx) this.fx.sparksBurst(dx, dy + 0.8, dz, 0x86c86a, 10, 4);
       }
       // Explosiv-Elite: verzögerte Todes-Explosion (telegrafiert — wegrennen!)
-      if (e.elite === 'boom') {
-        this._aoes.push({ type: 'circle', x: e.x, z: e.z, r: 3.4, dmg: Math.round(e.dmg * 1.6), delay: 0.75, src: e.type });
-        if (this.fx) this.fx.telegraph(e.x, e.z, 3.4, 0.75, e.y);
+      if (boom) {
+        this._aoes.push({ type: 'circle', x: dx, z: dz, r: 3.4, dmg: Math.round(dDmg * 1.6), delay: 0.75, src: dType });
+        if (this.fx) this.fx.telegraph(dx, dz, 3.4, 0.75, dy);
       }
-      if (onKill) onKill(e);
     }
   }
 }

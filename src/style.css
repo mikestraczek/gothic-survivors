@@ -1917,3 +1917,12 @@ button.secondary {
   letter-spacing: 3px;
   opacity: 0.8;
 }
+
+/* Helden-Sprite-Vorschau in der Auswahl */
+.hero-face {
+  width: 26px;
+  height: 26px;
+  image-rendering: pixelated;
+  vertical-align: -7px;
+  margin-right: 4px;
+}

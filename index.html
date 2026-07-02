@@ -182,7 +182,7 @@
       <div id="combos-screen" class="overlay hidden">
         <div class="start-inner combos-inner">
           <h1 class="game-title" style="font-size: 44px">KOMBINATIONEN</h1>
-          <p class="lvl-sub">Bring zwei Waffen auf Stufe 5, dann verschmelzen sie zu einer — ein Slot wird frei.</p>
+          <p class="lvl-sub">Bring zwei Waffen auf Maximalstufe (10), dann verschmelzen sie zu einer — ein Slot wird frei. Waffe + Passiv-Rezepte behalten den Slot.</p>
           <div id="combos-list"></div>
           <div class="menu-buttons">
             <button id="combos-back" class="secondary">Zurück</button>
@@ -216,6 +216,11 @@
               <label for="set-sfx">🔊 Effekte</label>
               <input type="range" id="set-sfx" min="0" max="100" step="5" />
               <span class="setting-val" id="set-sfx-val">80%</span>
+            </div>
+            <div class="setting-row">
+              <label for="set-scale">🖥 Renderauflösung</label>
+              <input type="range" id="set-scale" min="50" max="100" step="5" />
+              <span class="setting-val" id="set-scale-val">100%</span>
             </div>
             <div class="setting-row toggle">
               <label for="set-shake">📳 Screen Shake</label>

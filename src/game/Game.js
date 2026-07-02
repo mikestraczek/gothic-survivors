@@ -42,7 +42,6 @@ const INPUT_HZ = 22;
 const REVIVE_RANGE = 2.8; // Nähe zum gefallenen Mate für Wiederbelebung
 const REVIVE_TIME = 3.0; // Sekunden Halten für eine Wiederbelebung
 const AURA_RANGE = 7; // Nähe-Aura wirkt, wenn beide Spieler enger als das beieinander sind
-const ROOT_MAX = 1.5; // Boss-Festwurzeln: Anzeige-Normierung (muss zur Dauer in EnemyManager passen)
 const INTRO_DUR = 2.6; // Dauer des Start-Intros (Kamera-Flourish + Titel)
 const EMOTES = ['🆘 Hilfe!', '👍 Danke!', '💎 Sammeln!', '⚠ Achtung!']; // Quick-Emotes (Tasten 1–4)
 const PHASES = 3; // Phasen pro Level, dann finaler Boss
@@ -260,7 +259,7 @@ export class Game {
     this.camCtrl.snap(this.player.position);
     this._wireUI();
     document.getElementById('loading').classList.add('hidden');
-    this._showMenu();
+    this._bootFlow();
     this.clock.start();
     this.loop();
   }
@@ -406,7 +405,7 @@ export class Game {
     if (d.k === 'ping') { this._addPing(d.x, d.z); return; } // Team-Ping (beide Rollen)
     if (d.k === 'emote') { this._showEmote('mate', d.i); return; }
     if (d.k === 'start' && this.net.role === 'client') this._beginClientRun(d);
-    else if (d.k === 'in' && this.role === 'host') { this.remoteInput._x = d.x; this.remoteInput._z = d.z; this.remoteInput.reviving = !!d.rv; if (d.dodge) this.remotePlayer.dodge(); if (d.mash) this.remotePlayer.mashFree(0.34 * d.mash); }
+    else if (d.k === 'in' && this.role === 'host') { this.remoteInput._x = d.x; this.remoteInput._z = d.z; this.remoteInput.reviving = !!d.rv; if (d.dodge) this.remotePlayer.dodge(); if (d.mash) this.remotePlayer.mashFree(0.2 *d.mash); }
     else if (d.k === 'snap' && this.role === 'client') this._applySnapshot(d);
     else if (d.k === 'won' && this.role === 'client') this._clientWin(d);
     else if (d.k === 'endless' && this.role === 'client') {
@@ -459,7 +458,21 @@ export class Game {
     });
     document.getElementById('online-button').addEventListener('click', () => this._openLobby());
     const nameEl = document.getElementById('player-name');
-    if (nameEl) { this._loadName(); nameEl.addEventListener('input', () => { try { localStorage.setItem('gothicName', nameEl.value.trim()); } catch (e) {} }); }
+    if (nameEl) {
+      this._loadName();
+      const updName = () => {
+        const v = nameEl.value.trim();
+        try { localStorage.setItem('gothicName', v); } catch (e) {}
+        const btn = document.getElementById('name-confirm');
+        if (btn) btn.disabled = v.length === 0;
+      };
+      nameEl.addEventListener('input', updName);
+      nameEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') this._confirmName(); });
+    }
+    const nameConfirm = document.getElementById('name-confirm');
+    if (nameConfirm) nameConfirm.addEventListener('click', () => this._confirmName());
+    const changeName = document.getElementById('change-name');
+    if (changeName) changeName.addEventListener('click', () => this._showNameScreen());
     document.getElementById('leaderboard-button').addEventListener('click', () => this._openLeaderboard());
     document.getElementById('lb-back').addEventListener('click', () => { document.getElementById('leaderboard-screen').classList.add('hidden'); this._showMenu(); });
     document.getElementById('lb-tab-time').addEventListener('click', () => { document.getElementById('lb-tab-time').classList.add('active'); document.getElementById('lb-tab-kills').classList.remove('active'); this._renderLeaderboard('time'); });
@@ -505,6 +518,8 @@ export class Game {
     this._introT = 0;
     const ms = document.getElementById('menu-stats');
     if (ms) ms.textContent = `Gesammeltes Erz: ${this.meta.gold}`;
+    const mn = document.getElementById('menu-name');
+    if (mn) mn.textContent = this._playerName();
     document.getElementById('resume-button').classList.toggle('hidden', !this._hasSave());
     document.getElementById('start-screen').classList.remove('hidden');
   }
@@ -524,6 +539,30 @@ export class Game {
   }
   _loadName() {
     try { const n = localStorage.getItem('gothicName'); if (n) document.getElementById('player-name').value = n; } catch (e) {}
+  }
+  // Start: ohne gespeicherten Namen zuerst den Pflicht-Namens-Screen zeigen
+  _bootFlow() {
+    let name = '';
+    try { name = (localStorage.getItem('gothicName') || '').trim(); } catch (e) {}
+    if (name) this._showMenu();
+    else this._showNameScreen();
+  }
+  _showNameScreen() {
+    this.mode = 'menu';
+    document.getElementById('start-screen').classList.add('hidden');
+    const el = document.getElementById('player-name');
+    const btn = document.getElementById('name-confirm');
+    if (btn) btn.disabled = ((el && el.value.trim().length) || 0) === 0;
+    document.getElementById('name-screen').classList.remove('hidden');
+    try { el.focus(); } catch (e) {}
+  }
+  _confirmName() {
+    const el = document.getElementById('player-name');
+    const v = ((el && el.value) || '').trim();
+    if (!v) { if (el) el.focus(); return; } // Pflicht: ohne Namen kein Weiter
+    try { localStorage.setItem('gothicName', v); } catch (e) {}
+    document.getElementById('name-screen').classList.add('hidden');
+    this._showMenu();
   }
   _esc(s) {
     return String(s).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
@@ -1591,7 +1630,7 @@ export class Game {
     // Ping funktioniert in Solo UND Koop
     if (this.mode === 'play') this._pingInput();
     this._decayPings(dt);
-    this.hud.setRoot(this.mode === 'play' && this.player.rooted > 0 ? this.player.rooted / ROOT_MAX : 0);
+    this.hud.setRoot(this.mode === 'play' && this.player.rooted > 0 ? this.player.rooted : 0);
 
     if (this.role && this.remotePlayer) {
       this._updateBuffs();
@@ -1632,7 +1671,7 @@ export class Game {
     this.runElapsed += dt;
     const co = this.role === 'host';
     this.player.update(dt, this.input);
-    if (this.player.rooted > 0) this.player.mashFree(0.34 * this._mashCount());
+    if (this.player.rooted > 0) this.player.mashFree(0.2 *this._mashCount());
     if (co) this.remotePlayer.update(dt, this.remoteInput);
     if (co) this._tickRevive(dt);
     this.camCtrl.update(dt, this.input, this._camTarget());
@@ -1741,7 +1780,7 @@ export class Game {
 
     if (!this._clientPaused && !this.player.dead && this.input.pressed('Space')) this._pendingDodge = true;
     // Festwurzeln: Tastenhämmern lokal (Vorhersage) + gesammelt an den Host senden
-    if (this.player.rooted > 0) { const m = this._mashCount(); if (m) { this.player.mashFree(0.34 * m); this._mashAcc = (this._mashAcc || 0) + m; } }
+    if (this.player.rooted > 0) { const m = this._mashCount(); if (m) { this.player.mashFree(0.2 *m); this._mashAcc = (this._mashAcc || 0) + m; } }
     this._inAcc += dt;
     if (this._inAcc >= 1 / INPUT_HZ) {
       this._inAcc = 0;

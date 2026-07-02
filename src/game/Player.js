@@ -182,9 +182,12 @@ export class Player {
     this.hp = Math.min(this.maxHp, this.hp + n);
   }
 
-  // Festwurzeln durch Tastenhämmern verkürzen
+  // Festwurzeln durch Tastenhämmern verkürzen (kleine Restwerte auf 0 snappen -> kein „Steckenbleiben")
   mashFree(sec) {
-    if (this.rooted > 0 && sec > 0) this.rooted = Math.max(0, this.rooted - sec);
+    if (this.rooted > 0 && sec > 0) {
+      this.rooted = Math.max(0, this.rooted - sec);
+      if (this.rooted < 0.02) this.rooted = 0;
+    }
   }
 
   addGold(n) {
@@ -227,9 +230,8 @@ export class Player {
       }
     }
 
-    // Festgewurzelt: keine Bewegung/kein Dash — kurz, per Tastenhämmern lösbar
+    // Festgewurzelt: keine Bewegung/kein Dash — löst sich NUR durch Tastenhämmern (kein Zeit-Abbau)
     if (this.rooted > 0) {
-      this.rooted = Math.max(0, this.rooted - dt);
       this.moving = false;
       this.position.y = this.world.getHeight(this.position.x, this.position.z);
       this.group.position.set(this.position.x, this.position.y, this.position.z);

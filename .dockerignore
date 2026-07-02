@@ -6,3 +6,5 @@ dist
 .DS_Store
 .vite
 scripts
+.env
+.env.example

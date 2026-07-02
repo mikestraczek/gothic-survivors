@@ -225,9 +225,12 @@ const ETYPES = {
   demon: { proc: geoDemon, hp: 110, speed: 3.1, dmg: 18, radius: 0.7, scale: 1.5, xp: 13, gold: 0.28, glow: 0xe85018 },
   troll: { proc: geoTroll, hp: 190, speed: 1.8, dmg: 24, radius: 1.1, scale: 1.9, xp: 18, gold: 0.45, glow: 0x58a838 },
   // Bosse
-  boss: { proc: geoShadowbeast, hp: 1300, speed: 2.0, dmg: 26, radius: 2.0, scale: 2.6, xp: 60, gold: 5, boss: true, glow: 0xb030e0, abilities: ['slam', 'frontal', 'bolts', 'root'] },
-  boss_bone: { proc: geoSkeleton, hp: 1600, speed: 2.2, dmg: 28, radius: 1.8, scale: 1.8, xp: 75, gold: 6, boss: true, glow: 0xdce6f0, abilities: ['nova', 'safe', 'bolts', 'root'] },
-  boss_demon: { proc: geoDemon, hp: 2000, speed: 2.4, dmg: 32, radius: 1.9, scale: 2.0, xp: 90, gold: 7, boss: true, glow: 0xff3a14, abilities: ['slam', 'nova', 'frontal', 'bolts', 'root', 'safe'] },
+  // Jeder Boss hat ein EIGENES Fähigkeiten-Set (fühlt sich anders an):
+  //  Schattenläufer = Nahkämpfer (Slam/Kegel/Festwurzeln), Knochenkönig = Distanz/Bullet-Hell (Kugeln/Nova/Safe-Zonen),
+  //  Erzdämon = aggressiver Allrounder (Slam/Nova/Kugeln/Festwurzeln).
+  boss: { proc: geoShadowbeast, hp: 1300, speed: 2.0, dmg: 26, radius: 2.0, scale: 2.6, xp: 60, gold: 5, boss: true, glow: 0xb030e0, abilities: ['slam', 'frontal', 'root'] },
+  boss_bone: { proc: geoSkeleton, hp: 1600, speed: 2.2, dmg: 28, radius: 1.8, scale: 1.8, xp: 75, gold: 6, boss: true, glow: 0xdce6f0, abilities: ['bolts', 'nova', 'safe'] },
+  boss_demon: { proc: geoDemon, hp: 2000, speed: 2.4, dmg: 32, radius: 1.9, scale: 2.0, xp: 90, gold: 7, boss: true, glow: 0xff3a14, abilities: ['slam', 'nova', 'bolts', 'root'] },
 };
 
 // Fresnel-Randglühen in der Typ-Farbe per Shader-Injektion.
@@ -722,8 +725,8 @@ export class EnemyManager {
       }
       if (this.fx) this.fx.sparksBurst(e.x, 1.4, e.z, 0xff7ad0, 12, 5);
     } else if (kind === 'root') {
-      // Festwurzeln: kurz (1,5s) — per Tastenhämmern lösbar. Bewusst kurz, sonst zu gefährlich.
-      target.rooted = 1.5;
+      // Festwurzeln: löst sich NUR durch Tastenhämmern (~5 Drücke), kein Zeit-Abbau.
+      target.rooted = 1.0;
       if (this.fx) {
         this.fx.ring(target.position.x, target.position.z, 2.6, 0x9a6a2a);
         this.fx.sparksBurst(target.position.x, 0.6, target.position.z, 0x7a5020, 12, 3);
@@ -746,7 +749,7 @@ export class EnemyManager {
       this._boltGroup.add(mesh);
     }
     b.alive = true; b.x = x; b.z = z; b.vx = vx; b.vz = vz; b.dmg = dmg; b.src = src; b.life = 3.2; b.r = 0.5;
-    b.mesh.visible = true; b.mesh.position.set(x, 1.2, z);
+    b.mesh.visible = true; b.mesh.position.set(x, this.world.getHeight(x, z) + 1.2, z);
   }
   _updateBolts(dt, players) {
     if (!this._bolts.length) return;
@@ -762,10 +765,10 @@ export class EnemyManager {
       }
       if (hit || b.life <= 0 || Math.hypot(b.x, b.z) > maxR) {
         b.alive = false; b.mesh.visible = false;
-        if (hit && this.fx) this.fx.sparksBurst(b.x, 1.2, b.z, 0xff7ad0, 5, 4);
+        if (hit && this.fx) this.fx.sparksBurst(b.x, this.world.getHeight(b.x, b.z) + 1.2, b.z, 0xff7ad0, 5, 4);
         continue;
       }
-      b.mesh.position.set(b.x, 1.2, b.z);
+      b.mesh.position.set(b.x, this.world.getHeight(b.x, b.z) + 1.2, b.z); // folgt dem Gelände -> nicht im Boden
     }
   }
   boltSnapshot() {
@@ -779,7 +782,7 @@ export class EnemyManager {
     for (; i < list.length; i++) {
       let g = this._boltGhosts[i];
       if (!g) { g = new THREE.Mesh(this._boltGeo, this._boltMat); this._boltGroup.add(g); this._boltGhosts.push(g); }
-      g.visible = true; g.position.set(list[i][0], 1.2, list[i][1]);
+      g.visible = true; g.position.set(list[i][0], this.world.getHeight(list[i][0], list[i][1]) + 1.2, list[i][1]);
     }
     for (; i < this._boltGhosts.length; i++) this._boltGhosts[i].visible = false;
   }

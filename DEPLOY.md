@@ -50,20 +50,22 @@ Fertig: Unter deiner Domain läuft das Spiel, Online-Koop (über `wss://deine-do
 - Im Spiel: Namen eintippen → Run spielen → **🏆 Bestenliste** zeigt „🌐 Global".
 - Koop: „Online-Koop" → Lobby erstellen; ein zweiter Spieler sieht sie in der Liste.
 
-## Lokal testen (wie in Produktion)
+## Lokal mit den echten Server-Daten spielen
+
+`npm run server` und `npm run start` laden automatisch eine **`.env`** (via `--env-file-if-exists`, gitignoriert). So spielst du lokal gegen dieselbe Postgres-DB wie in Produktion.
+
+1. Einmalig `.env` anlegen: `cp .env.example .env` und `DATABASE_URL` eintragen.
+2. Spiel bauen: `npm run build`
+3. Server starten: `npm run server` → **http://localhost:3000** (verbindet mit der DB aus `.env`).
+
+Mit Hot-Reload (zwei Terminals):
 
 ```bash
-npm ci
-npm run build
-DATABASE_URL=postgres://... node server/index.js   # dann http://localhost:3000
+npm run server   # Terminal 1: API + /ws + DB (Port 3000)
+npm run dev      # Terminal 2: Vite mit Hot-Reload, proxyt /api und /ws an :3000
 ```
 
-## Lokale Entwicklung mit Hot-Reload
-
-```bash
-node server/index.js        # Terminal 1: API + /ws (+ dist) auf Port 3000
-npm run dev                 # Terminal 2: Vite mit Hot-Reload (proxyt /api und /ws an :3000)
-```
+> Die `.env` ist **nicht** im Git und **nicht** im Docker-Image — in Produktion setzt Coolify `DATABASE_URL` als Umgebungsvariable.
 
 ## Hinweise
 

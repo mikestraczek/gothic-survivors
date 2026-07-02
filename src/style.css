@@ -1389,6 +1389,44 @@ button.secondary {
   font-size: 15px;
   text-align: center;
 }
+#name-screen #player-name {
+  display: block;
+  width: 280px;
+  max-width: 80vw;
+  margin: 0 auto 6px;
+  padding: 12px;
+  font-size: 20px;
+  letter-spacing: 2px;
+}
+.name-prompt {
+  color: var(--gold-bright);
+  font-size: 18px;
+  letter-spacing: 1px;
+  margin: 18px 0 12px;
+}
+.name-hint {
+  color: #8a7a55;
+  font-size: 12px;
+  margin-top: 12px;
+}
+#menu-player {
+  margin-top: 2px;
+}
+.linkbtn {
+  background: none;
+  border: none;
+  color: var(--gold-bright);
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: inherit;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 400;
+}
+.linkbtn:hover {
+  filter: brightness(1.25);
+}
 .lb-inner {
   width: 520px;
   max-width: 94vw;
@@ -1402,12 +1440,15 @@ button.secondary {
 .lb-tab {
   padding: 8px 16px;
   font-size: 14px;
-  opacity: 0.55;
+  background: linear-gradient(180deg, #4a4030, #2e271a); /* inaktiv: dunkel, goldene Schrift */
+  color: var(--gold-bright);
+  border-color: var(--panel-border);
 }
 .lb-tab.active {
-  opacity: 1;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold)); /* aktiv: gold, dunkle Schrift */
+  color: var(--ink);
   border-color: var(--gold-bright);
-  color: var(--gold-bright);
+  box-shadow: 0 0 12px rgba(212, 175, 92, 0.45);
 }
 #lb-list {
   min-height: 120px;

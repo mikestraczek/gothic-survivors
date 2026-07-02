@@ -14,16 +14,27 @@
       <!-- Ladebildschirm -->
       <div id="loading">DIE KOLONIE ERWACHT…</div>
 
+      <!-- Pflicht-Namenseingabe (erster Screen) -->
+      <div id="name-screen" class="overlay hidden">
+        <div class="start-inner">
+          <h1 class="game-title">GOTHIC</h1>
+          <p class="game-subtitle">Survivors — Im Bann der Barriere</p>
+          <p class="name-prompt">Wie ist dein Name, Verbannter?</p>
+          <input id="player-name" maxlength="16" placeholder="Dein Name" autocomplete="off" spellcheck="false" />
+          <div class="menu-buttons">
+            <button id="name-confirm" disabled>Eintreten</button>
+          </div>
+          <p class="name-hint">Dein Name erscheint in der Bestenliste.</p>
+        </div>
+      </div>
+
       <!-- Startmenü -->
       <div id="start-screen" class="overlay hidden">
         <div class="start-inner">
           <h1 class="game-title">GOTHIC</h1>
           <p class="game-subtitle">Survivors — Im Bann der Barriere</p>
           <p id="menu-stats" class="game-edition">Gesammeltes Erz: 0</p>
-          <div class="name-row">
-            <label for="player-name">⚔ Name</label>
-            <input id="player-name" maxlength="16" placeholder="Dein Name" />
-          </div>
+          <p id="menu-player" class="game-edition">Spieler: <b id="menu-name">—</b> <button id="change-name" class="linkbtn">ändern</button></p>
           <div class="menu-buttons">
             <button id="resume-button" class="hidden">Run fortsetzen</button>
             <button id="start-button">Neuer Run</button>

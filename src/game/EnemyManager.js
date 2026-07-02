@@ -306,7 +306,7 @@ export class EnemyManager {
       const dist = 17 + this._rnd() * 7;
       const x = cx + Math.cos(a) * dist;
       const z = cz + Math.sin(a) * dist;
-      if (Math.hypot(x, z) < this.world.barrierRadius - 6) return this.spawn(type, x, z);
+      if (this.world.inBounds(x, z, 6)) return this.spawn(type, x, z);
     }
     return null;
   }
@@ -321,7 +321,7 @@ export class EnemyManager {
       const dist = 17 + this._rnd() * 7;
       const x = c.x + Math.cos(a) * dist;
       const z = c.z + Math.sin(a) * dist;
-      if (Math.hypot(x, z) >= this.world.barrierRadius - 6) continue;
+      if (!this.world.inBounds(x, z, 6)) continue;
       let ok = true;
       for (const p of centers) { if (Math.hypot(x - p.x, z - p.z) < minDist) { ok = false; break; } }
       if (ok) return this._maybeElite(this.spawn(type, x, z));
@@ -384,7 +384,7 @@ export class EnemyManager {
     const cell = 1.6;
     this._frame = (this._frame || 0) + 1;
     const grid = this._grid || (this._grid = new Map());
-    if (this._frame % 600 === 0) grid.clear(); // leere Buckets gelegentlich entsorgen
+    if (this._frame % 1800 === 0) grid.clear(); // leere Buckets gelegentlich entsorgen
     else for (const arr of grid.values()) arr.length = 0;
     const key = _gkey;
     for (let i = 0; i < this.enemies.length; i++) {
@@ -397,7 +397,6 @@ export class EnemyManager {
     }
     this._gridFrame = this._frame;
 
-    const maxR = this.world.barrierRadius - 4;
 
     for (const e of this.enemies) {
       if (!e.alive) continue;
@@ -492,11 +491,7 @@ export class EnemyManager {
       e.kz *= 1 - Math.min(1, dt * 8);
 
       if (e.def.fly) {
-        const r = Math.hypot(e.x, e.z);
-        if (r > maxR) {
-          e.x *= maxR / r;
-          e.z *= maxR / r;
-        }
+        this.world.clampBounds(e, 4);
       } else {
         this._col.x = e.x;
         this._col.z = e.z;
@@ -549,10 +544,10 @@ export class EnemyManager {
                 const ref = players[Math.floor(this._rnd() * players.length)] || target;
                 const ang = this._rnd() * Math.PI * 2;
                 const dist = 4 + this._rnd() * 8;
-                const sx = ref.position.x + Math.cos(ang) * dist;
-                const sz = ref.position.z + Math.sin(ang) * dist;
-                spots.push({ x: sx, z: sz, r: 3.6 });
-                if (this.fx) this.fx.telegraphSafe(sx, sz, 3.6, dur, this.world.getHeight(sx, sz));
+                const spot = { x: ref.position.x + Math.cos(ang) * dist, z: ref.position.z + Math.sin(ang) * dist };
+                this.world.clampBounds(spot, 5); // Safe-Zone muss erreichbar bleiben (Korridor!)
+                spots.push({ x: spot.x, z: spot.z, r: 3.6 });
+                if (this.fx) this.fx.telegraphSafe(spot.x, spot.z, 3.6, dur, this.world.getHeight(spot.x, spot.z));
               }
               this._aoes.push({ type: 'safe', spots, dmg: Math.round(e.dmg * 2.2), delay: dur, src: e.type });
               if (this.onSafeZones) this.onSafeZones();
@@ -674,7 +669,6 @@ export class EnemyManager {
   }
   _updateBolts(dt, players) {
     if (!this._bolts.length) return;
-    const maxR = this.world.barrierRadius;
     for (const b of this._bolts) {
       if (!b.alive) continue;
       b.life -= dt;
@@ -684,7 +678,7 @@ export class EnemyManager {
         if (!p.alive || p.dead) continue;
         if (Math.hypot(p.position.x - b.x, p.position.z - b.z) < b.r + p.radius) { p.takeDamage(b.dmg, b.src); hit = true; break; }
       }
-      if (hit || b.life <= 0 || Math.hypot(b.x, b.z) > maxR) {
+      if (hit || b.life <= 0 || !this.world.inBounds(b.x, b.z, 0)) {
         b.alive = false; b.mesh.visible = false;
         if (hit && this.fx) this.fx.sparksBurst(b.x, this.world.getHeight(b.x, b.z) + 1.2, b.z, 0xff7ad0, 5, 4);
         continue;

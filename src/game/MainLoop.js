@@ -169,7 +169,12 @@ export function _updatePlayHost(g, dt) {
   // Schrein-Segen: Timer runterzählen; solo den Schadensbonus direkt setzen
   // (im Koop rechnet _updateBuffs den Segen mit ein)
   for (const p of ps) if (p.blessing > 0) p.blessing -= dt;
-  if (!co) g.player.dmgMult = g.player.blessing > 0 ? 1.4 : 1;
+  if (!co) {
+    g.player.dmgMult = g.player.blessing > 0 ? 1.4 : 1;
+    // Map-Special-Tempofaktoren (Boost-Pad, Morast, Panzer)
+    g.player.speedMult = (g.player.boost > 0 ? 1.5 : 1) * (g.player.mud ? 0.72 : 1) * (g.player.vehicle ? 0.95 : 1);
+  }
+  g._updateMapSpecials(dt);
   g.enemies.update(dt, ps, null);
   // Gefallene Spieler greifen NICHT an (Waffen aus, Visuals versteckt)
   g.weapons.group.visible = !g.player.dead;
@@ -211,7 +216,11 @@ export function _updatePlayHost(g, dt) {
   g._autosaveAcc = (g._autosaveAcc || 0) + dt;
   if (g._autosaveAcc > 15) {
     g._autosaveAcc = 0;
-    if (!g.player.dead) g._saveRun();
+    if (!g.player.dead) {
+      // localStorage schreibt synchron -> in die Idle-Zeit verlegen (verhindert Mikro-Ruckler)
+      if (window.requestIdleCallback) requestIdleCallback(() => g._saveRun(), { timeout: 2000 });
+      else setTimeout(() => g._saveRun(), 0);
+    }
   }
 
   if (co) {

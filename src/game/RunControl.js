@@ -41,7 +41,7 @@ export function _onKillFor(g, p) {
 }
 // Musik-Theme des aktuellen Levels
 export function _musicTheme(g) {
-  return g.mapKey === 'swamp' ? 'swamp' : 'valley';
+  return (g.world && g.world.theme && g.world.theme.music) || (g.mapKey === 'swamp' ? 'swamp' : 'valley');
 }
 // Run-Statistiken in die Meta-Progression einrechnen + neue Achievements feiern
 export function _recordMeta(g, win) {
@@ -262,6 +262,20 @@ export function _phaseTick(g, dt) {
         const sa = Math.random() * Math.PI * 2;
         g.pickups.spawnAt('shrine', c.x + Math.cos(sa) * 9, c.z + Math.sin(sa) * 9);
         g.hud.toast('🕯 Ein Schrein der Barriere ist erschienen!', 'gold');
+        // Frontlinie: neuer Panzer nach jedem Anführer
+        if (g.world.tank) {
+          const t = g.world.tank;
+          t.taken = false;
+          t.group.visible = true;
+          t.group.position.set(t.homeX, g.world.getHeight(t.homeX, t.homeZ), t.homeZ);
+          t.group.rotation.y = 0;
+          if (g.world.tankCollider) {
+            g.world.tankCollider.r = 1.6;
+            g.world.tankCollider.x = t.homeX;
+            g.world.tankCollider.z = t.homeZ;
+          }
+          g.hud.toast('🛡 Nachschub: Ein neuer Panzer ist eingetroffen!', 'gold');
+        }
       }
     }
   } else if (g.phaseStage === 'final') {
@@ -650,4 +664,134 @@ export function _clientGameOver(g, d) {
   document.getElementById('retry-button').classList.add('hidden');
   document.getElementById('death-shop-button').classList.add('hidden');
   document.getElementById('death-screen').classList.remove('hidden');
+}
+
+// -------------------------------------------------- Map-Specials (Host-seitig, je Karte eins)
+// Frontlinie: fahrbarer Panzer · Hohlweg: durchrasende Lore · Neon-Distrikt: Boost-Pads ·
+// Sumpf: Morast bremst · Tal: die Barriere schleudert Blitze auf Gegner.
+export function _updateMapSpecials(g, dt) {
+  const w = g.world;
+  const ps = g._players();
+
+  // Boost-/Morast-Zustand aller Spieler
+  for (const p of ps) {
+    if (p.boost > 0) p.boost -= dt;
+    p.mud = false;
+    if (w.bogPools && !p.dead) {
+      for (const pool of w.bogPools) {
+        if (Math.hypot(p.position.x - pool.x, p.position.z - pool.z) < pool.r) { p.mud = true; break; }
+      }
+    }
+  }
+
+  // --- Frontlinie 1944: Panzer ---
+  if (w.tank) {
+    const t = w.tank;
+    let driver = null;
+    for (const p of ps) if (p.vehicle) { driver = p; break; }
+    if (driver) {
+      driver.vehicle.t -= dt;
+      t.group.visible = true;
+      t.group.position.set(driver.position.x, driver.position.y, driver.position.z);
+      t.group.rotation.y = -driver.yaw + Math.PI / 2; // Rohr in Blickrichtung (Modell zeigt +X)
+      // Ketten überrollen alles
+      const crushed = g.enemies.inRadius(driver.position.x, driver.position.z, 2.0);
+      const ok = g._onKillFor(driver);
+      for (const e of crushed) g.enemies.damage(e, 160 * dt + 2, { x: (e.x - driver.position.x) * 2, z: (e.z - driver.position.z) * 2 }, ok);
+      // Kanone feuert automatisch auf den nächsten Gegner
+      driver.vehicle.gun -= dt;
+      if (driver.vehicle.gun <= 0) {
+        driver.vehicle.gun = 1.6;
+        const tgt = g.enemies.nearest(driver.position.x, driver.position.z, 18);
+        if (tgt) {
+          g.fx.explosion(tgt.x, tgt.z, 3, 0xffa040);
+          g.camCtrl.addShake(0.16);
+          g.audio.kill();
+          for (const e of g.enemies.inRadius(tgt.x, tgt.z, 3)) g.enemies.damage(e, 90, null, ok);
+        }
+      }
+      if (driver.vehicle.t <= 0) {
+        driver.vehicle = null;
+        t.group.visible = false; // verbraucht — der nächste Anführer bringt Nachschub
+        g._toastFor(driver, '🛢 Treibstoff leer — Panzer verlassen', 'gold');
+      }
+    } else if (!t.taken) {
+      for (const p of ps) {
+        if (p.dead) continue;
+        if (Math.hypot(p.position.x - t.group.position.x, p.position.z - t.group.position.z) < 2.4) {
+          t.taken = true;
+          if (w.tankCollider) w.tankCollider.r = 0;
+          p.vehicle = { t: 22, gun: 0.6 };
+          g._toastFor(p, '🛡 PANZER! 22 Sekunden — überrolle alles!', 'gold', 'levelup');
+          g.camCtrl.addShake(0.3);
+          break;
+        }
+      }
+    }
+  }
+
+  // --- Hohlweg: Minen-Lore rast durch ---
+  if (w.lore) {
+    const lo = w.lore;
+    if (!lo.active) {
+      lo.timer -= dt;
+      if (lo.timer <= 0) {
+        lo.active = true;
+        lo.dir = Math.random() > 0.5 ? 1 : -1;
+        lo.x = -lo.dir * 375;
+        lo.timer = 22 + Math.random() * 14;
+        g.hud.toast('⚠ LORE IM ANMARSCH — runter vom Gleis!', 'blood');
+        g.audio.boss();
+      }
+    } else {
+      lo.x += lo.dir * 30 * dt;
+      lo.group.visible = true;
+      lo.group.position.set(lo.x, w.getHeight(lo.x, 0) + 0.1, 0);
+      // überrollt Gegner (mit Wucht) …
+      const hit = g.enemies.inRadius(lo.x, 0, 1.8);
+      for (const e of hit) g.enemies.damage(e, 400 * dt + 50, { x: lo.dir * 6, z: e.z > 0 ? 4 : -4 }, g._onKillP1);
+      // … und unvorsichtige Spieler
+      for (const p of ps) {
+        if (!p.dead && Math.abs(p.position.z) < 1.3 && Math.abs(p.position.x - lo.x) < 1.7) p.takeDamage(22, 'lore');
+      }
+      if (Math.abs(lo.x) > 378) {
+        lo.active = false;
+        lo.group.visible = false;
+      }
+    }
+  }
+
+  // --- Neon-Distrikt: Boost-Pads ---
+  if (w.boostPads) {
+    for (const pad of w.boostPads) {
+      pad.cd = Math.max(0, pad.cd - dt);
+      if (pad.cd > 0) continue;
+      for (const p of ps) {
+        if (p.dead) continue;
+        if (Math.hypot(p.position.x - pad.x, p.position.z - pad.z) < 1.5) {
+          pad.cd = 5;
+          p.boost = 3;
+          g.fx.ring(pad.x, pad.z, 3, 0x2fd0ff);
+          g._toastFor(p, '⚡ Boost!', 'gold', 'pickup');
+          break;
+        }
+      }
+    }
+  }
+
+  // --- Tal der Kolonie: die Barriere zürnt (Blitz auf einen zufälligen Gegner) ---
+  if (g.mapKey === 'valley') {
+    g._barrierBoltT = (g._barrierBoltT ?? 28) - dt;
+    if (g._barrierBoltT <= 0) {
+      g._barrierBoltT = 35 + Math.random() * 15;
+      const list = g.enemies.inRadius(g.player.position.x, g.player.position.z, 26);
+      if (list.length) {
+        const e = list[Math.floor(Math.random() * list.length)];
+        g.fx.bolt(e.x, e.z);
+        g.enemies.damage(e, 180, null, g._onKillP1);
+        g.hud.toast('⚡ Die Barriere zürnt!', 'gold');
+        g.audio.kill();
+      }
+    }
+  }
 }

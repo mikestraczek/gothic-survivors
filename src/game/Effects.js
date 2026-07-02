@@ -122,9 +122,14 @@ export class Effects {
     const key = txt + '|' + color + (big ? '|b' : '');
     let tex = this._dmgTexCache.get(key);
     if (tex) return tex;
-    if (this._dmgTexCache.size >= 160) {
-      for (const t of this._dmgTexCache.values()) t.dispose();
-      this._dmgTexCache.clear();
+    if (this._dmgTexCache.size >= 300) {
+      // nur die ~100 ältesten entsorgen (Map hält Einfüge-Reihenfolge) — kein Komplett-Flush
+      let n = 0;
+      for (const [k, t] of this._dmgTexCache) {
+        t.dispose();
+        this._dmgTexCache.delete(k);
+        if (++n >= 100) break;
+      }
     }
     const c = document.createElement('canvas');
     c.width = 160;

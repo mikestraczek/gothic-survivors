@@ -77,6 +77,8 @@ export class Game {
 
   _syncGrade() { return Visuals._syncGrade(this); }
 
+  _prewarm() { return Visuals._prewarm(this); }
+
   _makeSprite(key) { return Visuals._makeSprite(this, key); }
 
   _makeBlobShadow(scale = 2.2) { return Visuals._makeBlobShadow(this, scale); }
@@ -221,6 +223,7 @@ export class Game {
     this.camCtrl.snap(this.player.position);
     this._wireUI();
     this._applySettings();
+    this._prewarm(); // Shader hinter dem Ladescreen kompilieren (keine Erste-Nutzung-Ruckler)
     document.getElementById('loading').classList.add('hidden');
     this._bootFlow();
     this.clock.start();
@@ -308,6 +311,8 @@ export class Game {
   _startEndless() { return RunControl._startEndless(this); }
 
   _phaseTick(dt) { return RunControl._phaseTick(this, dt); }
+
+  _updateMapSpecials(dt) { return RunControl._updateMapSpecials(this, dt); }
 
   _phaseTarget() { return RunControl._phaseTarget(this); }
 

@@ -146,7 +146,7 @@ export class PickupManager {
       const dist = 8 + Math.random() * 16;
       const x = player.position.x + Math.cos(a) * dist;
       const z = player.position.z + Math.sin(a) * dist;
-      if (Math.hypot(x, z) < this.world.barrierRadius - 6) {
+      if (this.world.inBounds(x, z, 6)) {
         this.spawnAt(type, x, z);
         return;
       }

@@ -7,7 +7,8 @@ export class Player {
     this.world = world;
     this.scene = scene;
 
-    this.position = new THREE.Vector3(0, world.getHeight(0, 50), 50);
+    const sp0 = world.spawnPoint ? world.spawnPoint() : { x: 0, z: 50 };
+    this.position = new THREE.Vector3(sp0.x, world.getHeight(sp0.x, sp0.z), sp0.z);
     this.yaw = Math.PI;
     this.radius = 0.6;
     this.dead = false;
@@ -40,6 +41,9 @@ export class Player {
     this.hitFlash = 0;
     this.rooted = 0; // Festgewurzelt (Boss-Fähigkeit): blockt Bewegung, per Tastenhämmern lösbar
     this.blessing = 0; // Schrein-Segen: Restzeit des Schadens-Buffs
+    this.vehicle = null; // Map-Special: Panzer (Frontlinie 1944)
+    this.boost = 0; // Map-Special: Boost-Pad-Restzeit (Neon-Distrikt)
+    this.mud = false; // Map-Special: im Morast (Sumpf)
     this.moving = false;
     this.passivesTaken = new Set(); // für Waffen-Verschmelzungen
     this.passiveCounts = {}; // id -> Anzahl (für HUD)
@@ -97,7 +101,8 @@ export class Player {
   beginRun() {
     this.dead = false;
     this.group.rotation.z = 0;
-    this.position.set(0, this.world.getHeight(0, 50), 50);
+    const sp = this.world.spawnPoint ? this.world.spawnPoint() : { x: 0, z: 50 };
+    this.position.set(sp.x, this.world.getHeight(sp.x, sp.z), sp.z);
     this.yaw = Math.PI;
     this.resetStats();
     this.level = 1;
@@ -109,6 +114,9 @@ export class Player {
     this.hitFlash = 0;
     this.rooted = 0;
     this.blessing = 0;
+    this.vehicle = null;
+    this.boost = 0;
+    this.mud = false;
     this.passivesTaken.clear();
     this.passiveCounts = {};
     this.dodgeCharges = this.dodgeMax;
@@ -179,7 +187,7 @@ export class Player {
 
   takeDamage(amount, srcType) {
     if (this.dead || this.iframe > 0) return 0;
-    const dmg = Math.max(1, Math.round(amount - this.armor));
+    const dmg = Math.max(1, Math.round(amount - this.armor - (this.vehicle ? 18 : 0))); // Panzer schluckt viel
     this.hp = Math.max(0, this.hp - dmg);
     this.iframe = 0.45;
     this.hitFlash = 0.2;

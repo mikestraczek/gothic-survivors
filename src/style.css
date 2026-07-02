@@ -617,7 +617,7 @@ button.secondary {
 /* ---- Anti-Kiting: Zorn-Anzeige ---- */
 #wrath-meter {
   position: absolute;
-  top: 46px;
+  top: 170px; /* unter Timer/Phase/Boss-Balken — überlappt nichts mehr */
   left: 50%;
   transform: translateX(-50%);
   width: 230px;
@@ -1925,4 +1925,96 @@ button.secondary {
   image-rendering: pixelated;
   vertical-align: -7px;
   margin-right: 4px;
+}
+
+/* ==================================================================
+   Mobile-HUD: Überlappungen entzerren (kleine Screens / Touch)
+   ================================================================== */
+@media (max-width: 900px), (pointer: coarse) and (max-height: 900px) {
+  /* DPS-Panel ist auf kleinen Screens Platzfresser Nr. 1 */
+  #dps-panel {
+    display: none !important;
+  }
+  /* Minimap kompakter in die Ecke */
+  #minimap {
+    width: 110px !important;
+    height: 110px !important;
+    bottom: 12px;
+    right: 12px;
+  }
+  /* Ausweich-Button über die (kleinere) Minimap heben */
+  #touch-dodge {
+    right: 18px;
+    bottom: 138px;
+    width: 66px;
+    height: 66px;
+  }
+  /* linke HUD-Gruppe (Waffen/Passive/HP) etwas verkleinern */
+  #bottom-left {
+    transform: scale(0.85);
+    transform-origin: bottom left;
+  }
+  #top-right {
+    font-size: 14px;
+    top: 12px;
+    right: 12px;
+  }
+  #top-center {
+    top: 6px;
+  }
+  #ally-panel {
+    transform: scale(0.8);
+    transform-origin: top left;
+  }
+  #message-log {
+    max-width: 46vw;
+    font-size: 12px;
+  }
+  #boss-bar {
+    width: 60vw;
+  }
+}
+
+
+/* Erfolge: Fortschrittsbalken + Statistik-Block */
+.ach-progress {
+  margin-top: 5px;
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(20, 14, 8, 0.8);
+  border: 1px solid rgba(92, 74, 42, 0.5);
+  overflow: hidden;
+}
+.ach-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8a6a2a, var(--gold, #c8a24a));
+}
+.ach-item.done .ach-progress-fill {
+  background: linear-gradient(90deg, #4a8a3a, #7cd88a);
+}
+.ach-prog-txt {
+  font-size: 11px;
+  color: var(--parchment);
+  opacity: 0.75;
+  margin-top: 2px;
+}
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 14px;
+  margin: 10px 0 16px;
+  padding: 12px 14px;
+  background: rgba(20, 14, 8, 0.55);
+  border: 1px solid rgba(92, 74, 42, 0.5);
+  border-radius: 8px;
+  text-align: left;
+}
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--parchment);
+}
+.stat-row b {
+  color: var(--gold-bright, #e8c86a);
 }

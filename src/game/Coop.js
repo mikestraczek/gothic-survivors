@@ -187,8 +187,9 @@ export function _hostStart(g) {
   applyHero(g.remotePlayer, g._remoteHeroKey);
   g._syncHeroSprites();
   g.remotePlayer.lockedWeapons = new Set(g._remoteLocked || []);
-  g.player.position.set(-3, g.world.getHeight(-3, 50), 50);
-  g.remotePlayer.position.set(3, g.world.getHeight(3, 50), 50);
+  const sp = g.world.spawnPoint();
+  g.player.position.set(sp.x - 3, g.world.getHeight(sp.x - 3, sp.z), sp.z);
+  g.remotePlayer.position.set(sp.x + 3, g.world.getHeight(sp.x + 3, sp.z), sp.z);
   g._resetCommon();
   g.weapons2.reset();
   g.weapons2.add((HEROES[g._remoteHeroKey] || HEROES.soldier).start);
@@ -226,7 +227,8 @@ export function _beginClientRun(g, d) {
   g._lastHp = 100;
   g.player.beginRun();
   g.remotePlayer.beginRun();
-  g.player.position.set(3, g.world.getHeight(3, 50), 50); // self = P2
+  const spc = g.world.spawnPoint();
+  g.player.position.set(spc.x + 3, g.world.getHeight(spc.x + 3, spc.z), spc.z); // self = P2
   g.enemies.reset();
   g.gems.reset();
   g.pickups.reset();
@@ -315,7 +317,7 @@ export function _updateBuffs(g) {
   for (const [self, other] of [[a, b], [b, a]]) {
     const lastStand = !self.dead && other.dead;
     self.dmgMult = (lastStand ? 1.3 : 1) * (near ? 1.12 : 1) * (self.blessing > 0 ? 1.4 : 1);
-    self.speedMult = lastStand ? 1.25 : 1;
+    self.speedMult = (lastStand ? 1.25 : 1) * (self.boost > 0 ? 1.5 : 1) * (self.mud ? 0.72 : 1) * (self.vehicle ? 0.95 : 1);
     self.aura = near;
     self.lastStand = lastStand;
   }
@@ -404,7 +406,7 @@ export function _showEmote(g, who, i) {
 }
 // -------------------------------------------------- Snapshot
 export function _sendSnapshot(g) {
-  const enc = (p) => [Math.round(p.position.x * 20) / 20, Math.round(p.position.z * 20) / 20, Math.round(p.yaw * 100) / 100, Math.round(p.hp), p.maxHp, p.dead ? 1 : 0, Math.round((p.rooted || 0) * 10) / 10];
+  const enc = (p) => [Math.round(p.position.x * 20) / 20, Math.round(p.position.z * 20) / 20, Math.round(p.yaw * 100) / 100, Math.round(p.hp), p.maxHp, p.dead ? 1 : 0, Math.round((p.rooted || 0) * 10) / 10, p.vehicle ? 1 : 0];
   const stat = (p) => [p.level, p.xp, p.xpToNext, p.kills, Math.floor(p.gold)];
   const ld = (w) => w.ownedList().map((x) => ({ id: x.id, l: x.level, e: x.evolved ? 1 : 0 }));
   g.net.send({
@@ -430,6 +432,11 @@ export function _sendSnapshot(g) {
     dg: g.enemies._aoes.some((a) => a.type === 'safe') ? 1 : 0,
     wr: Math.round(g.enemies.wrathFrac() * 100) / 100,
     t: Math.round(g.runElapsed),
+    // Map-Specials (Panzer/Lore) für die Gast-Anzeige
+    ms: {
+      tk: g.world.tank ? [g.world.tank.group.visible ? 1 : 0, Math.round(g.world.tank.group.position.x * 10) / 10, Math.round(g.world.tank.group.position.z * 10) / 10, Math.round(g.world.tank.group.rotation.y * 100) / 100] : 0,
+      lo: g.world.lore && g.world.lore.active ? Math.round(g.world.lore.x * 10) / 10 : null,
+    },
   });
 }
 export function _applySnapshot(g, d) {
@@ -438,9 +445,11 @@ export function _applySnapshot(g, d) {
   g._authRemote = { x: host[0], z: host[1], yaw: host[2] };
   g.remotePlayer.hp = host[3]; g.remotePlayer.maxHp = host[4]; g.remotePlayer.dead = host[5] === 1;
   g.remotePlayer.rooted = host[6] || 0;
+  g.remotePlayer.vehicle = host[7] ? { t: 1 } : null; // nur fürs Sprite-Ausblenden
   g._authSelf = { x: self[0], z: self[1] };
   g.player.hp = self[3]; g.player.maxHp = self[4]; g.player.dead = self[5] === 1;
   g.player.rooted = self[6] || 0;
+  g.player.vehicle = self[7] ? { t: 1 } : null;
   g.runElapsed = d.t || 0;
   if (d.p2) { g.player.level = d.p2[0]; g.player.xp = d.p2[1]; g.player.xpToNext = d.p2[2]; g.player.kills = d.p2[3]; g.player.gold = d.p2[4]; }
   if (d.p1) { g.remotePlayer.level = d.p1[0]; g.remotePlayer.kills = d.p1[3]; }
@@ -460,6 +469,20 @@ export function _applySnapshot(g, d) {
   g.gems.applySnapshot(d.gm || [], 0);
   g.pickups.applySnapshot(d.pk || []);
   if (d.fx) g.fx.replay(d.fx);
+  // Map-Special-Visuals (Panzer folgt Fahrer, Lore rast durch)
+  if (d.ms) {
+    if (g.world.tank && d.ms.tk) {
+      const [vis, tx, tz, ry] = d.ms.tk;
+      g.world.tank.group.visible = vis === 1;
+      g.world.tank.group.position.set(tx, g.world.getHeight(tx, tz), tz);
+      g.world.tank.group.rotation.y = ry;
+    }
+    if (g.world.lore) {
+      const lx = d.ms.lo;
+      g.world.lore.group.visible = lx != null;
+      if (lx != null) g.world.lore.group.position.set(lx, g.world.getHeight(lx, 0) + 0.1, 0);
+    }
+  }
   g._ghostProj = d.pj || []; // fliegende Projektile für die Ghost-Anzeige
   g._ghostBolts = d.bo || []; // Boss-Kugeln
 }

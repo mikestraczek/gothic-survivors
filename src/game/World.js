@@ -21,6 +21,28 @@ export function terrainHeight(x, z) {
     h *= 1 - flat * 0.5;
     return h;
   }
+  if (_variant === 'corridor') {
+    // schmaler Hohlweg entlang X: fast flacher Boden, steile Felswände in Z
+    let h = Math.sin(x * 0.08) * 0.5 + Math.sin((x + z) * 0.17) * 0.25;
+    h += Math.max(0, Math.abs(z) - 13) * 2.4; // Wände
+    return h;
+  }
+  if (_variant === 'flat') {
+    // Stadt: fast eben, ansteigender Rand
+    let h = Math.sin(x * 0.02) * 0.35 + Math.cos(z * 0.025) * 0.35;
+    h += Math.max(0, r - 100) * 0.35;
+    return h;
+  }
+  if (_variant === 'field') {
+    // Schlachtfeld: flach, von Kratern zernarbt
+    let h = Math.sin(x * 0.05) * 0.7 + Math.cos(z * 0.06) * 0.7;
+    const cr = Math.sin(x * 0.11 + 2.3) * Math.sin(z * 0.13 + 1.1);
+    h -= Math.max(0, cr - 0.55) * 6.0; // Krater-Dellen
+    h += Math.max(0, r - 100) * 0.32;
+    const flat = 1 - Math.min(1, r / 40);
+    h *= 1 - flat * 0.6;
+    return h;
+  }
   // Tal: rollende Hügel mit ansteigendem Rand
   let h =
     Math.sin(x * 0.03) * 2.2 +
@@ -34,6 +56,9 @@ export function terrainHeight(x, z) {
 }
 
 const BARRIER_RADIUS = 138;
+// Hohlweg-Map: begehbarer Streifen entlang X
+const CORRIDOR_HALF = 13; // halbe Breite
+const CORRIDOR_LEN = 380; // halbe Länge (wirkt durch Nebel endlos)
 
 const _UP = new THREE.Vector3(0, 1, 0);
 
@@ -63,6 +88,31 @@ function glowTexture() {
   return _glowTex;
 }
 
+// Leuchtfenster-Textur für Cyberpunk-Gebäude (einmal erzeugt, wiederholt gekachelt)
+let _winTex = null;
+function windowTexture() {
+  if (_winTex) return _winTex;
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#04050a';
+  g.fillRect(0, 0, 64, 128);
+  const cols = ['#2fd0ff', '#ff2fd0', '#ffc46a', '#8a7aff'];
+  for (let yy = 6; yy < 122; yy += 9) {
+    for (let xx = 5; xx < 58; xx += 9) {
+      if (Math.random() < 0.34) {
+        g.fillStyle = cols[(Math.random() * cols.length) | 0];
+        g.globalAlpha = 0.45 + Math.random() * 0.55;
+        g.fillRect(xx, yy, 5, 4);
+      }
+    }
+  }
+  g.globalAlpha = 1;
+  _winTex = new THREE.CanvasTexture(c);
+  return _winTex;
+}
+
 // Karten-Themen (umschaltbar)
 export const THEMES = {
   valley: {
@@ -76,6 +126,7 @@ export const THEMES = {
     trunk: 0x3a2a1a, foliage: 0x24341c, rockMat: 0x575250, grassMat: 0x4a5a30, stone: 0x6b6358,
     terrain: 'valley', vegStyle: 'pine', layout: 'ruins', treeCount: 70, rockCount: 26, grassCount: 600, water: false,
     gradeShadow: [0.0, 0.02, 0.075], gradeHigh: [0.07, 0.045, 0.0], // Split-Toning (Visuals-Grade-Pass)
+    weather: 'motes', music: 'valley',
     finalBoss: 'boss',
   },
   swamp: {
@@ -89,12 +140,61 @@ export const THEMES = {
     trunk: 0x241c12, foliage: 0x2a3a22, rockMat: 0x444a38, grassMat: 0x3a4a28, stone: 0x4a4e40,
     terrain: 'swamp', vegStyle: 'dead', layout: 'bog', treeCount: 70, rockCount: 18, grassCount: 360, water: true, waterColor: 0x16321f,
     gradeShadow: [0.0, 0.05, 0.02], gradeHigh: [0.05, 0.06, 0.0],
+    weather: 'rain', music: 'swamp',
     finalBoss: 'boss_demon',
+  },
+  corridor: {
+    name: 'Der Hohlweg',
+    fog: 0x14161e, fogD: 0.0085,
+    sky: [0x08080e, 0x101018, 0x1a1410],
+    hemiSky: 0x5a6a8a, hemiGround: 0x241f16, hemiI: 0.95,
+    ambient: 0x3a4050, ambientI: 0.6, moonCol: 0xb8c4e0, moonI: 1.1,
+    grass: 0x3a3f2c, grass2: 0x2c3122, dirt: 0x4c4232, rock: 0x3f3b34,
+    barrierA: 0x8a2fa0, barrierB: 0x2f5aa0,
+    trunk: 0x352718, foliage: 0x223018, rockMat: 0x514c46, grassMat: 0x44502c, stone: 0x5c564c,
+    terrain: 'corridor', vegStyle: 'pine', layout: 'canyon', treeCount: 48, rockCount: 0, grassCount: 320, water: false,
+    bounds: 'corridor', relics: false,
+    gradeShadow: [0.01, 0.02, 0.07], gradeHigh: [0.06, 0.05, 0.01],
+    weather: 'motes', music: 'valley', mistCol: 0x9aa8c8,
+    finalBoss: 'boss_bone',
+  },
+  cyber: {
+    name: 'Neon-Distrikt 7',
+    fog: 0x0c0a18, fogD: 0.0072,
+    sky: [0x060612, 0x120a24, 0x241030],
+    hemiSky: 0x6a4a9a, hemiGround: 0x101020, hemiI: 1.0,
+    ambient: 0x3a2a5a, ambientI: 0.7, moonCol: 0x9a7ae0, moonI: 0.9,
+    grass: 0x23242c, grass2: 0x1b1c24, dirt: 0x2c2d38, rock: 0x30313c,
+    barrierA: 0xff2fd0, barrierB: 0x2fd0ff,
+    trunk: 0x23242c, foliage: 0x23303c, rockMat: 0x3c3e4c, grassMat: 0x2c3644, stone: 0x3a3c4a,
+    terrain: 'flat', vegStyle: 'pine', layout: 'city', treeCount: 0, rockCount: 0, grassCount: 0, water: false,
+    relics: false, shrooms: false,
+    gradeShadow: [0.02, 0.0, 0.09], gradeHigh: [0.06, 0.0, 0.08],
+    weather: 'rain', music: 'cyber', mistCol: 0x8a7ab8,
+    finalBoss: 'boss_demon',
+  },
+  ww2: {
+    name: 'Frontlinie 1944',
+    fog: 0x1a1c18, fogD: 0.009,
+    sky: [0x0e100c, 0x1a1c16, 0x24221a],
+    hemiSky: 0x7a8070, hemiGround: 0x26241c, hemiI: 0.95,
+    ambient: 0x4a4c40, ambientI: 0.6, moonCol: 0xc0c4b0, moonI: 0.9,
+    grass: 0x3c3a26, grass2: 0x2e2c1e, dirt: 0x4a4028, rock: 0x403d32,
+    barrierA: 0x8a6a2f, barrierB: 0xa03a2f,
+    trunk: 0x2c2416, foliage: 0x2a2c1c, rockMat: 0x4c483c, grassMat: 0x424426, stone: 0x565044,
+    terrain: 'field', vegStyle: 'dead', layout: 'battlefield', treeCount: 26, rockCount: 10, grassCount: 260, water: false,
+    relics: false, shrooms: false,
+    gradeShadow: [0.01, 0.03, 0.02], gradeHigh: [0.06, 0.05, 0.02],
+    weather: 'rain', music: 'war', mistCol: 0x9aa08a,
+    finalBoss: 'boss',
   },
 };
 export const MAP_LIST = [
   { key: 'valley', name: 'Tal der Kolonie' },
   { key: 'swamp', name: 'Sumpf der Bruderschaft' },
+  { key: 'corridor', name: 'Der Hohlweg' },
+  { key: 'cyber', name: 'Neon-Distrikt 7' },
+  { key: 'ww2', name: 'Frontlinie 1944' },
 ];
 
 export class World {
@@ -115,14 +215,18 @@ export class World {
   _build() {
     this._waterMat = null;
     this._treeFade = null;
+    this.bogPools = null;
+    this.tank = null;
+    this.lore = null;
+    this.boostPads = null;
     this._buildSky();
     this._buildLights();
     this._buildTerrain();
     this._buildBarrier();
     this._buildCamp();
     this._buildVegetation();
-    this._buildGraveyard();
-    if (this.theme.layout !== 'bog') this._buildOldCamp();
+    if (this.theme.relics !== false) this._buildGraveyard();
+    if (this.theme.layout === 'ruins') this._buildOldCamp();
     this._buildWeather();
   }
 
@@ -131,7 +235,8 @@ export class World {
   // folgt dem Kamera-Ziel (center in update) — wirkt überall in der Arena.
   _buildWeather() {
     this.weather = null;
-    if (this.theme.terrain === 'swamp') {
+    const wkind = this.theme.weather || (this.theme.terrain === 'swamp' ? 'rain' : 'motes');
+    if (wkind === 'rain') {
       const N = 480;
       const geo = new THREE.PlaneGeometry(0.03, 0.8);
       const mat = new THREE.MeshBasicMaterial({ color: 0x9fb6c8, transparent: true, opacity: 0.34, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
@@ -162,7 +267,7 @@ export class World {
     mistGeo.rotateX(-Math.PI / 2);
     const mistMat = new THREE.MeshBasicMaterial({
       map: glowTexture(),
-      color: this.theme.terrain === 'swamp' ? 0x9ab890 : 0x9aa8c8,
+      color: this.theme.mistCol || (this.theme.terrain === 'swamp' ? 0x9ab890 : 0x9aa8c8),
       transparent: true,
       opacity: 0.13,
       depthWrite: false,
@@ -474,9 +579,10 @@ export class World {
 
   // --------------------------------------------------------------- Terrain
   _buildTerrain() {
-    const size = 320;
-    const seg = 200;
-    const geo = new THREE.PlaneGeometry(size, size, seg, seg);
+    const corridor = this.theme.bounds === 'corridor';
+    const sizeX = corridor ? 800 : 320;
+    const sizeZ = corridor ? 64 : 320;
+    const geo = new THREE.PlaneGeometry(sizeX, sizeZ, corridor ? 400 : 200, corridor ? 32 : 200);
     geo.rotateX(-Math.PI / 2);
 
     const pos = geo.attributes.position;
@@ -496,8 +602,8 @@ export class World {
       const n = (Math.sin(x * 1.3) * Math.cos(z * 1.1) + 1) * 0.5;
       let c = cGrass.clone().lerp(cGrass2, n);
       if (y > 6) c = c.lerp(cRock, Math.min(1, (y - 6) / 8));
-      const r2 = Math.hypot(x, z);
-      if (r2 < 30) c = c.lerp(cDirt, 0.4); // getrampelter Boden im Lager
+      const r2 = corridor ? Math.abs(z) * 3.4 : Math.hypot(x, z);
+      if (r2 < 30) c = c.lerp(cDirt, 0.4); // getrampelter Boden (Lager bzw. Pfad)
       colors.push(c.r, c.g, c.b);
     }
     geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
@@ -563,8 +669,13 @@ export class World {
         }
       `,
     });
-    const dome = new THREE.Mesh(geo, this.barrierMat);
-    this.group.add(dome);
+    if (this.theme.bounds === 'corridor') {
+      // Keine Energie-Wände: die Felswände des Hohlwegs begrenzen sichtbar,
+      // clampBounds() hält unsichtbar in der Spur (Wände hingen sonst in der Kamera).
+    } else {
+      const dome = new THREE.Mesh(geo, this.barrierMat);
+      this.group.add(dome);
+    }
     this.barrierRadius = BARRIER_RADIUS;
   }
 
@@ -578,7 +689,11 @@ export class World {
   }
 
   _buildCamp() {
-    if (this.theme.layout === 'bog') this._bogFeatures();
+    const L = this.theme.layout;
+    if (L === 'city') { this._cityFeatures(); return; } // Stadt bringt eigene Beleuchtung mit
+    if (L === 'battlefield') { this._warFeatures(); return; }
+    if (L === 'canyon') { this._canyonFeatures(); return; }
+    if (L === 'bog') this._bogFeatures();
     else this._ruinFeatures();
 
     // Lagerfeuer als zentrale Lichtquellen (beide Karten)
@@ -590,7 +705,7 @@ export class World {
         ? [[-12, 10], [14, 8], [-2, -18], [24, 4], [-26, 18]]
         : [[-10, 12], [12, 12], [-24, 0], [24, 2], [0, -16], [-14, -16], [16, -14], [6, 26], [-30, 16]];
     for (const [tx, tz] of torchSpots) this._buildTorch(tx, tz);
-    if (this.theme.layout !== 'bog') this._buildTents();
+    if (L === 'ruins') this._buildTents();
   }
 
   // Tal: verwitterte Stein-Ruinen (Altes-Lager-Feeling) — gebrochene Mauerkronen,
@@ -723,6 +838,7 @@ export class World {
     const water = new THREE.MeshStandardMaterial({ color: this.theme.waterColor || 0x16321f, roughness: 0.15, metalness: 0.4, transparent: true, opacity: 0.85, emissive: 0x1a4a2c, emissiveIntensity: 0.22 });
     this._waterMat = water; // schimmert im update()
     const pools = [[-14, 8, 5], [16, -6, 6], [-26, -16, 7], [26, 16, 5], [2, 28, 6], [-30, 22, 4.5], [12, -26, 5.5], [-4, -6, 4]];
+    this.bogPools = pools.map(([px, pz, prr]) => ({ x: px, z: pz, r: prr })); // Map-Special: Morast bremst
     for (const [px, pz, prr] of pools) {
       const w = new THREE.Mesh(new THREE.CircleGeometry(prr, 22), water);
       w.rotation.x = -Math.PI / 2;
@@ -743,6 +859,320 @@ export class World {
       this._place(b, x, z, 0.5);
       this.colliders.push({ x, z, r: 2 });
     }
+  }
+
+  // Cyberpunk: Gebäudeblocks mit Leuchtfenstern, Neon-Dachkanten, Straßenlampen, Holo-Ringe
+  _cityFeatures() {
+    let seed = 1717;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const winTex = windowTexture();
+    for (let i = 0; i < 30; i++) {
+      const a = rnd() * Math.PI * 2;
+      const dist = 24 + rnd() * 95;
+      const x = Math.cos(a) * dist, z = Math.sin(a) * dist;
+      if (!this.inBounds(x, z, 12)) continue;
+      if (Math.hypot(x, z - 50) < 20) continue; // Spawn-Bereich freihalten
+      // innen niedrige Blocks (Sicht!), Hochhäuser nur am Rand
+      const w = 5 + rnd() * 5, d = 5 + rnd() * 5;
+      const h = dist < 60 ? 4 + rnd() * 4 : 8 + rnd() * 16;
+      const mat = new THREE.MeshStandardMaterial({ color: 0x14161e, roughness: 0.85, emissive: 0xffffff, emissiveMap: winTex, emissiveIntensity: 0.9 });
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      const y = terrainHeight(x, z);
+      b.position.set(x, y + h / 2 - 0.3, z);
+      b.rotation.y = Math.floor(rnd() * 4) * (Math.PI / 2) + (rnd() - 0.5) * 0.12;
+      b.castShadow = true;
+      this.group.add(b);
+      // Neon-Kante auf dem Dach
+      const neon = new THREE.Mesh(
+        new THREE.BoxGeometry(w * 0.92, 0.14, 0.14),
+        new THREE.MeshBasicMaterial({ color: rnd() > 0.5 ? 0xff2fd0 : 0x2fd0ff })
+      );
+      neon.position.set(x, y + h - 0.2, z);
+      neon.rotation.y = b.rotation.y;
+      this.group.add(neon);
+      this.colliders.push({ x, z, r: Math.max(w, d) * 0.62 });
+    }
+    // Straßenlampen als kalte Lichtinseln
+    const lamps = [[-10, 10], [12, 8], [-16, -12], [16, -12], [0, 22], [-26, 2], [26, 18], [8, -26], [0, -8]];
+    let li = 0;
+    for (const [lx, lz] of lamps) this._buildNeonLamp(lx, lz, li++ % 2 ? 0xff2fd0 : 0x2fd0ff);
+    // schwebende Holo-Ringe
+    for (let i = 0; i < 6; i++) {
+      const x = (rnd() * 2 - 1) * 60, z = (rnd() * 2 - 1) * 60;
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(1.1 + rnd(), 0.06, 8, 24),
+        new THREE.MeshBasicMaterial({ color: 0x2fd0ff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false })
+      );
+      ring.position.set(x, terrainHeight(x, z) + 5 + rnd() * 4, z);
+      ring.rotation.x = Math.PI / 2;
+      this.group.add(ring);
+    }
+    // Map-Special: Boost-Pads (kurzer Tempo-Schub beim Drüberlaufen)
+    this.boostPads = [];
+    for (const [bx, bz] of [[-6, 2], [10, -14], [-18, 16], [20, 24], [4, 34], [-28, -10]]) {
+      const pad = new THREE.Mesh(
+        new THREE.CircleGeometry(1.3, 24),
+        new THREE.MeshBasicMaterial({ color: 0x2fd0ff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false })
+      );
+      pad.rotation.x = -Math.PI / 2;
+      pad.position.set(bx, terrainHeight(bx, bz) + 0.1, bz);
+      pad.renderOrder = 2;
+      this.group.add(pad);
+      this.boostPads.push({ x: bx, z: bz, cd: 0, mesh: pad });
+    }
+  }
+
+  _buildNeonLamp(x, z, color) {
+    const y = terrainHeight(x, z);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 4.4, 6), new THREE.MeshStandardMaterial({ color: 0x1c1e26, roughness: 0.7, metalness: 0.5 }));
+    pole.position.set(x, y + 2.2, z);
+    pole.castShadow = true;
+    this.group.add(pole);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.4, 6), new THREE.MeshBasicMaterial({ color }));
+    tube.rotation.z = Math.PI / 2;
+    tube.position.set(x, y + 4.4, z);
+    this.group.add(tube);
+    const pool = new THREE.Mesh(
+      new THREE.PlaneGeometry(6, 6),
+      new THREE.MeshBasicMaterial({ map: glowTexture(), color, transparent: true, opacity: 0.18, depthWrite: false, blending: THREE.AdditiveBlending })
+    );
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.set(x, y + 0.08, z);
+    pool.renderOrder = 2;
+    this.group.add(pool);
+    const light = new THREE.PointLight(color, 2.2, 22, 2);
+    light.position.set(x, y + 4.2, z);
+    this.group.add(light);
+    this.torchLights.push({ light, flame: null, base: 2.2, x, z, seed: Math.random() * 10 });
+  }
+
+  // 2.-Weltkrieg-Front: Sandsack-Stellungen, Panzersperren, Stacheldraht, Backstein-Ruinen, Feuertonnen
+  _warFeatures() {
+    let seed = 999;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    // Sandsack-Stellungen
+    const sandMat = new THREE.MeshStandardMaterial({ color: 0x6a5c3c, roughness: 1, bumpMap: bumpTexture(), bumpScale: 0.3 });
+    const sandGeo = new THREE.SphereGeometry(0.42, 8, 6);
+    const walls = [[-16, 8, 0.3], [14, -6, 1.2], [-8, -18, 2.2], [20, 14, 0.8], [-28, 20, 1.6], [4, 26, 0.1]];
+    for (const [wx, wz, rot] of walls) {
+      const gW = new THREE.Group();
+      for (let row = 0; row < 2; row++) {
+        for (let k = 0; k < 6; k++) {
+          const bag = new THREE.Mesh(sandGeo, sandMat);
+          bag.scale.set(1.5, 0.7, 0.9);
+          bag.position.set(-2.1 + k * 0.85 + (row % 2) * 0.4, 0.28 + row * 0.42, 0);
+          bag.rotation.y = (rnd() - 0.5) * 0.3;
+          gW.add(bag);
+        }
+      }
+      gW.rotation.y = rot;
+      gW.position.set(wx, terrainHeight(wx, wz), wz);
+      gW.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      this.group.add(gW);
+      this.colliders.push({ x: wx, z: wz, r: 1.6 });
+    }
+    // Panzersperren (gekreuzte Stahlträger)
+    const steel = new THREE.MeshStandardMaterial({ color: 0x2c2e30, roughness: 0.6, metalness: 0.7 });
+    const beam = new THREE.BoxGeometry(0.22, 2.6, 0.22);
+    const hedgehogs = [[-22, -6], [10, 18], [26, -2], [-4, -28], [-32, 8], [18, -22], [2, 12]];
+    for (const [hx, hz] of hedgehogs) {
+      const hg = new THREE.Group();
+      for (const tilt of [[0.9, 0.3], [-0.5, 1.2], [-0.5, -0.9]]) {
+        const b = new THREE.Mesh(beam, steel);
+        b.rotation.set(tilt[0], 0, tilt[1]);
+        hg.add(b);
+      }
+      hg.rotation.y = rnd() * Math.PI;
+      hg.position.set(hx, terrainHeight(hx, hz) + 0.6, hz);
+      hg.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      this.group.add(hg);
+      this.colliders.push({ x: hx, z: hz, r: 0.9 });
+    }
+    // Stacheldraht-Linien: schiefe Holzpfosten + gespannte Drähte
+    const postGeo = new THREE.CylinderGeometry(0.06, 0.08, 1.3, 5);
+    const wood = new THREE.MeshStandardMaterial({ color: 0x2c2416, roughness: 1 });
+    const wire = new THREE.MeshStandardMaterial({ color: 0x3a3c3e, roughness: 0.5, metalness: 0.6 });
+    const lines = [[-30, -18, 0.4], [22, 24, 1.9], [-12, 30, 0.9], [30, 6, 2.6]];
+    for (const [lx, lz, rot] of lines) {
+      const lg = new THREE.Group();
+      for (let k = 0; k < 4; k++) {
+        const pMesh = new THREE.Mesh(postGeo, wood);
+        pMesh.position.set(k * 2.2 - 3.3, 0.65, 0);
+        pMesh.rotation.z = (rnd() - 0.5) * 0.2;
+        lg.add(pMesh);
+      }
+      for (let w = 0; w < 2; w++) {
+        const wr = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 6.8, 4), wire);
+        wr.rotation.z = Math.PI / 2;
+        wr.position.set(0, 0.45 + w * 0.45, 0);
+        lg.add(wr);
+      }
+      lg.rotation.y = rot;
+      lg.position.set(lx, terrainHeight(lx, lz), lz);
+      this.group.add(lg);
+    }
+    // zerschossene Backstein-Mauerreste
+    const brick = new THREE.MeshStandardMaterial({ color: 0x5a3a30, roughness: 1, bumpMap: bumpTexture(), bumpScale: 0.5 });
+    const ruins = [[-10, 4, 0.6, 5], [16, 6, 1.4, 4], [8, -14, 2.4, 6], [-24, 30, 0.2, 4]];
+    for (const [rx, rz, rot, len] of ruins) {
+      const y = terrainHeight(rx, rz);
+      const wallG = new THREE.Group();
+      const base = new THREE.Mesh(new THREE.BoxGeometry(len, 1.1, 0.6), brick);
+      base.position.y = 0.55;
+      wallG.add(base);
+      let cx = -len / 2;
+      while (cx < len / 2 - 0.4) {
+        const w = 0.6 + rnd() * 1.0, h = 0.3 + rnd() * 1.3;
+        const seg = new THREE.Mesh(new THREE.BoxGeometry(w * 0.95, h, 0.55), brick);
+        seg.position.set(cx + w / 2, 1.1 + h / 2, 0);
+        wallG.add(seg);
+        cx += w;
+      }
+      wallG.rotation.y = rot;
+      wallG.position.set(rx, y, rz);
+      wallG.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      this.group.add(wallG);
+      this.colliders.push({ x: rx, z: rz, r: 1.4 });
+    }
+    // brennende Fässer als Lichtquellen
+    for (const [bx, bz] of [[0, 6], [-20, 24], [14, -10]]) this._buildBarrelFire(bx, bz);
+    // Map-Special: fahrbarer Panzer
+    this._buildTank(-8, 34);
+  }
+
+  // Fahrbarer Panzer (Map-Special Frontlinie). Fahr-Logik lebt in RunControl._updateMapSpecials;
+  // die Gruppe dient beim Fahren als Fahrzeug-Visual (folgt dem Spieler).
+  _buildTank(x, z) {
+    const g = new THREE.Group();
+    const olive = new THREE.MeshStandardMaterial({ color: 0x3f4a2c, roughness: 0.8, metalness: 0.3 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x24281e, roughness: 0.9 });
+    const hull = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.8, 1.7), olive);
+    hull.position.y = 0.75;
+    const turret = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.55, 1.1), olive);
+    turret.position.set(-0.2, 1.35, 0);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 2.2, 8), dark);
+    barrel.rotation.z = Math.PI / 2;
+    barrel.position.set(1.15, 1.4, 0);
+    const trackL = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.55, 0.42), dark);
+    trackL.position.set(0, 0.35, 0.95);
+    const trackR = trackL.clone();
+    trackR.position.z = -0.95;
+    g.add(hull, turret, barrel, trackL, trackR);
+    g.position.set(x, terrainHeight(x, z), z);
+    g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    this.group.add(g);
+    this.tank = { group: g, taken: false, homeX: x, homeZ: z };
+    this.tankCollider = { x, z, r: 1.6 };
+    this.colliders.push(this.tankCollider);
+  }
+
+  _buildBarrelFire(x, z) {
+    const y = terrainHeight(x, z);
+    const barrel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.42, 0.46, 1.05, 10),
+      new THREE.MeshStandardMaterial({ color: 0x35402c, roughness: 0.8, metalness: 0.4 })
+    );
+    barrel.position.set(x, y + 0.52, z);
+    barrel.castShadow = true;
+    this.group.add(barrel);
+    const flame = new THREE.Group();
+    const fo = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.9, 7), new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.85, fog: false, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const fc = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.55, 6), new THREE.MeshBasicMaterial({ color: 0xffe9a0, transparent: true, opacity: 0.95, fog: false, blending: THREE.AdditiveBlending, depthWrite: false }));
+    fc.position.y = -0.1;
+    flame.add(fo, fc);
+    flame.position.set(x, y + 1.45, z);
+    this.group.add(flame);
+    const light = new THREE.PointLight(0xff8a2a, 3.2, 30, 2);
+    light.position.set(x, y + 1.8, z);
+    this.group.add(light);
+    this.torchLights.push({ light, flame, base: 3.2, x, z, seed: Math.random() * 10 });
+    this.colliders.push({ x, z, r: 0.6 });
+  }
+
+  // Hohlweg: Stollen-Stützbögen, Wand-Fackeln, Geröll + glühendes Erz an den Wandfüßen
+  _canyonFeatures() {
+    let seed = 313;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const wood = new THREE.MeshStandardMaterial({ color: 0x2e2113, roughness: 1, bumpMap: bumpTexture(), bumpScale: 0.4 });
+    // Stützbögen in Abständen entlang des Wegs
+    for (let x = -360; x <= 360; x += 24 + Math.floor(rnd() * 12)) {
+      const gS = new THREE.Group();
+      for (const side of [-1, 1]) {
+        const postM = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 5.6, 6), wood);
+        postM.position.set(0, 2.7, side * 11.6);
+        postM.rotation.x = side * -0.12;
+        gS.add(postM);
+      }
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 24, 6), wood);
+      beam.rotation.x = Math.PI / 2;
+      beam.position.set(0, 5.4, 0);
+      gS.add(beam);
+      gS.position.set(x, terrainHeight(x, 0), 0);
+      gS.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      this.group.add(gS);
+    }
+    // Fackeln abwechselnd an beiden Wänden
+    let ti = 0;
+    for (let x = -350; x <= 350; x += 40) this._buildTorch(x, ti++ % 2 === 0 ? -10.5 : 10.5);
+    // Geröll + glühendes Magie-Erz an den Wandfüßen
+    for (let i = 0; i < 70; i++) {
+      const x = (rnd() * 2 - 1) * 360;
+      const side = rnd() > 0.5 ? 1 : -1;
+      const z = side * (9.5 + rnd() * 3);
+      if (rnd() < 0.18) {
+        this._placeOre(x, z, 0.5 + rnd() * 0.8);
+      } else {
+        const rb = new THREE.Mesh(new THREE.DodecahedronGeometry(0.5, 0), new THREE.MeshStandardMaterial({ color: 0x4c4842, roughness: 1, flatShading: true }));
+        const sc = 0.5 + rnd() * 1.1;
+        rb.scale.set(sc, sc * 0.7, sc);
+        rb.position.set(x, terrainHeight(x, z) + 0.2, z);
+        rb.rotation.set(rnd() * 3, rnd() * 6, rnd() * 3);
+        this.group.add(rb);
+      }
+    }
+    this._buildCampfire(6, 0);
+
+    // Map-Special: Schienen in der Mitte + Minen-Lore, die periodisch durchrast
+    const railMat = new THREE.MeshStandardMaterial({ color: 0x3a3c40, roughness: 0.5, metalness: 0.7 });
+    for (let rx = -370; rx < 370; rx += 10) {
+      const y = terrainHeight(rx + 5, 0);
+      for (const off of [-0.55, 0.55]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(10.2, 0.07, 0.09), railMat);
+        rail.position.set(rx + 5, y + 0.32, off);
+        this.group.add(rail);
+      }
+    }
+    const sleeperGeo = new THREE.BoxGeometry(0.22, 0.06, 1.5);
+    const sleeperMat = new THREE.MeshStandardMaterial({ color: 0x241c10, roughness: 1 });
+    const sleepers = new THREE.InstancedMesh(sleeperGeo, sleeperMat, 300);
+    const sm = new THREE.Matrix4();
+    let si = 0;
+    for (let rx = -370; rx < 370 && si < 300; rx += 2.5) {
+      sm.makeTranslation(rx, terrainHeight(rx, 0) + 0.26, 0);
+      sleepers.setMatrixAt(si++, sm);
+    }
+    sleepers.count = si;
+    this.group.add(sleepers);
+    // die Lore selbst (versteckt bis zur Durchfahrt)
+    const loreG = new THREE.Group();
+    const rust = new THREE.MeshStandardMaterial({ color: 0x4a3226, roughness: 0.8, metalness: 0.4 });
+    const cart = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.75, 1.05), rust);
+    cart.position.y = 0.75;
+    loreG.add(cart);
+    const oreLoad = new THREE.Mesh(new THREE.DodecahedronGeometry(0.42, 0), new THREE.MeshStandardMaterial({ color: 0x3a4650, roughness: 0.8, emissive: 0x1e90b4, emissiveIntensity: 0.9 }));
+    oreLoad.position.y = 1.2;
+    loreG.add(oreLoad);
+    const wheelGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.1, 10);
+    for (const [wx, wz] of [[-0.5, 0.55], [0.5, 0.55], [-0.5, -0.55], [0.5, -0.55]]) {
+      const wheel = new THREE.Mesh(wheelGeo, railMat);
+      wheel.rotation.x = Math.PI / 2;
+      wheel.position.set(wx, 0.3, wz);
+      loreG.add(wheel);
+    }
+    loreG.visible = false;
+    loreG.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    this.group.add(loreG);
+    this.lore = { group: loreG, active: false, x: 0, dir: 1, timer: 14 };
   }
 
   _buildTorch(x, z) {
@@ -888,13 +1318,22 @@ export class World {
     const trunkY = dead ? 4.5 : 3;
     const tint = new THREE.Color();
     const treeList = [];
+    const corridorVeg = this.theme.bounds === 'corridor';
     let placed = 0, tries = 0;
     while (placed < treeCount && tries < treeCount * 8) {
       tries++;
-      const a = rnd() * Math.PI * 2;
-      const dist = 32 + rnd() * 95;
-      const x = Math.cos(a) * dist, z = Math.sin(a) * dist;
-      if (Math.hypot(x, z) > BARRIER_RADIUS - 8) continue;
+      let x, z;
+      if (corridorVeg) {
+        // Bäume auf den Wällen links/rechts des Hohlwegs
+        x = (rnd() * 2 - 1) * 370;
+        z = (rnd() > 0.5 ? 1 : -1) * (15 + rnd() * 8);
+      } else {
+        const a = rnd() * Math.PI * 2;
+        const dist = 32 + rnd() * 95;
+        x = Math.cos(a) * dist;
+        z = Math.sin(a) * dist;
+        if (Math.hypot(x, z) > BARRIER_RADIUS - 8) continue;
+      }
       const y = terrainHeight(x, z);
       const sc = 0.7 + rnd() * 0.9;
       // leichte Schräglage + zufällige Drehung
@@ -969,11 +1408,17 @@ export class World {
     const grassTint = new THREE.Color();
     let gp = 0;
     for (let i = 0; i < grassCount; i++) {
-      const a = rnd() * Math.PI * 2;
-      const dist = 6 + rnd() * 110;
-      const x = Math.cos(a) * dist;
-      const z = Math.sin(a) * dist;
-      if (Math.hypot(x, z) > BARRIER_RADIUS - 4) continue;
+      let x, z;
+      if (corridorVeg) {
+        x = (rnd() * 2 - 1) * 370;
+        z = (rnd() * 2 - 1) * 12;
+      } else {
+        const a = rnd() * Math.PI * 2;
+        const dist = 6 + rnd() * 110;
+        x = Math.cos(a) * dist;
+        z = Math.sin(a) * dist;
+        if (Math.hypot(x, z) > BARRIER_RADIUS - 4) continue;
+      }
       const y = terrainHeight(x, z);
       const gs = 0.7 + rnd() * 0.9;
       const gy = dead ? 2.2 : 1; // Schilf höher
@@ -990,6 +1435,7 @@ export class World {
     this.group.add(grass);
 
     // Glühende Pilz-Cluster (Gothic-Flair; emissive -> füttert den Bloom-Pass)
+    if (this.theme.shrooms === false) return;
     const clusters = 14;
     const shroomCap = clusters * 5;
     const stemGeo = new THREE.CylinderGeometry(0.05, 0.09, 0.42, 5);
@@ -1001,9 +1447,16 @@ export class World {
     const caps = new THREE.InstancedMesh(capGeo, capMat, shroomCap);
     let sp2 = 0;
     for (let ci = 0; ci < clusters; ci++) {
-      const a = rnd() * Math.PI * 2;
-      const dist = 14 + rnd() * 95;
-      const ccx = Math.cos(a) * dist, ccz = Math.sin(a) * dist;
+      let ccx, ccz;
+      if (corridorVeg) {
+        ccx = (rnd() * 2 - 1) * 350;
+        ccz = (rnd() > 0.5 ? 1 : -1) * (9 + rnd() * 3);
+      } else {
+        const a = rnd() * Math.PI * 2;
+        const dist = 14 + rnd() * 95;
+        ccx = Math.cos(a) * dist;
+        ccz = Math.sin(a) * dist;
+      }
       const n = 3 + Math.floor(rnd() * 3);
       for (let k = 0; k < n && sp2 < shroomCap; k++) {
         const mx = ccx + (rnd() - 0.5) * 2.4;
@@ -1035,13 +1488,31 @@ export class World {
         pos.z += dz * push;
       }
     }
-    // innerhalb der Barriere halten
-    const r = Math.hypot(pos.x, pos.z);
-    const maxR = BARRIER_RADIUS - 4;
-    if (r > maxR) {
-      pos.x *= maxR / r;
-      pos.z *= maxR / r;
+    // innerhalb des Spielfelds halten (radiale Arena oder Korridor)
+    this.clampBounds(pos, 4);
+  }
+
+  // Begehbarer Bereich je Karte: radiale Arena oder schmaler Korridor entlang X
+  inBounds(x, z, m = 0) {
+    if (this.theme.bounds === 'corridor') return Math.abs(x) < CORRIDOR_LEN - m && Math.abs(z) < CORRIDOR_HALF - m;
+    return Math.hypot(x, z) < BARRIER_RADIUS - m;
+  }
+  clampBounds(o, m = 4) {
+    if (this.theme.bounds === 'corridor') {
+      o.x = Math.max(-(CORRIDOR_LEN - m), Math.min(CORRIDOR_LEN - m, o.x));
+      o.z = Math.max(-(CORRIDOR_HALF - m), Math.min(CORRIDOR_HALF - m, o.z));
+      return;
     }
+    const r = Math.hypot(o.x, o.z);
+    const maxR = BARRIER_RADIUS - m;
+    if (r > maxR) {
+      o.x *= maxR / r;
+      o.z *= maxR / r;
+    }
+  }
+  // Start-Position der Spieler (Korridor: Mitte, sonst Süd-Rand des Lagers)
+  spawnPoint() {
+    return this.theme.bounds === 'corridor' ? { x: 0, z: 0 } : { x: 0, z: 50 };
   }
 
   // --------------------------------------------------------------- Update
@@ -1050,6 +1521,12 @@ export class World {
     if (this.barrierMat) this.barrierMat.uniforms.uTime.value = elapsed;
     this._updateWeather(dt, elapsed, center);
     this._updateTreeFade(dt, center);
+    // Boost-Pads pulsieren (Client kennt keine Cooldowns -> reiner Look)
+    if (this.boostPads) {
+      for (const pad of this.boostPads) {
+        pad.mesh.material.opacity = pad.cd > 0 ? 0.14 : 0.4 + Math.sin(elapsed * 5) * 0.15;
+      }
+    }
     // Wasseroberflächen schimmern leicht
     if (this._waterMat) this._waterMat.emissiveIntensity = 0.22 + Math.sin(elapsed * 1.1) * 0.1;
     // Fackel-Flackern

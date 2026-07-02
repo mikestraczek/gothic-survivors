@@ -40,7 +40,7 @@ export function _wireUI(g) {
   document.getElementById('leaderboard-button').addEventListener('click', () => g._openLeaderboard());
   document.getElementById('achievements-button').addEventListener('click', () => {
     document.getElementById('start-screen').classList.add('hidden');
-    document.getElementById('ach-list').innerHTML = g.meta.achievementsHtml();
+    document.getElementById('ach-list').innerHTML = g.meta.statsHtml() + g.meta.achievementsHtml();
     document.getElementById('achievements-screen').classList.remove('hidden');
   });
   document.getElementById('ach-back').addEventListener('click', () => {

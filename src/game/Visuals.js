@@ -187,6 +187,34 @@ export function _updateHeroSprites(g) {
     g.remoteShadow.position.set(g.remotePlayer.position.x, g.remotePlayer.position.y + 0.06, g.remotePlayer.position.z);
   }
 }
+// Alle Effekt-/Material-Shader einmal rendern (der Ladescreen verdeckt das) —
+// verhindert die klassischen Mikro-Ruckler bei der ersten Explosion/Telegraph/Zahl im Kampf.
+export function _prewarm(g) {
+  const fx = g.fx;
+  fx.record = false;
+  fx.ring(0, 0, 2, 0xffffff);
+  fx.slash(0, 0, 1.5, 0);
+  fx.explosion(0, 0, 2);
+  fx.bolt(0, 0);
+  fx.telegraph(0, 0, 2, 0.4, 0);
+  fx.telegraphSafe(3, 0, 2, 0.4, 0);
+  fx.telegraphCone(0, 3, 1, 0, 3, 0.4, 0);
+  fx.sparksBurst(0, 1, 0, 0xffffff, 6, 3);
+  fx.dmgNumber(0, 2, 0, 123);
+  g.weapons.prewarm();
+  g.enemies._spawnBolt(0, 0, 0.1, 0, 1, 'prewarm');
+  g.gems.spawn(0, 0, 1);
+  for (const t of ['heal', 'magnet', 'nova', 'greed', 'chest', 'shrine']) g.pickups.spawnAt(t, 0, 0);
+  fx.update(0.016);
+  g.composer.render();
+  // aufräumen: Effekte auslaufen lassen, Prewarm-Objekte entfernen
+  for (let i = 0; i < 60; i++) fx.update(0.1);
+  g.weapons.prewarmCleanup();
+  g.enemies.hideBolts();
+  g.gems.reset();
+  g.pickups.reset();
+}
+
 export function _onResize(g) {
   const w = window.innerWidth;
   const h = window.innerHeight;

@@ -98,10 +98,20 @@ Jedes Level besteht aus **3 Phasen** — pro Phase gilt es eine **Kill-Quota** z
 erfüllen (55/80/110), dann erscheint der **Anführer** (Mini-Boss) der Phase.
 Nach der dritten Phase kommt der **finale Boss** der Karte — besiegst du ihn,
 ist das **Level abgeschlossen** (danach optional **Endlos-Modus**). Es gibt
-**2 Karten** (Tal der Kolonie; Sumpf der Bruderschaft — per Achievement
-freischaltbar) mit jeweils **2 Schwierigkeitsgraden** (Normal/Schwer). Held,
-Karte & Schwierigkeit wählst du vor dem Start (im Koop wählt der Host Karte &
-Schwierigkeit, jeder Spieler seinen eigenen Helden).
+**5 Karten** mit jeweils **2 Schwierigkeitsgraden** (Normal/Schwer) — und jede
+hat ihr eigenes **Map-Special**:
+
+| Karte | Stil | Special |
+| ----- | ---- | ------- |
+| Tal der Kolonie | Gothic-Tal, Altes Lager | ⚡ Die Barriere schleudert Blitze auf Gegner |
+| Sumpf der Bruderschaft (Unlock) | Morast, Regen | 🥾 Tümpel bremsen dich — Positionsspiel! |
+| Der Hohlweg | schmaler, (gefühlt) endloser Pass | 🛤 Eine Minen-Lore rast periodisch durchs Gleis |
+| Neon-Distrikt 7 | Cyberpunk, Regen & Neon | ⚡ Boost-Pads geben Tempo-Schübe |
+| Frontlinie 1944 | Weltkriegs-Schlachtfeld | 🛡 **Fahrbarer Panzer**: überrollt Gegner, Kanone feuert automatisch |
+
+Held, Karte & Schwierigkeit wählst du vor dem Start (im Koop wählt der Host
+Karte & Schwierigkeit, jeder Spieler seinen eigenen Helden). Dev-Tipp:
+`?unlock` in der URL schaltet zum Testen alles frei.
 
 ## Helden (Charakterauswahl)
 
@@ -170,8 +180,10 @@ Projektiltempo, Windschritt (Ausweichen), Vielzahl (+1 Projektil, rar).
 ## Meta-Progression (permanent)
 
 **Halle der Erzbarone** (Erz): Zähigkeit, Schnelligkeit, Macht, Panzerung,
-Hast, Magnetismus, Lebenskraft, Gier, Würfelglück. Dazu **7 Achievements**,
-die Helden, Waffen und die Sumpf-Karte freischalten (🎖 Erfolge im Menü).
+Hast, Magnetismus, Lebenskraft, Gier, Würfelglück. Dazu **7 Achievements** mit
+**Fortschrittsbalken** und einer **Gesamtstatistik** (Kills, Siege, beste
+Zeit/Stufe, Erz), die Helden, Waffen und die Sumpf-Karte freischalten
+(🎖 Erfolge im Menü).
 
 ## Optionen & Komfort
 

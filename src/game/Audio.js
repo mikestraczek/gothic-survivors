@@ -24,6 +24,16 @@ const THEMES = {
     beat: 0.46, chords: [[41, 48, 53], [40, 47, 52], [41, 48, 53], [44, 50, 56]], barsPerChord: 4,
     padType: 'sawtooth', padGain: 0.1, bass: true, melody: 0.16, melodyNotes: [65, 68, 70, 72, 75], perc: true, cutoff: 1300,
   },
+  // Neon-Distrikt: schneller Synth-Puls mit hellen Arpeggien
+  cyber: {
+    beat: 0.42, chords: [[45, 52, 57, 60], [43, 50, 55, 58], [41, 48, 53, 56], [46, 53, 58, 61]], barsPerChord: 2,
+    padType: 'sawtooth', padGain: 0.12, bass: true, melody: 0.22, melodyNotes: [69, 72, 76, 79, 81, 84], perc: true, cutoff: 2200,
+  },
+  // Frontlinie: schwerer, langsamer Marsch-Puls
+  war: {
+    beat: 0.62, chords: [[38, 45, 50], [36, 43, 48], [38, 45, 50], [34, 41, 46]], barsPerChord: 4,
+    padType: 'sawtooth', padGain: 0.1, bass: true, melody: 0.07, melodyNotes: [57, 60, 62, 65], perc: true, cutoff: 800,
+  },
 };
 
 export class GameAudio {

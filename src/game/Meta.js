@@ -17,13 +17,13 @@ const META = [
 // ---- Achievements: schalten Helden, Waffen und Karten frei ----
 // check(stats) prüft gegen die kumulierten Statistiken (über alle Runs).
 export const ACHIEVEMENTS = [
-  { id: 'first_win', name: 'Bezwinger des Tals', desc: 'Schließe ein Level ab', unlock: 'Karte: Sumpf der Bruderschaft', check: (s) => s.wins >= 1 },
-  { id: 'kills_500', name: 'Schlächter', desc: 'Erlege insgesamt 500 Gegner', unlock: 'Heldin: Die Jägerin', check: (s) => s.totalKills >= 500 },
-  { id: 'survive_10', name: 'Unbeugsam', desc: 'Überlebe 10 Minuten in einem Run', unlock: 'Held: Der Templer', check: (s) => s.bestTime >= 600 },
-  { id: 'level_20', name: 'Aufgestiegen', desc: 'Erreiche Stufe 20 in einem Run', unlock: 'Held: Der Schatten', check: (s) => s.bestLevel >= 20 },
-  { id: 'evolve', name: 'Verschmelzer', desc: 'Führe eine Waffen-Verschmelzung durch', unlock: 'Waffe: Meteor', check: (s) => s.evolves >= 1 },
-  { id: 'boss_10', name: 'Anführer-Schreck', desc: 'Besiege 10 Bosse oder Anführer', unlock: 'Waffe: Giftwolke', check: (s) => s.bossKills >= 10 },
-  { id: 'gold_1000', name: 'Erzbaron', desc: 'Sammle insgesamt 1000 Erz', unlock: 'Waffe: Wächtergeister', check: (s) => s.totalGold >= 1000 },
+  { id: 'first_win', name: 'Bezwinger des Tals', desc: 'Schließe ein Level ab', unlock: 'Karte: Sumpf der Bruderschaft', check: (s) => s.wins >= 1, prog: (s) => [Math.min(s.wins, 1), 1] },
+  { id: 'kills_500', name: 'Schlächter', desc: 'Erlege insgesamt 500 Gegner', unlock: 'Heldin: Die Jägerin', check: (s) => s.totalKills >= 500, prog: (s) => [s.totalKills, 500] },
+  { id: 'survive_10', name: 'Unbeugsam', desc: 'Überlebe 10 Minuten in einem Run', unlock: 'Held: Der Templer', check: (s) => s.bestTime >= 600, prog: (s) => [s.bestTime, 600], fmt: 'time' },
+  { id: 'level_20', name: 'Aufgestiegen', desc: 'Erreiche Stufe 20 in einem Run', unlock: 'Held: Der Schatten', check: (s) => s.bestLevel >= 20, prog: (s) => [s.bestLevel, 20] },
+  { id: 'evolve', name: 'Verschmelzer', desc: 'Führe eine Waffen-Verschmelzung durch', unlock: 'Waffe: Meteor', check: (s) => s.evolves >= 1, prog: (s) => [Math.min(s.evolves, 1), 1] },
+  { id: 'boss_10', name: 'Anführer-Schreck', desc: 'Besiege 10 Bosse oder Anführer', unlock: 'Waffe: Giftwolke', check: (s) => s.bossKills >= 10, prog: (s) => [s.bossKills, 10] },
+  { id: 'gold_1000', name: 'Erzbaron', desc: 'Sammle insgesamt 1000 Erz', unlock: 'Waffe: Wächtergeister', check: (s) => s.totalGold >= 1000, prog: (s) => [s.totalGold, 1000] },
 ];
 
 // Was hängt an welchem Achievement?
@@ -150,19 +150,44 @@ export class Meta {
     return fresh;
   }
 
-  // Achievement-Liste als HTML (für den Erfolge-Screen)
+  // Achievement-Liste als HTML (für den Erfolge-Screen) — mit Fortschrittsbalken
   achievementsHtml() {
+    const st = this.data.stats;
+    const fmtT = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
     return ACHIEVEMENTS.map((a) => {
       const done = this.hasAchievement(a.id);
+      const [cur, max] = a.prog ? a.prog(st) : [done ? 1 : 0, 1];
+      const pct = Math.min(100, Math.round((cur / max) * 100));
+      const txt = a.fmt === 'time' ? `${fmtT(Math.min(cur, max))} / ${fmtT(max)}` : `${Math.min(Math.round(cur), max).toLocaleString('de-DE')} / ${max.toLocaleString('de-DE')}`;
       return `<div class="ach-item ${done ? 'done' : ''}">
         <div class="ach-icon">${done ? '🏆' : '🔒'}</div>
         <div class="ach-text">
           <div class="ach-name">${a.name}</div>
           <div class="ach-desc">${a.desc}</div>
+          <div class="ach-progress"><div class="ach-progress-fill" style="width:${pct}%"></div></div>
+          <div class="ach-prog-txt">${done ? 'Abgeschlossen' : txt}</div>
           <div class="ach-unlock">${done ? 'Freigeschaltet' : 'Schaltet frei'}: ${a.unlock}</div>
         </div>
       </div>`;
     }).join('');
+  }
+
+  // Gesamtstatistiken als HTML (über der Erfolgs-Liste)
+  statsHtml() {
+    const st = this.data.stats;
+    const fmtT = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+    const n = (v) => (v || 0).toLocaleString('de-DE');
+    const rows = [
+      ['☠ Kills gesamt', n(st.totalKills)],
+      ['👑 Boss-Kills', n(st.bossKills)],
+      ['🏆 Siege', n(st.wins)],
+      ['⏱ Beste Zeit', fmtT(st.bestTime || 0)],
+      ['⬆ Beste Stufe', n(st.bestLevel)],
+      ['✨ Verschmelzungen', n(st.evolves)],
+      ['⛏ Erz verdient (gesamt)', n(st.totalGold)],
+      ['💰 Erz verfügbar', n(this.gold)],
+    ];
+    return `<div class="stats-grid">${rows.map(([k, v]) => `<div class="stat-row"><span>${k}</span><b>${v}</b></div>`).join('')}</div>`;
   }
 
   buy(id) {

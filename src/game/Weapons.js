@@ -155,6 +155,27 @@ export class Weapons {
     this.group.add(this.holyRing);
   }
 
+  // Shader-Prewarm: je ein Mesh pro Projektil-Material einmal rendern lassen,
+  // damit die erste echte Nutzung im Kampf keinen Kompilier-Ruckler erzeugt.
+  prewarm() {
+    const pairs = [
+      [this._bladeGeo, this._bladeMat], [this._axeGeo, this._axeMat], [this._fireGeo, this._fireMat],
+      [this._orbGeo, this._orbMat], [this._spearGeo, this._spearMat], [this._cloudGeo, this._cloudMat],
+    ];
+    this._prewarmMeshes = pairs.map(([geo, mat]) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(0, 1.2, 0);
+      this.group.add(m);
+      return m;
+    });
+    this.holyRing.visible = true;
+  }
+  prewarmCleanup() {
+    for (const m of this._prewarmMeshes || []) this.group.remove(m);
+    this._prewarmMeshes = null;
+    this.holyRing.visible = false;
+  }
+
   serialize() {
     return { owned: this.ownedList().map((w) => ({ id: w.id, level: w.level, evolved: !!w.evolved })), dealt: { ...this._dealt } };
   }

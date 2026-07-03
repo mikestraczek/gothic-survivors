@@ -94,19 +94,19 @@ export const COMBO_ICONS = {
 export const WEAPON_ICONS = { whirl: '🌀', axe: '🪓', fireball: '🔥', orbit: '✦', lightning: '⚡', frost: '❄️', spear: '🦴', poison: '☠️', holy: '✝️', daggers: '🗡️', meteor: '☄️' };
 
 export const COMBINATIONS = [
-  { base: 'whirl', consume: 'axe', name: 'Klingensturm', desc: 'Klingenwirbel + Wurfäxte zu einer verheerenden Waffe' },
-  { base: 'fireball', consume: 'lightning', name: 'Höllensturm', desc: 'Feuerbälle + Blitze zu einem Inferno' },
-  { base: 'frost', consume: 'orbit', name: 'Ewiger Winter', desc: 'Frostwelle + Wächtergeister zu eisiger Übermacht' },
-  { base: 'spear', consume: 'poison', name: 'Seuchenhagel', desc: 'Knochenspeere + Giftwolken zu tödlicher Salve' },
-  { base: 'daggers', consume: 'meteor', name: 'Sternenregen', desc: 'Schattendolche + Meteore — ein Regen aus glühenden Klingen' },
-  { base: 'holy', consume: 'daggers', name: 'Geweihte Klingen', desc: 'Weihrauch + Schattendolche — heilige, durchbohrende Aura' },
-  { base: 'meteor', consume: 'fireball', name: 'Kataklysmus', desc: 'Meteor + Feuerball — verheerender Flächeneinschlag' },
-  { base: 'holy', consume: 'lightning', name: 'Göttlicher Zorn', desc: 'Weihrauch + Blitze — strafende heilige Energie' },
+  { base: 'whirl', consume: 'axe', name: 'Klingensturm', desc: 'Der Wirbel schleudert zusätzlich Klingen nach außen' },
+  { base: 'fireball', consume: 'lightning', name: 'Höllensturm', desc: 'Jeder Feuerball-Einschlag ruft einen Blitz herab' },
+  { base: 'frost', consume: 'orbit', name: 'Ewiger Winter', desc: 'Frostwellen frieren Gegner mehr als doppelt so lange ein' },
+  { base: 'spear', consume: 'poison', name: 'Seuchenhagel', desc: 'Speere ziehen ätzende Gift-Spuren hinter sich her' },
+  { base: 'daggers', consume: 'meteor', name: 'Sternenregen', desc: 'Jede Dolch-Salve ruft zwei Mini-Meteore vom Himmel' },
+  { base: 'holy', consume: 'daggers', name: 'Geweihte Klingen', desc: 'Die Aura wirft geweihte Dolche auf den nächsten Gegner' },
+  { base: 'meteor', consume: 'fireball', name: 'Kataklysmus', desc: 'Einschläge lösen Schockwellen aus, die alles wegschleudern' },
+  { base: 'holy', consume: 'lightning', name: 'Göttlicher Zorn', desc: 'Die Aura straft Gegner regelmäßig mit heiligen Blitzen' },
   // Waffe + Passiv (3× genommen)
-  { base: 'axe', passive: 'might', passiveCount: 3, name: 'Urteil des Henkers', desc: 'Wurfaxt (max) + 3× Stärke — richtende Riesenäxte' },
-  { base: 'lightning', passive: 'proj', passiveCount: 3, name: 'Sturmruf', desc: 'Blitzschlag (max) + 3× Geschwindigkeit — das Gewitter folgt dir' },
-  { base: 'poison', passive: 'area', passiveCount: 3, name: 'Pestwind', desc: 'Giftwolke (max) + 3× Wucht — alles verwest' },
-  { base: 'orbit', passive: 'hp', passiveCount: 3, name: 'Seelenwacht', desc: 'Wächtergeister (max) + 3× Vitalität — unermüdliche Wächter' },
+  { base: 'axe', passive: 'might', passiveCount: 3, name: 'Urteil des Henkers', desc: 'Riesenäxte richten angeschlagene Gegner sofort hin' },
+  { base: 'lightning', passive: 'proj', passiveCount: 3, name: 'Sturmruf', desc: 'Blitze springen als Kette auf weitere Gegner über' },
+  { base: 'poison', passive: 'area', passiveCount: 3, name: 'Pestwind', desc: 'Giftwolken wandern mit dem Wind und verlangsamen' },
+  { base: 'orbit', passive: 'hp', passiveCount: 3, name: 'Seelenwacht', desc: 'Jeder Geister-Treffer heilt dich (Lebensraub)' },
 ];
 
 export class Weapons {
@@ -346,9 +346,15 @@ export class Weapons {
     this.whirlBlades = [];
     const lv = this.level('whirl');
     if (!lv) return;
+    // Klingensturm: goldglühende Klingen statt Stahl
+    const evolved = this.owned.whirl && this.owned.whirl.evolved;
+    if (evolved && !this._bladeMatEvo) {
+      this._bladeMatEvo = new THREE.MeshStandardMaterial({ color: 0xf0d8a0, metalness: 0.9, roughness: 0.25, emissive: 0xc88a20, emissiveIntensity: 1.1 });
+    }
+    const mat = evolved ? this._bladeMatEvo : this._bladeMat;
     const n = 2 + Math.floor(lv / 2); // wenige, mehr pro 2 Stufen
     for (let i = 0; i < n; i++) {
-      const mesh = new THREE.Mesh(this._bladeGeo, this._bladeMat);
+      const mesh = new THREE.Mesh(this._bladeGeo, mat);
       this.group.add(mesh);
       this.whirlBlades.push({ mesh, off: (i / n) * Math.PI * 2 });
     }
@@ -396,9 +402,13 @@ export class Weapons {
     c.life = life;
     c.maxLife = life;
     c.tick = 0.5;
+    c.vx = 0;
+    c.vz = 0;
+    c.slow = 0;
     c.mesh.visible = true;
     c.mesh.scale.setScalar(r * 0.7);
     c.mesh.position.set(x, c.y, z);
+    return c;
   }
 
   _spawnProjectile(kind, x, z, vx, vz, dmg, pierce, radius, life) {
@@ -424,6 +434,14 @@ export class Weapons {
     p.radius = radius;
     p.life = life;
     p.hit = new Set();
+    // Pool-Reset: Flags des vorherigen Nutzers löschen (sonst boomerangt z. B. eine Axt)
+    p.boomerang = false;
+    p.owner = null;
+    p.execute = 0;
+    p.plague = false;
+    p.storm = false;
+    p._pl = 0;
+    p.mesh.scale.setScalar(1);
     p.mesh.visible = true;
     p.mesh.position.set(x, 1.1, z);
     return p;
@@ -506,6 +524,14 @@ export class Weapons {
           this.fx.ring(player.position.x, player.position.z, r, 0xffb060);
           this.fx.slash(player.position.x, player.position.z, r, this._whirlSpin, 0xeaf2ff);
         }
+        // Klingensturm: schleudert bei jedem Wirbel zwei Klingen nach außen
+        if (w.evolved) {
+          for (let i = 0; i < 2; i++) {
+            const a = this._whirlSpin * 2.7 + i * Math.PI;
+            const pj = this._spawnProjectile('axe', player.position.x, player.position.z, Math.sin(a) * 16, Math.cos(a) * 16, dmg * 0.7, 2, 0.6 * areaMult, 0.9);
+            pj.wid = 'whirl';
+          }
+        }
       } else if (w.id === 'axe') {
         const count = s.count + extra;
         const target = enemies.nearest(player.position.x, player.position.z);
@@ -517,6 +543,11 @@ export class Weapons {
           const vz = Math.cos(a) * s.speed * player.projSpeedMult;
           const p = this._spawnProjectile('axe', player.position.x, player.position.z, vx, vz, s.damage * might, s.pierce, 0.7 * areaMult, 1.4);
           p.wid = 'axe';
+          // Urteil des Henkers: Riesenäxte richten angeschlagene Nicht-Bosse sofort hin
+          if (w.evolved) {
+            p.execute = 0.2;
+            p.mesh.scale.setScalar(1.8);
+          }
         }
       } else if (w.id === 'fireball') {
         const count = s.count + extra;
@@ -530,25 +561,38 @@ export class Weapons {
           const p = this._spawnProjectile('fire', player.position.x, player.position.z, vx, vz, s.damage * might, 0, 0.6 * areaMult, 2.2);
           p.explodeR = s.area * areaMult;
           p.wid = 'fireball';
+          p.storm = w.evolved; // Höllensturm: Einschlag ruft einen Blitz
         }
       } else if (w.id === 'lightning') {
         const count = s.count + extra;
-        const candidates = enemies.inRadius(player.position.x, player.position.z, s.range);
+        // .slice(): inRadius liefert einen WIEDERVERWENDETEN Puffer — der innere Aufruf
+        // unten würde die Kandidatenliste sonst mitten in der Schleife überschreiben
+        const candidates = enemies.inRadius(player.position.x, player.position.z, s.range).slice();
         for (let i = 0; i < count && candidates.length; i++) {
           const e = candidates[Math.floor(Math.random() * candidates.length)];
           if (!e.alive) continue;
           if (this.fx) this.fx.bolt(e.x, e.z, 0xcfe6ff);
-          for (const t of enemies.inRadius(e.x, e.z, s.area * areaMult)) {
+          const struck = enemies.inRadius(e.x, e.z, s.area * areaMult).slice();
+          for (const t of struck) {
             this._dmg(enemies, t, s.damage * might, null, onKill, 'lightning');
+          }
+          // Sturmruf: der Blitz springt auf einen weiteren Gegner über
+          if (w.evolved) {
+            const jump = enemies.inRadius(e.x, e.z, 9).find((c) => c.alive && c !== e && !struck.includes(c));
+            if (jump) {
+              if (this.fx) this.fx.bolt(jump.x, jump.z, 0x9fd0ff);
+              this._dmg(enemies, jump, s.damage * might * 0.6, null, onKill, 'lightning');
+            }
           }
         }
       } else if (w.id === 'frost') {
         const r = s.radius * areaMult;
+        const slowDur = w.evolved ? 3.2 : s.slow; // Ewiger Winter: friert deutlich länger ein
         for (const e of enemies.inRadius(player.position.x, player.position.z, r + 0.6)) {
-          this._dmg(enemies, e, s.damage * might, null, onKill, 'frost', s.slow);
-          if (this.fx) this.fx.sparksBurst(e.x, 0.9, e.z, 0x9fe0ff, 2, 3);
+          this._dmg(enemies, e, s.damage * might, null, onKill, 'frost', slowDur);
+          if (this.fx) this.fx.sparksBurst(e.x, 0.9, e.z, w.evolved ? 0xeaffff : 0x9fe0ff, 2, 3);
         }
-        if (this.fx) this.fx.ring(player.position.x, player.position.z, r, 0x6ad0ff);
+        if (this.fx) this.fx.ring(player.position.x, player.position.z, r, w.evolved ? 0xeaffff : 0x6ad0ff);
       } else if (w.id === 'spear') {
         const count = s.count + extra;
         const target = enemies.nearest(player.position.x, player.position.z);
@@ -565,17 +609,45 @@ export class Weapons {
           p.speed = sp;
           p.owner = player;
           p.wid = 'spear';
+          p.plague = w.evolved && i < 2; // Seuchenhagel: die vorderen Speere ziehen Gift-Spuren
         }
       } else if (w.id === 'poison') {
         const target = enemies.nearest(player.position.x, player.position.z, 30);
         const tx = target ? target.x : player.position.x;
         const tz = target ? target.z : player.position.z;
         const ty = target ? target.y : player.position.y;
-        this._spawnCloud(tx, tz, s.radius * areaMult, s.damage * might, s.life, ty);
+        const c = this._spawnCloud(tx, tz, s.radius * areaMult, s.damage * might, s.life, ty);
+        // Pestwind: Wolken treiben mit dem Wind und verlangsamen Gegner
+        if (w.evolved && c) {
+          const wa = Math.random() * Math.PI * 2;
+          c.vx = Math.cos(wa) * 1.6;
+          c.vz = Math.sin(wa) * 1.6;
+          c.slow = 1.0;
+        }
       } else if (w.id === 'holy') {
         const r = s.radius * areaMult;
         for (const e of enemies.inRadius(player.position.x, player.position.z, r)) {
           this._dmg(enemies, e, s.damage * might, null, onKill, 'holy');
+        }
+        if (w.evolved && w.evoName === 'Geweihte Klingen') {
+          // wirft jeden Tick einen geweihten Dolch auf den nächsten Gegner
+          const t = enemies.nearest(player.position.x, player.position.z, 22);
+          if (t) {
+            const a = Math.atan2(t.x - player.position.x, t.z - player.position.z);
+            const pj = this._spawnProjectile('axe', player.position.x, player.position.z, Math.sin(a) * 26, Math.cos(a) * 26, s.damage * might * 2.2, 3, 0.5 * areaMult, 1.2);
+            pj.wid = 'holy';
+          }
+        } else if (w.evolved && w.evoName === 'Göttlicher Zorn') {
+          // jeder zweite Tick: strafender Blitz auf einen Gegner im erweiterten Umkreis
+          w._zorn = (w._zorn || 0) + 1;
+          if (w._zorn % 2 === 0) {
+            const cand = enemies.inRadius(player.position.x, player.position.z, r * 1.6);
+            if (cand.length) {
+              const t = cand[Math.floor(Math.random() * cand.length)];
+              if (this.fx) this.fx.bolt(t.x, t.z, 0xfff0b0);
+              this._dmg(enemies, t, s.damage * might * 3, null, onKill, 'holy');
+            }
+          }
         }
       } else if (w.id === 'daggers') {
         const count = s.count + extra;
@@ -587,15 +659,32 @@ export class Weapons {
           const p = this._spawnProjectile('axe', player.position.x, player.position.z, Math.sin(a) * sp, Math.cos(a) * sp, s.damage * might, s.pierce, 0.5 * areaMult, 1.3);
           p.wid = 'daggers';
         }
+        // Sternenregen: jede Salve ruft zwei Mini-Meteore auf zufällige Gegner
+        if (w.evolved) {
+          const cands = enemies.inRadius(player.position.x, player.position.z, 20).slice();
+          for (let k = 0; k < 2 && cands.length; k++) {
+            const t = cands[Math.floor(Math.random() * cands.length)];
+            if (!t.alive) continue;
+            if (this.fx) this.fx.explosion(t.x, t.z, 1.7, 0x9fd8ff);
+            for (const q of enemies.inRadius(t.x, t.z, 1.7)) this._dmg(enemies, q, s.damage * might * 1.2, null, onKill, 'daggers');
+          }
+        }
       } else if (w.id === 'meteor') {
         const count = s.count + extra;
-        const candidates = enemies.inRadius(player.position.x, player.position.z, s.range);
+        const candidates = enemies.inRadius(player.position.x, player.position.z, s.range).slice(); // Puffer-Kopie (siehe lightning)
         for (let i = 0; i < count && candidates.length; i++) {
           const e = candidates[Math.floor(Math.random() * candidates.length)];
           if (!e.alive) continue;
           const ar = s.area * areaMult;
-          for (const t of enemies.inRadius(e.x, e.z, ar)) this._dmg(enemies, t, s.damage * might, { x: t.x - e.x, z: t.z - e.z }, onKill, 'meteor');
+          for (const t of enemies.inRadius(e.x, e.z, ar).slice()) this._dmg(enemies, t, s.damage * might, { x: t.x - e.x, z: t.z - e.z }, onKill, 'meteor');
           if (this.fx) this.fx.explosion(e.x, e.z, ar, 0xff8a30);
+          // Kataklysmus: Schockwelle — weiter Rückstoß + kurze Verlangsamung
+          if (w.evolved) {
+            for (const t of enemies.inRadius(e.x, e.z, ar * 1.8)) {
+              this._dmg(enemies, t, s.damage * might * 0.25, { x: (t.x - e.x) * 5, z: (t.z - e.z) * 5 }, onKill, 'meteor', 0.9);
+            }
+            if (this.fx) this.fx.ring(e.x, e.z, ar * 1.8, 0xffc46a);
+          }
         }
       }
     }
@@ -616,12 +705,16 @@ export class Weapons {
       c.life -= dt;
       c.tick -= dt;
       const k = Math.max(0, c.life / c.maxLife);
+      if (c.vx || c.vz) { // Pestwind: Drift
+        c.x += c.vx * dt;
+        c.z += c.vz * dt;
+      }
       c.mesh.position.set(c.x, this._cloudY(c) + Math.sin(this.elapsed * 2 + c.x) * 0.1, c.z);
       c.mesh.scale.setScalar(c.r * (0.7 + 0.3 * k));
       c.mesh.material = this._cloudMat;
       if (c.tick <= 0) {
         c.tick = 0.5;
-        for (const e of enemies.inRadius(c.x, c.z, c.r)) this._dmg(enemies, e, c.dmg, null, onKill, 'poison');
+        for (const e of enemies.inRadius(c.x, c.z, c.r)) this._dmg(enemies, e, c.dmg, null, onKill, 'poison', c.slow || undefined);
       }
       if (c.life <= 0) {
         c.alive = false;
@@ -662,7 +755,9 @@ export class Weapons {
           if (this.elapsed - last > 0.35) {
             e._orbHit = this.elapsed;
             this._dmg(enemies, e, dmg, { x: (e.x - ox) * 3, z: (e.z - oz) * 3 }, onKill, 'orbit');
-            if (this.fx) this.fx.sparksBurst(e.x, 1.0, e.z, 0x9fd8ff, 3, 4);
+            const evoOrbit = this.owned.orbit && this.owned.orbit.evolved;
+            if (evoOrbit) player.heal(1); // Seelenwacht: jeder Geister-Treffer heilt
+            if (this.fx) this.fx.sparksBurst(e.x, 1.0, e.z, evoOrbit ? 0x8ff0a0 : 0x9fd8ff, 3, 4);
           }
         }
       }
@@ -698,6 +793,15 @@ export class Weapons {
       p.mesh.position.set(p.x, 1.1, p.z);
       p.mesh.rotation.y += dt * 18;
       p.mesh.rotation.x += dt * 12;
+      // Seuchenhagel: Gift-Spur entlang der Flugbahn
+      if (p.plague) {
+        p._pl = (p._pl || 0) + dt;
+        if (p._pl > 0.3) {
+          p._pl = 0;
+          const gy = this.fx && this.fx.heightAt ? this.fx.heightAt(p.x, p.z) : 0;
+          this._spawnCloud(p.x, p.z, 1.1, p.dmg * 0.12, 1.3, gy);
+        }
+      }
       // Partikel-Schweife
       if (this.fx) {
         p._tr = (p._tr || 0) + dt;
@@ -724,7 +828,13 @@ export class Weapons {
           break;
         } else {
           p.hit.add(e);
-          this._dmg(enemies, e, p.dmg, { x: p.vx * 0.3, z: p.vz * 0.3 }, onKill, p.wid || 'axe');
+          let hitDmg = p.dmg;
+          // Urteil des Henkers: Exekution — angeschlagene Nicht-Bosse sterben sofort
+          if (p.execute && !e.def.boss && e.hp / e.maxHp < p.execute) {
+            hitDmg = e.hp + (e.shield || 0) + 999;
+            if (this.fx) this.fx.slash(e.x, e.z, 1.6, 0, 0xffd24a);
+          }
+          this._dmg(enemies, e, hitDmg, { x: p.vx * 0.3, z: p.vz * 0.3 }, onKill, p.wid || 'axe');
           if (this.fx) this.fx.sparksBurst(e.x, 1.1, e.z, 0xffe0a0, 5, 5);
           p.pierce--;
           if (p.pierce < 0) {
@@ -742,6 +852,13 @@ export class Weapons {
     if (this.fx) this.fx.explosion(p.x, p.z, r, 0xffa030);
     for (const e of enemies.inRadius(p.x, p.z, r)) {
       this._dmg(enemies, e, p.dmg, { x: (e.x - p.x) * 2, z: (e.z - p.z) * 2 }, onKill, 'fireball');
+    }
+    // Höllensturm: Blitz schlägt in den Krater ein (+50% Blitzschaden, etwas größerer Radius)
+    if (p.storm) {
+      if (this.fx) this.fx.bolt(p.x, p.z, 0xcfe6ff);
+      for (const e of enemies.inRadius(p.x, p.z, r * 1.25)) {
+        this._dmg(enemies, e, p.dmg * 0.5, null, onKill, 'fireball');
+      }
     }
   }
 

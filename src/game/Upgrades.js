@@ -1,4 +1,4 @@
-import { WEAPON_DEFS, COMBINATIONS } from './Weapons.js';
+import { WEAPON_DEFS, COMBINATIONS, COMBO_ICONS } from './Weapons.js';
 
 const MAX_WEAPONS = 4;
 
@@ -200,7 +200,7 @@ export class Upgrades {
     const second = c.consume
       ? wi(c.consume)
       : `${PASSIVE_ICON[c.passive] || '◆'} ${c.passiveCount || 3}× ${(PASSIVE_INFO[c.passive] && PASSIVE_INFO[c.passive].name) || c.passive}`;
-    return `<span class="combo-src">${wi(c.base)}</span> <span class="combo-plus">+</span> <span class="combo-src">${second}</span> <span class="combo-arrow">→</span> <span class="combo-res">✨ ${c.name}</span>`;
+    return `<span class="combo-src">${wi(c.base)}</span> <span class="combo-plus">+</span> <span class="combo-src">${second}</span> <span class="combo-arrow">→</span> <span class="combo-res">${COMBO_ICONS[c.name] || '✨'} ${c.name}</span>`;
   }
 
   // Liste aller möglichen Kombinationen (für das Hauptmenü)
@@ -215,7 +215,7 @@ export class Upgrades {
       <p class="lvl-sub">Verschmilz zwei Waffen zu einer stärkeren — danach wird ein Waffenslot frei.</p>
       <div class="lvl-choices">
         <div class="lvl-choice combo-card">
-          <div class="lc-icon">✨</div>
+          <div class="lc-icon">${COMBO_ICONS[combo.name] || '✨'}</div>
           <div class="lc-text"><div class="lc-title">${combo.name}</div><div class="lc-sub">${combo.desc}</div><div class="combo-merge">${this._comboLine(combo)}</div></div>
         </div>
       </div>

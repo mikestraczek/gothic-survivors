@@ -170,6 +170,13 @@ Schatten werden über **Achievements** freigeschaltet.
 **Verschmelzungen (12):** Zwei Rezept-Formen — **zwei Waffen** (beide auf
 Maximalstufe; die zweite wird verbraucht, ein Slot wird frei) oder **Waffe +
 Passiv** (Maximalstufe + Passiv 3× genommen; kein Slot frei, Passiv bleibt).
+Jede Verschmelzung hat neben stärkeren Werten einen **eigenen Zusatzeffekt**:
+Kettenblitze (Sturmruf), Gift-Spuren hinter Speeren (Seuchenhagel), Exekution
+angeschlagener Gegner (Urteil des Henkers), Lebensraub (Seelenwacht),
+Blitzeinschläge im Feuerball-Krater (Höllensturm), Schockwellen (Kataklysmus),
+wandernde Giftwolken (Pestwind), Dolch- und Blitz-Auren (Geweihte Klingen /
+Göttlicher Zorn), Mini-Meteore (Sternenregen), Tiefkühlung (Ewiger Winter) und
+goldene Wurfklingen (Klingensturm).
 Beispiele: Klingenwirbel + Wurfaxt → *Klingensturm*, Wurfaxt + 3× Stärke →
 *Urteil des Henkers*. Die Übersicht aller Rezepte gibt es im Menü unter
 **Kombinationen**.

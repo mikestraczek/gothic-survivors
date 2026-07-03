@@ -167,7 +167,7 @@ Schatten werden über **Achievements** freigeschaltet.
 | 🗡️ **Schattendolche** | Fächer schneller, durchbohrender Dolche |
 | ☄️ **Meteor** | Einschläge mit Flächenschaden (Unlock) |
 
-**Verschmelzungen (12):** Zwei Rezept-Formen — **zwei Waffen** (beide auf
+**Verschmelzungen (16):** Zwei Rezept-Formen — **zwei Waffen** (beide auf
 Maximalstufe; die zweite wird verbraucht, ein Slot wird frei) oder **Waffe +
 Passiv** (Maximalstufe + Passiv 3× genommen; kein Slot frei, Passiv bleibt).
 Jede Verschmelzung hat neben stärkeren Werten einen **eigenen Zusatzeffekt**:
@@ -176,7 +176,12 @@ angeschlagener Gegner (Urteil des Henkers), Lebensraub (Seelenwacht),
 Blitzeinschläge im Feuerball-Krater (Höllensturm), Schockwellen (Kataklysmus),
 wandernde Giftwolken (Pestwind), Dolch- und Blitz-Auren (Geweihte Klingen /
 Göttlicher Zorn), Mini-Meteore (Sternenregen), Tiefkühlung (Ewiger Winter) und
-goldene Wurfklingen (Klingensturm).
+goldene Wurfklingen (Klingensturm), einfrierende Eisspeere (Gletscherdorn),
+ein ansaugender Klingen-Sog (Mahlstrom), Schutzschilde (Schutzsegen) und
+heilende Felder (Quell des Lebens). Jede Waffe hat mindestens 2 Rezepte.
+Neu dabei: **💚 Lebensfunke** — heilt dich und im Koop deine Verbündeten.
+Karten im Level-Up zeigen an, wenn eine Wahl zu einer **Kombination mit deinem
+Bestand** führen würde.
 Beispiele: Klingenwirbel + Wurfaxt → *Klingensturm*, Wurfaxt + 3× Stärke →
 *Urteil des Henkers*. Die Übersicht aller Rezepte gibt es im Menü unter
 **Kombinationen**.
@@ -196,6 +201,11 @@ Zeit/Stufe, Erz), die Helden, Waffen und die Sumpf-Karte freischalten
 (🎖 Erfolge im Menü).
 
 ## Optionen & Komfort
+
+Die **Bestenliste** ist in **Solo und Koop** geteilt — Koop-Runs erscheinen
+als ein gemeinsamer Team-Eintrag („Anna & Ben", Kills/Erz beider Spieler
+zusammengezählt). Eine **Auto-Qualität** senkt bei schwachen Geräten die
+Renderauflösung dynamisch (und hebt sie wieder an), damit es flüssig bleibt.
 
 ⚙ **Optionen** (Menü & Pause): Musik-/Effekt-Lautstärke, **Renderauflösung**
 (50–100 %, für schwächere Geräte), Screen Shake, Schadenszahlen, Schatten,

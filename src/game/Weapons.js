@@ -906,9 +906,12 @@ export class Weapons {
         this._killProj(p);
         continue;
       }
-      const targets = enemies.inRadius(p.x, p.z, p.radius);
+      // Treffer gegen den KÖRPER des Gegners, nicht nur sein Zentrum — sonst fliegen
+      // Projektile durch große Gegner (Trolle!) hindurch
+      const targets = enemies.inRadius(p.x, p.z, p.radius + 1.6);
       for (const e of targets) {
         if (p.hit.has(e)) continue;
+        if (Math.hypot(e.x - p.x, e.z - p.z) > p.radius + (e.def.radius || 0.5)) continue;
         if (p.kind === 'fire') {
           this._explode(p, enemies, onKill);
           this._killProj(p);

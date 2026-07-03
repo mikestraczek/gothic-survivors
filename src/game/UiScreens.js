@@ -50,6 +50,8 @@ export function _wireUI(g) {
   document.getElementById('lb-back').addEventListener('click', () => { document.getElementById('leaderboard-screen').classList.add('hidden'); g._showMenu(); });
   document.getElementById('lb-tab-time').addEventListener('click', () => { document.getElementById('lb-tab-time').classList.add('active'); document.getElementById('lb-tab-kills').classList.remove('active'); g._renderLeaderboard('time'); });
   document.getElementById('lb-tab-kills').addEventListener('click', () => { document.getElementById('lb-tab-kills').classList.add('active'); document.getElementById('lb-tab-time').classList.remove('active'); g._renderLeaderboard('kills'); });
+  document.getElementById('lb-mode-solo').addEventListener('click', () => { g._lbMode = 'solo'; document.getElementById('lb-mode-solo').classList.add('active'); document.getElementById('lb-mode-coop').classList.remove('active'); g._renderLeaderboard(g._lbSort || 'time'); });
+  document.getElementById('lb-mode-coop').addEventListener('click', () => { g._lbMode = 'coop'; document.getElementById('lb-mode-coop').classList.add('active'); document.getElementById('lb-mode-solo').classList.remove('active'); g._renderLeaderboard(g._lbSort || 'time'); });
   document.getElementById('map-start').addEventListener('click', () => { document.getElementById('map-screen').classList.add('hidden'); g.startRun(g._selMap, g._selDiff); });
   document.getElementById('map-back').addEventListener('click', () => { document.getElementById('map-screen').classList.add('hidden'); g._showMenu(); });
   document.getElementById('win-menu').addEventListener('click', () => { document.getElementById('win-screen').classList.add('hidden'); g._quitToMenu(); });
@@ -249,18 +251,25 @@ export function _openLeaderboard(g) {
 // Server-Bestenliste laden (Postgres); leer/offline -> lokale Liste anzeigen
 export async function _renderLeaderboard(g, sortBy) {
   g._lbSort = sortBy;
+  const mode = g._lbMode || 'solo';
+  const wantCoop = mode === 'coop';
   const el = document.getElementById('lb-list');
   el.innerHTML = '<div class="lb-empty">Lade…</div>';
   let server = null;
   try {
-    const r = await fetch(`/api/scores?sort=${sortBy}&limit=15`);
+    const r = await fetch(`/api/scores?sort=${sortBy}&limit=50`);
     if (r.ok) { const data = await r.json(); if (Array.isArray(data)) server = data; }
   } catch (e) { /* Server nicht erreichbar */ }
-  if (g._lbSort !== sortBy) return; // Tab wurde inzwischen gewechselt
-  if (server && server.length) { g._renderLbRows(el, server, true); return; }
+  if (g._lbSort !== sortBy || (g._lbMode || 'solo') !== mode) return; // Tab wurde inzwischen gewechselt
+  const byMode = (list) => list.filter((s) => !!s.coop === wantCoop);
+  if (server && server.length) {
+    const rows = byMode(server);
+    if (rows.length) { g._renderLbRows(el, rows, true); return; }
+  }
   // leer oder offline -> lokale Liste
   let local = [];
   try { local = JSON.parse(localStorage.getItem('gothicScores') || '[]'); } catch (e) {}
+  local = byMode(local);
   local.sort((a, b) => (sortBy === 'kills' ? b.kills - a.kills : b.time - a.time));
   g._renderLbRows(el, local.slice(0, 15), false);
 }
@@ -270,7 +279,8 @@ export function _renderLbRows(g, el, scores, global) {
   let h = `<div class="lb-src">${global ? '🌐 Global' : '💾 Lokal (Server offline)'}</div>`;
   h += `<div class="lb-row lb-head"><span class="lb-rank">#</span><span class="lb-name">Name</span><span class="lb-val">Zeit</span><span class="lb-val">Kills</span><span class="lb-val">Stufe</span></div>`;
   scores.slice(0, 15).forEach((s, i) => {
-    h += `<div class="lb-row"><span class="lb-rank">${i + 1}</span><span class="lb-name">${g._esc(s.name)}${s.coop ? ' 👥' : ''}${s.win ? ' 🏆' : ''}</span><span class="lb-val">${fmtT(s.time)}</span><span class="lb-val">${s.kills}</span><span class="lb-val">${s.level}</span></div>`;
+    const nm = s.coop ? `🤝 ${g._esc(s.name)}` : g._esc(s.name);
+    h += `<div class="lb-row"><span class="lb-rank">${i + 1}</span><span class="lb-name">${nm}${s.win ? ' 🏆' : ''}</span><span class="lb-val">${fmtT(s.time)}</span><span class="lb-val">${s.kills}</span><span class="lb-val">${s.level}</span></div>`;
   });
   el.innerHTML = h;
 }

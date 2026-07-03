@@ -3,15 +3,15 @@
 const KEY = 'gothicSurvivorsMeta_v1';
 
 const META = [
-  { id: 'hp', name: 'Zähigkeit', sub: '+20 Start-Leben/Stufe', max: 5, cost: (l) => 40 + l * 45, apply: (p, l) => (p.maxHp += 20 * l) },
-  { id: 'spd', name: 'Schnelligkeit', sub: '+4% Tempo/Stufe', max: 5, cost: (l) => 50 + l * 50, apply: (p, l) => (p.moveSpeed *= 1 + 0.04 * l) },
-  { id: 'might', name: 'Macht', sub: '+6% Schaden/Stufe', max: 5, cost: (l) => 60 + l * 55, apply: (p, l) => (p.might += 0.06 * l) },
-  { id: 'armor', name: 'Panzerung', sub: '+1 Rüstung/Stufe', max: 5, cost: (l) => 50 + l * 50, apply: (p, l) => (p.armor += l) },
-  { id: 'cd', name: 'Hast', sub: '-3% Abklingzeit/Stufe', max: 4, cost: (l) => 70 + l * 65, apply: (p, l) => (p.cooldownMult = Math.max(0.5, p.cooldownMult - 0.03 * l)) },
-  { id: 'pickup', name: 'Magnetismus', sub: '+0,5 Aufnahmeradius/Stufe', max: 4, cost: (l) => 40 + l * 40, apply: (p, l) => (p.pickupRadius += 0.5 * l) },
-  { id: 'regen', name: 'Lebenskraft', sub: '+0,3 Regen/s/Stufe', max: 4, cost: (l) => 60 + l * 55, apply: (p, l) => (p.hpRegen += 0.3 * l) },
-  { id: 'greed', name: 'Gier', sub: '+10% Erz/Stufe', max: 3, cost: (l) => 80 + l * 75, apply: (p, l) => (p.goldMult = (p.goldMult || 1) + 0.1 * l) },
-  { id: 'reroll', name: 'Würfelglück', sub: '+1 Neuwurf je Run/Stufe', max: 3, cost: (l) => 90 + l * 80, apply: (p, l) => (p.rerolls = (p.rerolls || 0) + l) },
+  { id: 'hp', name: 'Zähigkeit', sub: '+20 Start-Leben/Stufe', max: 5, cost: (l) => Math.round((40 + l * 45) * 2.5 * 1.25 ** l), apply: (p, l) => (p.maxHp += 20 * l) },
+  { id: 'spd', name: 'Schnelligkeit', sub: '+4% Tempo/Stufe', max: 5, cost: (l) => Math.round((50 + l * 50) * 2.5 * 1.25 ** l), apply: (p, l) => (p.moveSpeed *= 1 + 0.04 * l) },
+  { id: 'might', name: 'Macht', sub: '+6% Schaden/Stufe', max: 5, cost: (l) => Math.round((60 + l * 55) * 2.5 * 1.25 ** l), apply: (p, l) => (p.might += 0.06 * l) },
+  { id: 'armor', name: 'Panzerung', sub: '+1 Rüstung/Stufe', max: 5, cost: (l) => Math.round((50 + l * 50) * 2.5 * 1.25 ** l), apply: (p, l) => (p.armor += l) },
+  { id: 'cd', name: 'Hast', sub: '-3% Abklingzeit/Stufe', max: 4, cost: (l) => Math.round((70 + l * 65) * 2.5 * 1.25 ** l), apply: (p, l) => (p.cooldownMult = Math.max(0.5, p.cooldownMult - 0.03 * l)) },
+  { id: 'pickup', name: 'Magnetismus', sub: '+0,5 Aufnahmeradius/Stufe', max: 4, cost: (l) => Math.round((40 + l * 40) * 2.5 * 1.25 ** l), apply: (p, l) => (p.pickupRadius += 0.5 * l) },
+  { id: 'regen', name: 'Lebenskraft', sub: '+0,3 Regen/s/Stufe', max: 4, cost: (l) => Math.round((60 + l * 55) * 2.5 * 1.25 ** l), apply: (p, l) => (p.hpRegen += 0.3 * l) },
+  { id: 'greed', name: 'Gier', sub: '+10% Erz/Stufe', max: 3, cost: (l) => Math.round((80 + l * 75) * 2.5 * 1.25 ** l), apply: (p, l) => (p.goldMult = (p.goldMult || 1) + 0.1 * l) },
+  { id: 'reroll', name: 'Würfelglück', sub: '+1 Neuwurf je Run/Stufe', max: 3, cost: (l) => Math.round((90 + l * 80) * 2.5 * 1.25 ** l), apply: (p, l) => (p.rerolls = (p.rerolls || 0) + l) },
 ];
 
 // ---- Achievements: schalten Helden, Waffen und Karten frei ----

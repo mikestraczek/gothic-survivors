@@ -147,7 +147,7 @@ export function _onNetData(g, d) {
   if (!d) return;
   if (d.k === 'ping') { g._addPing(d.x, d.z); return; } // Team-Ping (beide Rollen)
   if (d.k === 'emote') { g._showEmote('mate', d.i); return; }
-  if (d.k === 'hero') { g._remoteHero = d.key; g._remoteLocked = d.locked || []; return; } // Heldenwahl des Gastes
+  if (d.k === 'hero') { g._remoteHero = d.key; g._remoteLocked = d.locked || []; if (d.name) g._remoteName = String(d.name).slice(0, 24); return; } // Heldenwahl + Name des Gastes
   if (d.k === 'start' && g.net.role === 'client') g._beginClientRun(d);
   else if (d.k === 'in' && g.role === 'host' && g.remotePlayer) { g.remoteInput._x = d.x; g.remoteInput._z = d.z; g.remoteInput.reviving = !!d.rv; if (d.dodge) g.remotePlayer.dodge(); if (d.mash) g.remotePlayer.mashFree(0.2 *d.mash); }
   else if (d.k === 'snap' && g.role === 'client') g._applySnapshot(d);
@@ -193,7 +193,7 @@ export function _onNetData(g, d) {
   else if (d.k === 'over' && g.role === 'client') g._clientGameOver(d);
 }
 export function _sendHeroInfo(g) {
-  g.net.send({ k: 'hero', key: g._selHero, locked: [...g.meta.lockedWeaponSet()] });
+  g.net.send({ k: 'hero', key: g._selHero, locked: [...g.meta.lockedWeaponSet()], name: g._playerName() });
 }
 // Host: geänderte Karte/Schwierigkeit im Warteraum an die Lobby-Liste melden
 export function _lobbyUpdate(g) {

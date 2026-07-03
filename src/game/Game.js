@@ -180,7 +180,7 @@ export class Game {
       },
       greed: (it, p) => {
         const who = p || this.player;
-        const g = 20 + Math.floor(this.enemies.elapsed / 30) * 10;
+        const g = 10 + Math.floor(this.enemies.elapsed / 30) * 5;
         who.gold += g * who.goldMult;
         this._toastFor(who, `Erzader — +${g} Erz`, 'gold', 'pickup');
       },
@@ -188,7 +188,7 @@ export class Game {
       chest: (it, p) => {
         const who = p || this.player;
         const wp = who === this.remotePlayer ? this.weapons2 : this.weapons;
-        const g = 25 + Math.floor(this.enemies.elapsed / 20);
+        const g = 12 + Math.floor(this.enemies.elapsed / 40);
         who.gold += g * (who.goldMult || 1);
         const upgradable = wp.ownedList().filter((w) => !wp.isMax(w.id));
         if (upgradable.length) {

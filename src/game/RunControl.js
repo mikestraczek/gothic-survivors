@@ -12,13 +12,13 @@ export function _makeOnKill(g, p) {
     p.kills++;
     g._phaseKills++;
     g.audio.kill();
-    p.gold += (e.def.gold || 0) * (e.xpMult || 1) * (p.goldMult || 1);
+    p.gold += (e.def.gold || 0) * (e.xpMult || 1) * (p.goldMult || 1) * 0.55; // Erz ist kostbar
     g.fx.sparksBurst(e.x, e.y + 0.6, e.z, e.def.boss ? 0xff5a3a : 0xc89060, e.def.boss ? 26 : 7, e.def.boss ? 9 : 5);
     if (e.def.boss) {
       g._bossKills = (g._bossKills || 0) + 1;
       const gv = Math.max(8, Math.round(e.def.xp / 6));
       for (let i = 0; i < 9; i++) g.gems.spawn(e.x + (Math.random() - 0.5) * 5, e.z + (Math.random() - 0.5) * 5, gv);
-      p.gold += 5 * (p.goldMult || 1);
+      p.gold += 3 * (p.goldMult || 1);
       g.fx.explosion(e.x, e.z, 6, 0x9a4aff);
       g.camCtrl.addShake(0.55);
       g.hitStop(0.16);
@@ -103,6 +103,7 @@ export function _installUnloadScore(g) {
 // Ergebnis eines Runs speichern: lokal (Cache) + an den Server (Postgres, best effort)
 export function _recordScore(g, win) {
   if (g._specOnly) return; // Zuschauer werten nichts
+  const coop = !!g.role;
   const entry = {
     name: g._playerName(),
     time: Math.round(g.runElapsed),
@@ -110,16 +111,25 @@ export function _recordScore(g, win) {
     level: g.player.level,
     gold: Math.floor(g.player.gold),
     map: g.mapKey,
-    coop: !!g.role,
+    coop,
     win: !!win,
     ts: Date.now(),
   };
+  // Koop: der Host meldet EINEN Team-Eintrag (beide Spieler zusammengezählt)
+  if (coop && g.role === 'host' && g.remotePlayer) {
+    entry.name = `${g._playerName()} & ${g._remoteName || 'Mitspieler'}`;
+    entry.kills = g.player.kills + (g.remotePlayer.kills || 0);
+    entry.level = Math.max(g.player.level, g.remotePlayer.level || 1);
+    entry.gold = Math.floor(g.player.gold + (g.remotePlayer.gold || 0));
+  }
   try {
     const scores = JSON.parse(localStorage.getItem('gothicScores') || '[]');
     scores.push(entry);
     scores.sort((a, b) => b.time - a.time);
     localStorage.setItem('gothicScores', JSON.stringify(scores.slice(0, 100)));
   } catch (e) { /* ignore */ }
+  // Gast postet nicht — der Team-Eintrag des Hosts zählt (verhindert Doppel-Einträge)
+  if (coop && g.role === 'client') return;
   try {
     fetch('/api/scores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }).catch(() => {});
   } catch (e) { /* offline: nur lokal */ }

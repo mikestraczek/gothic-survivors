@@ -2018,3 +2018,56 @@ button.secondary {
 .stat-row b {
   color: var(--gold-bright, #e8c86a);
 }
+
+/* ==================================================================
+   Fotosensitivitäts-Warnung + Photosafe-Modus
+   ================================================================== */
+.epilepsy-inner {
+  max-width: 560px;
+}
+.epi-icon {
+  font-size: 52px;
+  color: #ffcf5a;
+  margin-bottom: 6px;
+}
+.epi-text {
+  color: var(--parchment);
+  font-size: 14px;
+  line-height: 1.55;
+  text-align: left;
+  margin: 10px 0;
+}
+.epi-text b {
+  color: var(--gold-bright, #e8c86a);
+}
+.epi-hint {
+  font-size: 13px;
+  color: #9ac27a;
+  margin: 12px 0 6px;
+}
+/* Photosafe: pulsierende Vollbild-Overlays ruhigstellen */
+body.photosafe #lowhp-vignette,
+body.photosafe #danger-overlay,
+body.photosafe #lowhp-vignette.pulsing {
+  animation: none !important;
+  transition: opacity 0.4s ease;
+}
+body.photosafe .intro-flash {
+  display: none;
+}
+
+/* Lobby-Browser: laufende Solo-Runs (Zuschauen) */
+.lobby-item.solo-run {
+  border-color: rgba(90, 150, 240, 0.5);
+}
+.li-watch {
+  background: rgba(40, 80, 140, 0.4);
+  border: 1px solid rgba(90, 150, 240, 0.7);
+  color: #a8ccff;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.li-watch:hover {
+  background: rgba(60, 110, 190, 0.55);
+}

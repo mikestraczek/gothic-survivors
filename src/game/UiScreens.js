@@ -90,7 +90,12 @@ export function _applySettings(g) {
   g.audio.setMusicVolume(s.musicVol);
   g.camCtrl.shakeScale = s.shake ? 1 : 0;
   if (g.fx) g.fx.showDmg = s.dmgNumbers;
-  if (g.bloom) g.bloom.enabled = s.bloom;
+  if (g.fx) g.fx.photoSafe = !!s.photoSafe;
+  if (g.bloom) {
+    g.bloom.enabled = s.bloom;
+    g.bloom.strength = s.photoSafe ? 0.2 : 0.38; // Photosafe: deutlich weniger Glühen
+  }
+  document.body.classList.toggle('photosafe', !!s.photoSafe);
   if (g.pixelPass) g.pixelPass.enabled = s.pixelArt;
   if (g.renderer.shadowMap.enabled !== s.shadows) {
     g.renderer.shadowMap.enabled = s.shadows;
@@ -137,6 +142,7 @@ export function _wireSettings(g) {
   bindToggle('set-shadows', 'shadows');
   bindToggle('set-bloom', 'bloom');
   bindToggle('set-pixel', 'pixelArt');
+  bindToggle('set-photosafe', 'photoSafe');
 }
 export function _openSettings(g, from) {
   g._settingsReturn = from;
@@ -152,6 +158,7 @@ export function _openSettings(g, from) {
   document.getElementById('set-shadows').checked = s.shadows;
   document.getElementById('set-bloom').checked = s.bloom;
   document.getElementById('set-pixel').checked = s.pixelArt;
+  document.getElementById('set-photosafe').checked = !!s.photoSafe;
   document.getElementById(from === 'pause' ? 'pause-screen' : 'start-screen').classList.add('hidden');
   document.getElementById('settings-screen').classList.remove('hidden');
 }
@@ -190,6 +197,23 @@ export function _loadName(g) {
 }
 // Start: ohne gespeicherten Namen zuerst den Pflicht-Namens-Screen zeigen
 export function _bootFlow(g) {
+  // Einmalige Fotosensitivitäts-Warnung VOR allem anderen (viele Licht-/Blitzeffekte!)
+  let ack = false;
+  try { ack = localStorage.getItem('gothicEpilepsyAck') === '1'; } catch (e) {}
+  if (!ack) {
+    const scr = document.getElementById('epilepsy-screen');
+    scr.classList.remove('hidden');
+    document.getElementById('epilepsy-ok').addEventListener('click', () => {
+      try { localStorage.setItem('gothicEpilepsyAck', '1'); } catch (e) {}
+      scr.classList.add('hidden');
+      g.audio.ui();
+      _bootName(g);
+    }, { once: true });
+    return;
+  }
+  _bootName(g);
+}
+function _bootName(g) {
   let name = '';
   try { name = (localStorage.getItem('gothicName') || '').trim(); } catch (e) {}
   if (name) g._showMenu();
@@ -265,13 +289,14 @@ export function _onEsc(g) {
     g._closeSettings();
     return;
   }
+  if (g._specOnly && (g.mode === 'play' || g.mode === 'levelup')) { g._leaveOnline(); return; } // Zuschauer: ESC = raus
   if (g.mode === 'play') g._openPause();
   else if (g.mode === 'paused') g._resumeFromPause();
 }
 export function _openPause(g) {
   g.mode = 'paused';
   g.input.enabled = false;
-  if (g.role === 'host') g.net.send({ k: 'pause', on: true });
+  if (g.role === 'host' || g._broadcasting) g.net.send({ k: 'pause', on: true });
   if (g.role === 'client') g.net.send({ k: 'gpause', on: true }); // Host mit-pausieren
   const isClient = g.role === 'client';
   document.getElementById('pause-save').classList.toggle('hidden', isClient);
@@ -283,7 +308,7 @@ export function _resumeFromPause(g) {
   document.getElementById('pause-screen').classList.add('hidden');
   g.mode = 'play';
   g.input.enabled = true;
-  if (g.role === 'host') g.net.send({ k: 'pause', on: false });
+  if (g.role === 'host' || g._broadcasting) g.net.send({ k: 'pause', on: false });
   if (g.role === 'client') g.net.send({ k: 'gpause', on: false });
 }
 // Host: Gast hat sein Menü geöffnet/geschlossen -> Simulation mit-pausieren
@@ -299,6 +324,7 @@ export function _peerPause(g, on) {
   }
 }
 export function _saveAndQuit(g) {
+  if (g._broadcasting) { g.net.close(); g._broadcasting = false; g._watchers = 0; }
   g._saveRun();
   document.getElementById('pause-screen').classList.add('hidden');
   if (g.role) g.net.close();
@@ -308,6 +334,7 @@ export function _saveAndQuit(g) {
   g._showMenu();
 }
 export function _quitToMenu(g) {
+  if (g._broadcasting) { g.net.close(); g._broadcasting = false; g._watchers = 0; }
   document.getElementById('pause-screen').classList.add('hidden');
   if (g.role) g.net.close();
   g.role = null;

@@ -40,6 +40,8 @@ const URL = `http://localhost:${PORT}/`;
 
 for (const [p, nm] of [[host, 'HostSpieler'], [guest, 'GastSpieler']]) {
   await p.goto(URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await poll(p, () => window.__game && !document.getElementById('epilepsy-screen').classList.contains('hidden'), 25000);
+  await p.click('#epilepsy-ok').catch(() => {});
   await poll(p, () => !document.getElementById('name-screen').classList.contains('hidden'));
   await p.type('#player-name', nm);
   await p.click('#name-confirm');

@@ -18,6 +18,30 @@
         <div id="loading-pct" class="loading-pct">0%</div>
       </div>
 
+      <!-- Photosensitivitäts-Warnung (einmalig beim ersten Start) -->
+      <div id="epilepsy-screen" class="overlay hidden">
+        <div class="start-inner epilepsy-inner">
+          <div class="epi-icon">⚠</div>
+          <h1 class="game-title" style="font-size: 36px">FOTOSENSITIVITÄTS-WARNUNG</h1>
+          <p class="epi-text">
+            Dieses Spiel enthält <b>schnell wechselnde Lichteffekte, Blitze und
+            leuchtende Explosionen</b>. Bei einem kleinen Teil der Menschen können
+            solche Effekte epileptische Anfälle oder Bewusstseinsstörungen auslösen —
+            auch ohne bekannte Vorgeschichte.
+          </p>
+          <p class="epi-text">
+            Falls dir schwindelig wird, du Sehstörungen, Zuckungen oder
+            Orientierungsverlust bemerkst: <b>sofort aufhören zu spielen</b> und
+            ärztlichen Rat einholen. Spiele in einem gut beleuchteten Raum und mit
+            Abstand zum Bildschirm.
+          </p>
+          <p class="epi-hint">💡 In den <b>⚙ Optionen</b> gibt es „Reduzierte Lichtblitze" — das dämpft die härtesten Effekte.</p>
+          <div class="menu-buttons">
+            <button id="epilepsy-ok">Verstanden — weiter</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Pflicht-Namenseingabe (erster Screen) -->
       <div id="name-screen" class="overlay hidden">
         <div class="start-inner">
@@ -241,6 +265,10 @@
             <div class="setting-row toggle">
               <label for="set-pixel">🕹 Retro-Pixel-Filter</label>
               <input type="checkbox" id="set-pixel" />
+            </div>
+            <div class="setting-row toggle">
+              <label for="set-photosafe">⚠ Reduzierte Lichtblitze (Fotosensitivität)</label>
+              <input type="checkbox" id="set-photosafe" />
             </div>
           </div>
           <div class="menu-buttons">

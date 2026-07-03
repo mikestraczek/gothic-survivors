@@ -28,6 +28,10 @@ const poll = async (fn, timeout = 20000) => {
 };
 
 await page.goto(URL + '?unlock', { waitUntil: 'domcontentloaded', timeout: 60000 });
+
+// Fotosensitivitäts-Warnung wegklicken (erscheint bei frischem Profil zuerst)
+await poll(() => window.__game && !document.getElementById('epilepsy-screen').classList.contains('hidden'), 25000);
+await page.click('#epilepsy-ok').catch(() => {});
 await poll(() => window.__game && !document.getElementById('name-screen').classList.contains('hidden'), 30000);
 await page.type('#player-name', 'Shot');
 await page.click('#name-confirm');

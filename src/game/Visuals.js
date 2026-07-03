@@ -174,13 +174,14 @@ export function _tintHero(g, im, pl, heroKey) {
 }
 export function _updateHeroSprites(g) {
   const fr = Math.floor(g.runElapsed * 7) % SPRITE_FRAMES;
-  g.playerSprite.visible = true;
-  g._placeSprite(g.playerSprite, g.player.position, 2.9, fr, g._heroFlip(g.player, '_pFlip'));
+  // im Panzer sitzt der Held IM Fahrzeug; als Zuschauer gibt es keinen eigenen Helden
+  g.playerSprite.visible = !g.player.vehicle && !g._specOnly;
+  if (g.playerSprite.visible) g._placeSprite(g.playerSprite, g.player.position, 2.9, fr, g._heroFlip(g.player, '_pFlip'));
   g._tintHero(g.playerSprite, g.player, g.heroKey);
-  g.playerShadow.visible = true;
+  g.playerShadow.visible = !g._specOnly;
   g.playerShadow.position.set(g.player.position.x, g.player.position.y + 0.06, g.player.position.z);
-  g.remoteSprite.visible = !!g.role && !!g.remotePlayer;
-  g.remoteShadow.visible = g.remoteSprite.visible;
+  g.remoteSprite.visible = !!g.role && !!g.remotePlayer && !g.remotePlayer.vehicle;
+  g.remoteShadow.visible = !!g.role && !!g.remotePlayer;
   if (g.remoteSprite.visible) {
     g._placeSprite(g.remoteSprite, g.remotePlayer.position, 2.9, fr, g._heroFlip(g.remotePlayer, '_rFlip'));
     g._tintHero(g.remoteSprite, g.remotePlayer, g._remoteHeroKey);

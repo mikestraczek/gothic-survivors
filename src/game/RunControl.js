@@ -45,6 +45,7 @@ export function _musicTheme(g) {
 }
 // Run-Statistiken in die Meta-Progression einrechnen + neue Achievements feiern
 export function _recordMeta(g, win) {
+  if (g._specOnly) return; // Zuschauer werten nichts
   const fresh = g.meta.recordRun({
     time: g.runElapsed,
     kills: g.player.kills,
@@ -65,6 +66,7 @@ export function _recordMeta(g, win) {
 }
 // Ergebnis eines Runs speichern: lokal (Cache) + an den Server (Postgres, best effort)
 export function _recordScore(g, win) {
+  if (g._specOnly) return; // Zuschauer werten nichts
   const entry = {
     name: g._playerName(),
     time: Math.round(g.runElapsed),
@@ -317,6 +319,7 @@ export function _phaseText(g) {
   return `${ph} · ${g._phaseKills}/${g._phaseTarget()}`;
 }
 export function _winLevel(g) {
+  if (g._broadcasting) { g.net.send({ k: 'over', t: g.runElapsed, host: { lv: g.player.level, ki: g.player.kills }, guest: { lv: 0, ki: 0 }, dmg: {}, gk: g.enemies.displayName(g.player.lastHitBy) }); }
   g.mode = 'won';
   g.levelWon = true;
   g.input.enabled = false;
@@ -435,8 +438,12 @@ export function startRun(g, mapKey = g._selMap, diff = g._selDiff) {
   g.hud.toast(`${g.world.theme.name} · ${DIFFS[diff].name} — Phase 1/${PHASES}`, 'gold');
   g.input.enabled = true;
   g.mode = 'play';
+  g._specOnly = false;
+  g._broadcasting = false;
+  g._watchers = 0;
   g.audio.setMusic(g._musicTheme());
   g._playIntro();
+  g._startSoloBroadcast(); // Run im Lobby-Browser beobachtbar machen (best effort)
 }
 export function _collectXp(g, value, who) {
   g.audio.gem();
@@ -613,6 +620,7 @@ export function _dmgRowsHtml(g, dealt) {
   return h;
 }
 export function _endRun(g) {
+  if (g._broadcasting) { g.net.send({ k: 'over', t: g.runElapsed, host: { lv: g.player.level, ki: g.player.kills }, guest: { lv: 0, ki: 0 }, dmg: {}, gk: g.enemies.displayName(g.player.lastHitBy) }); }
   g.mode = 'dead';
   g.input.enabled = false;
   g.audio.setMusic('menu');

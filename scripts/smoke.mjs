@@ -42,6 +42,10 @@ const poll = async (fn, timeout = 15000) => {
 
 await page.goto(URL, { waitUntil: 'networkidle2', timeout: 30000 });
 
+// Fotosensitivitäts-Warnung wegklicken (erscheint bei frischem Profil zuerst)
+await poll(() => window.__game && !document.getElementById('epilepsy-screen').classList.contains('hidden'), 25000);
+await page.click('#epilepsy-ok').catch(() => {});
+
 // Pflicht-Namens-Screen (frisches Profil hat keinen gespeicherten Namen)
 const nameScreen = await poll(() => {
   const ns = document.getElementById('name-screen');

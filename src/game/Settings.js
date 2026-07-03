@@ -10,6 +10,7 @@ export const SETTINGS_DEFAULTS = {
   bloom: true, // Glüh-Pass
   pixelArt: false, // Retro-Pixel-Filter (Post-Pass)
   renderScale: 1, // Renderauflösung 0.5–1.0 (großer Hebel für schwache Geräte)
+  photoSafe: false, // Reduzierte Lichtblitze (Fotosensitivität)
 };
 
 export function loadSettings() {

@@ -113,7 +113,7 @@ app.get('*', (req, res) => res.sendFile(join(DIST, 'index.html')));
 const server = createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-const rooms = new Map(); // id -> { host, guest, map, diff }
+const rooms = new Map(); // id -> { host, guest, spectators[], solo, name, hero, map, diff, started }
 function id4() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let s = '';
@@ -125,8 +125,16 @@ function send(ws, obj) {
 }
 function openLobbies() {
   const list = [];
-  for (const [id, r] of rooms) if (r.host && !r.guest) list.push({ id, map: r.map, diff: r.diff });
+  for (const [id, r] of rooms) {
+    if (!r.host) continue;
+    if (r.solo) list.push({ id, kind: 'solo', map: r.map, diff: r.diff, name: r.name, hero: r.hero, t: Math.round((Date.now() - r.started) / 1000), specs: r.spectators.length });
+    else if (!r.guest) list.push({ id, kind: 'coop', map: r.map, diff: r.diff });
+  }
   return list;
+}
+function specCount(room) {
+  room.spectators = room.spectators.filter((w) => w.readyState === w.OPEN);
+  return room.spectators.length;
 }
 function broadcastLobbies() {
   const msg = JSON.stringify({ t: 'lobbies', list: openLobbies() });
@@ -142,9 +150,29 @@ wss.on('connection', (ws) => {
     if (m.t === 'create') {
       let id = id4();
       while (rooms.has(id)) id = id4();
-      rooms.set(id, { host: ws, guest: null, map: m.map || 'valley', diff: m.diff || 'normal' });
+      rooms.set(id, { host: ws, guest: null, spectators: [], map: m.map || 'valley', diff: m.diff || 'normal' });
       ws.room = id; ws.role = 'host';
       send(ws, { t: 'created', code: id });
+      broadcastLobbies();
+    } else if (m.t === 'solo') {
+      // laufender Solo-Run meldet sich als beobachtbarer Raum an
+      let id = id4();
+      while (rooms.has(id)) id = id4();
+      rooms.set(id, {
+        host: ws, guest: null, spectators: [], solo: true, started: Date.now(),
+        name: String(m.name || 'Anonym').slice(0, 24), hero: m.hero || 'soldier',
+        map: m.map || 'valley', diff: m.diff || 'normal',
+      });
+      ws.room = id; ws.role = 'host';
+      send(ws, { t: 'solo-ok', code: id });
+      broadcastLobbies();
+    } else if (m.t === 'watch') {
+      const room = rooms.get((m.id || '').toUpperCase());
+      if (!room || !room.solo) return send(ws, { t: 'error', msg: 'Dieser Run ist nicht mehr verfügbar' });
+      room.spectators.push(ws);
+      ws.room = (m.id || '').toUpperCase(); ws.role = 'spec';
+      send(ws, { t: 'watch-ok', code: ws.room, map: room.map, diff: room.diff, hero: room.hero, name: room.name });
+      send(room.host, { t: 'watchers', n: specCount(room) });
       broadcastLobbies();
     } else if (m.t === 'list') {
       send(ws, { t: 'lobbies', list: openLobbies() });
@@ -163,15 +191,31 @@ wss.on('connection', (ws) => {
     } else if (m.t === 'msg') {
       const room = rooms.get(ws.room);
       if (!room) return;
-      send(ws.role === 'host' ? room.guest : room.host, { t: 'msg', data: m.data });
+      if (ws.role === 'spec') return; // Zuschauer senden nichts weiter
+      if (ws.role === 'host') {
+        const out = JSON.stringify({ t: 'msg', data: m.data });
+        if (room.guest && room.guest.readyState === room.guest.OPEN) room.guest.send(out);
+        for (const w of room.spectators) if (w.readyState === w.OPEN) w.send(out);
+      } else {
+        send(room.host, { t: 'msg', data: m.data });
+      }
     }
   });
   ws.on('close', () => {
     const room = rooms.get(ws.room);
     if (room) {
-      send(ws.role === 'host' ? room.guest : room.host, { t: 'peer-left' });
-      if (ws.role === 'guest' && room.host && room.host.readyState === room.host.OPEN) room.guest = null;
-      else rooms.delete(ws.room);
+      if (ws.role === 'spec') {
+        room.spectators = room.spectators.filter((w) => w !== ws);
+        send(room.host, { t: 'watchers', n: specCount(room) });
+      } else if (ws.role === 'guest' && room.host && room.host.readyState === room.host.OPEN) {
+        send(room.host, { t: 'peer-left' });
+        room.guest = null;
+      } else {
+        // Host weg -> Gast und alle Zuschauer informieren, Raum schließen
+        send(room.guest, { t: 'peer-left' });
+        for (const w of room.spectators) send(w, { t: 'peer-left' });
+        rooms.delete(ws.room);
+      }
     }
     broadcastLobbies();
   });

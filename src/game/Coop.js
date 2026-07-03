@@ -30,9 +30,22 @@ export function _initNet(g) {
     g._sendHeroInfo(); // Held + Waffen-Unlocks an den Host melden
   };
   g.net.onPeerLeft = () => {
+    if (g._specOnly) {
+      // Übertragung beendet (Runner hat aufgehört)
+      g.hud.toast('👁 Übertragung beendet', 'gold');
+      if (g.mode === 'play' || g.mode === 'levelup' || g.mode === 'paused') g._leaveOnline();
+      return;
+    }
     g.hud.toast('Mitspieler hat die Lobby verlassen', 'blood');
     if (g.mode === 'play' || g.mode === 'levelup' || g.mode === 'paused') g._leaveOnline();
     else { g._setLobbySlot2(false); document.getElementById('lobby-start').classList.add('hidden'); g._setLobbyStatus('Mitspieler getrennt — warte…'); }
+  };
+  // Zuschauen bestätigt -> in den Spectator-Modus wechseln
+  g.net.onWatchOk = (m) => g._beginSpectate(m);
+  // Broadcaster: Zuschauerzahl (Toast bei Neuzugang)
+  g.net.onWatchers = (n) => {
+    if (n > (g._watchers || 0)) g.hud.toast(`👁 ${n} Zuschauer ${n === 1 ? 'schaut' : 'schauen'} zu`, 'gold');
+    g._watchers = n;
   };
   g.net.onError = (msg) => g._setLobbyStatus('Fehler: ' + msg);
   g.net.onLobbyList = (list) => { if (g.mode === 'lobby') g._renderLobbyList(list); };
@@ -65,15 +78,28 @@ export async function _lobbyConnect(g) {
 export function _renderLobbyList(g, list) {
   const el = document.getElementById('lobby-list');
   if (!el) return;
-  if (!list || !list.length) { el.innerHTML = '<div class="lobby-empty">Keine offenen Lobbys — erstelle eine!</div>'; return; }
+  if (!list || !list.length) { el.innerHTML = '<div class="lobby-empty">Keine offenen Lobbys oder laufenden Runs — erstelle eine Lobby!</div>'; return; }
   const mapName = (k) => { const m = MAP_LIST.find((x) => x.key === k); return m ? m.name : k; };
   const diffName = (k) => (DIFFS[k] ? DIFFS[k].name : k);
-  el.innerHTML = list.map((l) => `
+  const esc = (t) => String(t).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+  const fmtT = (t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+  el.innerHTML = list.map((l) => {
+    if (l.kind === 'solo') {
+      // laufender Solo-Run -> zuschauen
+      return `
+    <div class="lobby-item solo-run">
+      <div class="li-info"><div class="li-map">👁 ${esc(l.name)} · ${mapName(l.map)}</div><div class="li-diff">${diffName(l.diff)} · läuft seit ${fmtT(l.t || 0)}${l.specs ? ` · ${l.specs} 👁` : ''}</div></div>
+      <button class="li-watch" data-id="${l.id}">Zuschauen</button>
+    </div>`;
+    }
+    return `
     <div class="lobby-item">
       <div class="li-info"><div class="li-map">🗺️ ${mapName(l.map)}</div><div class="li-diff">${diffName(l.diff)}</div></div>
       <button class="li-join" data-id="${l.id}">Beitreten</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   el.querySelectorAll('.li-join').forEach((b) => b.addEventListener('click', () => g._lobbyJoinId(b.getAttribute('data-id'))));
+  el.querySelectorAll('.li-watch').forEach((b) => b.addEventListener('click', () => g.net.watch(b.getAttribute('data-id'))));
 }
 // Warteraum betreten (Host oder Client)
 export function _enterLobbyRoom(g, role) {
@@ -120,7 +146,7 @@ export function _onNetData(g, d) {
   if (d.k === 'emote') { g._showEmote('mate', d.i); return; }
   if (d.k === 'hero') { g._remoteHero = d.key; g._remoteLocked = d.locked || []; return; } // Heldenwahl des Gastes
   if (d.k === 'start' && g.net.role === 'client') g._beginClientRun(d);
-  else if (d.k === 'in' && g.role === 'host') { g.remoteInput._x = d.x; g.remoteInput._z = d.z; g.remoteInput.reviving = !!d.rv; if (d.dodge) g.remotePlayer.dodge(); if (d.mash) g.remotePlayer.mashFree(0.2 *d.mash); }
+  else if (d.k === 'in' && g.role === 'host' && g.remotePlayer) { g.remoteInput._x = d.x; g.remoteInput._z = d.z; g.remoteInput.reviving = !!d.rv; if (d.dodge) g.remotePlayer.dodge(); if (d.mash) g.remotePlayer.mashFree(0.2 *d.mash); }
   else if (d.k === 'snap' && g.role === 'client') g._applySnapshot(d);
   else if (d.k === 'won' && g.role === 'client') g._clientWin(d);
   else if (d.k === 'endless' && g.role === 'client') {
@@ -245,6 +271,7 @@ export function _beginClientRun(g, d) {
   g._pings = [];
   g._ghostProj = [];
   g._ghostBolts = [];
+  g._specOnly = false;
   // Client rendert nur -> keine eigene Effekt-Aufnahme, spielt die des Hosts ab
   g.fx.record = false;
   g.fx.drain();
@@ -258,6 +285,7 @@ export function _beginClientRun(g, d) {
   g._playIntro();
 }
 export function _leaveOnline(g) {
+  g._specOnly = false;
   if (g.net) g.net.close();
   g.role = null;
   g.mode = 'menu';
@@ -407,23 +435,27 @@ export function _showEmote(g, who, i) {
 // -------------------------------------------------- Snapshot
 export function _sendSnapshot(g) {
   const enc = (p) => [Math.round(p.position.x * 20) / 20, Math.round(p.position.z * 20) / 20, Math.round(p.yaw * 100) / 100, Math.round(p.hp), p.maxHp, p.dead ? 1 : 0, Math.round((p.rooted || 0) * 10) / 10, p.vehicle ? 1 : 0];
+  // Solo-Broadcast: P2 ist ein toter Dummy -> Zuschauer landen automatisch im Spectate-Modus
+  const DUMMY = [0, 0, 0, 0, 100, 1, 0, 0];
+  const p2 = g.remotePlayer;
+  const w2 = g.weapons2;
   const stat = (p) => [p.level, p.xp, p.xpToNext, p.kills, Math.floor(p.gold)];
   const ld = (w) => w.ownedList().map((x) => ({ id: x.id, l: x.level, e: x.evolved ? 1 : 0 }));
   g.net.send({
     k: 'snap',
-    pl: [enc(g.player), enc(g.remotePlayer)],
+    pl: [enc(g.player), p2 ? enc(p2) : DUMMY],
     en: g.enemies.snapshot(),
     gm: g.gems.snapshot(),
     pk: g.pickups.snapshot(),
     fx: g.fx.drain(),
-    pj: g.weapons.projSnapshot().concat(g.weapons2.projSnapshot()), // fliegende Projektile beider Spieler
+    pj: g.weapons.projSnapshot().concat(w2 ? w2.projSnapshot() : []), // fliegende Projektile beider Spieler
     bo: g.enemies.boltSnapshot(), // Boss-Kugeln
     p1: stat(g.player),
-    p2: stat(g.remotePlayer),
+    p2: p2 ? stat(p2) : [1, 0, 6, 0, 0],
     ld1: ld(g.weapons),
-    ld2: ld(g.weapons2),
+    ld2: w2 ? ld(w2) : [],
     pa1: g.player.passiveCounts, // Host-Passive (fürs Mitspieler-Panel beim Gast)
-    pa2: g.remotePlayer.passiveCounts,
+    pa2: p2 ? p2.passiveCounts : {},
     ph: g.phaseIndex,
     phk: g._phaseKills, // eigener Key — nicht mehr mit Pickups (pk) kollidieren
     rv: Math.round((g._reviveProg || 0) * 100) / 100, // Wiederbelebungs-Fortschritt
@@ -496,4 +528,26 @@ export function _toastFor(g, who, msg, type = 'gold', sound = null) {
   }
   g.hud.toast(msg, type);
   if (sound && g.audio[sound]) g.audio[sound]();
+}
+
+// Solo-Run als beobachtbaren Raum anmelden (best effort — ohne Server passiert nichts)
+export async function _startSoloBroadcast(g) {
+  if (g.role) return; // nur echte Solo-Runs
+  try {
+    if (!g.net.connected) await g.net.connect();
+    g.net.solo(g._playerName(), g.mapKey, g.difficulty, g.heroKey);
+    g._broadcasting = true;
+    g._watchers = 0;
+  } catch (e) { /* Server nicht erreichbar — Run läuft einfach lokal */ }
+}
+
+// Zuschauer-Modus: nutzt den Koop-Client-Pfad; der eigene Spieler ist ein toter Dummy,
+// dadurch greifen Kamera-Follow + Spectate-Banner automatisch.
+export function _beginSpectate(g, d) {
+  document.getElementById('lobby').classList.add('hidden');
+  g._beginClientRun({ map: d.map, diff: d.diff, hero: d.hero });
+  g._specOnly = true;
+  g._specName = d.name || 'Unbekannt';
+  g.player.dead = true; // bis zum ersten Snapshot: sofort Spectate-Verhalten
+  g.hud.toast(`👁 Du schaust ${g._specName} zu — ESC zum Verlassen`, 'gold');
 }

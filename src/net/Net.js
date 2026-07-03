@@ -14,6 +14,9 @@ export class Net {
     this.onError = null;
     this.onData = null;
     this.onLobbyList = null; // Liste offener Lobbys (Browser)
+    this.onWatchOk = null; // Zuschauen bestätigt (Meta des Runs)
+    this.onWatchers = null; // Zuschauerzahl (für den Broadcaster)
+    this.watchers = 0;
   }
 
   static defaultUrl() {
@@ -79,6 +82,17 @@ export class Net {
       if (this.onLobbyList) this.onLobbyList(m.list || []);
     } else if (m.t === 'msg') {
       if (this.onData) this.onData(m.data);
+    } else if (m.t === 'solo-ok') {
+      this.role = 'solo';
+      this.code = m.code;
+    } else if (m.t === 'watch-ok') {
+      this.role = 'spec';
+      this.code = m.code;
+      this.peerPresent = true;
+      if (this.onWatchOk) this.onWatchOk(m);
+    } else if (m.t === 'watchers') {
+      this.watchers = m.n || 0;
+      if (this.onWatchers) this.onWatchers(this.watchers);
     }
   }
 
@@ -87,6 +101,13 @@ export class Net {
   }
   join(id) {
     this.ws.send(JSON.stringify({ t: 'join', id }));
+  }
+  // Solo-Run als beobachtbaren Raum anmelden
+  solo(name, map, diff, hero) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: 'solo', name, map, diff, hero }));
+  }
+  watch(id) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: 'watch', id }));
   }
   list() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: 'list' }));
@@ -99,5 +120,8 @@ export class Net {
   }
   close() {
     if (this.ws) this.ws.close();
+    this.role = null;
+    this.watchers = 0;
+    this.peerPresent = false;
   }
 }

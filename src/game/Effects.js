@@ -23,6 +23,8 @@ export class Effects {
     this.heightAt = null; // vom Game gesetzt: (x,z) => Geländehöhe
     this.zones = [];
 
+    this.photoSafe = false; // Reduzierte Lichtblitze (Settings)
+
     // ---- Schadenszahlen (gepoolte Sprites, steigen auf und verblassen) ----
     this.showDmg = true; // per Settings abschaltbar
     this._dmgPool = [];
@@ -237,7 +239,7 @@ export class Effects {
     const was = this.record;
     this.record = false; // innere Effekte nicht doppelt aufzeichnen
     // heller Kern (Sphere) + doppelter Stoßring + viele Funken
-    const e = this._getFx('boom', this.boomGeo, 0xfff2c0);
+    const e = this._getFx('boom', this.boomGeo, this.photoSafe ? 0xcc9a5a : 0xfff2c0);
     e.dur = 0.42;
     e.maxR = r;
     e.mesh.position.set(x, (this.heightAt ? this.heightAt(x, z) : 0) + 0.9, z);
@@ -254,7 +256,7 @@ export class Effects {
     this.record = false;
     // gezackte Lichtsäule (mehrere versetzte Segmente) + Aufblitz + Bodenring + Funken
     for (let i = 0; i < 3; i++) {
-      const e = this._getFx('bolt', this.boltGeo, i === 0 ? 0xffffff : color);
+      const e = this._getFx('bolt', this.boltGeo, i === 0 && !this.photoSafe ? 0xffffff : color);
       e.dur = 0.24;
       const ox = i === 0 ? 0 : (Math.random() - 0.5) * 0.9;
       const oz = i === 0 ? 0 : (Math.random() - 0.5) * 0.9;
@@ -262,10 +264,12 @@ export class Effects {
       e.mesh.rotation.z = (Math.random() - 0.5) * 0.5;
       e.mesh.scale.set(i === 0 ? 1.3 : 0.7, 1, i === 0 ? 1.3 : 0.7);
     }
-    const f = this._getFx('flash', this.flashGeo, 0xffffff);
-    f.dur = 0.22;
-    f.mesh.position.set(x, 1.0, z);
-    f.mesh.scale.setScalar(1.4);
+    if (!this.photoSafe) {
+      const f = this._getFx('flash', this.flashGeo, 0xffffff);
+      f.dur = 0.22;
+      f.mesh.position.set(x, 1.0, z);
+      f.mesh.scale.setScalar(1.4);
+    }
 
     this.ring(x, z, 3.0, color);
     this.sparksBurst(x, 0.6, z, 0xbfe0ff, 14, 8);
@@ -357,7 +361,7 @@ export class Effects {
           this.zones.splice(i, 1);
           continue;
         }
-        zn.mesh.material.opacity = k > 0.7 ? 0.5 + 0.3 * Math.sin(zn.t * 30) : 0.34 + 0.16 * Math.sin(zn.t * 12);
+        zn.mesh.material.opacity = this.photoSafe ? 0.42 : k > 0.7 ? 0.5 + 0.3 * Math.sin(zn.t * 30) : 0.34 + 0.16 * Math.sin(zn.t * 12);
       }
     }
 
@@ -423,7 +427,7 @@ export class Effects {
         mat.opacity = 1 - k;
       } else if (e.kind === 'tele' || e.kind === 'cone') {
         // pulsierende Gefahrenfläche; zum Ende hin schneller/heller
-        mat.opacity = k > 0.7 ? 0.5 + 0.28 * Math.sin(e.t * 30) : 0.34 + 0.18 * Math.sin(e.t * 13);
+        mat.opacity = this.photoSafe ? 0.42 : k > 0.7 ? 0.5 + 0.28 * Math.sin(e.t * 30) : 0.34 + 0.18 * Math.sin(e.t * 13);
       } else if (e.kind === 'telering') {
         e.mesh.scale.setScalar(e.maxR); // fester Radius (Grenze der Gefahrenzone)
         mat.opacity = k > 0.7 ? 0.85 + 0.15 * Math.sin(e.t * 34) : 0.7;

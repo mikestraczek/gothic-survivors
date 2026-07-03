@@ -226,6 +226,14 @@ export function _updatePlayHost(g, dt) {
   if (co) {
     g._snapAcc += dt;
     if (g._snapAcc >= 1 / SNAP_HZ) { g._snapAcc = 0; g._sendSnapshot(); }
+  } else if (g._broadcasting && g.net && g.net.connected) {
+    // Solo-Broadcast: nur senden (und Effekte aufzeichnen), wenn wirklich jemand zuschaut
+    const want = (g.net.watchers || 0) > 0;
+    g.fx.record = want;
+    if (want) {
+      g._snapAcc += dt;
+      if (g._snapAcc >= 1 / 10) { g._snapAcc = 0; g._sendSnapshot(); }
+    }
   }
 
   if (ps.every((p) => p.dead)) g._endRun();
@@ -286,6 +294,7 @@ export function _updatePlayClient(g, dt) {
   }
   g._drawCombatUI();
 
+  if (g._specOnly) return; // Zuschauer senden keine Eingaben
   if (!g._clientPaused && !g.player.dead && g.input.pressed('Space')) g._pendingDodge = true;
   // Festwurzeln: Tastenhämmern lokal (Vorhersage) + gesammelt an den Host senden
   if (g.player.rooted > 0) { const m = g._mashCount(); if (m) { g.player.mashFree(0.2 *m); g._mashAcc = (g._mashAcc || 0) + m; } }

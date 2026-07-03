@@ -336,6 +336,10 @@ export class Game {
 
   _beginClientRun(d) { return Coop._beginClientRun(this, d); }
 
+  _beginSpectate(d) { return Coop._beginSpectate(this, d); }
+
+  _startSoloBroadcast() { return Coop._startSoloBroadcast(this); }
+
   _leaveOnline() { return Coop._leaveOnline(this); }
 
   _players() { return MainLoop._players(this); }

@@ -69,6 +69,36 @@ export function _recordMeta(g, win) {
     delay += 900;
   }
 }
+// Tab-Schließen mitten im Run: Ergebnis noch schnell werten (sendBeacon überlebt das Entladen).
+// Einmalig aus Game._preload registriert.
+export function _installUnloadScore(g) {
+  window.addEventListener('pagehide', () => {
+    if (g._specOnly) return;
+    if (!(g.mode === 'play' || g.mode === 'paused' || g.mode === 'levelup')) return;
+    if (g.runElapsed < 20) return;
+    const entry = {
+      name: g._playerName(),
+      time: Math.round(g.runElapsed),
+      kills: g.player.kills,
+      level: g.player.level,
+      gold: Math.floor(g.player.gold),
+      map: g.mapKey,
+      coop: !!g.role,
+      win: false,
+      ts: Date.now(),
+    };
+    try {
+      const scores = JSON.parse(localStorage.getItem('gothicScores') || '[]');
+      scores.push(entry);
+      scores.sort((a, b) => b.time - a.time);
+      localStorage.setItem('gothicScores', JSON.stringify(scores.slice(0, 100)));
+    } catch (e) { /* ignore */ }
+    try {
+      navigator.sendBeacon('/api/scores', new Blob([JSON.stringify(entry)], { type: 'application/json' }));
+    } catch (e) { /* ignore */ }
+  });
+}
+
 // Ergebnis eines Runs speichern: lokal (Cache) + an den Server (Postgres, best effort)
 export function _recordScore(g, win) {
   if (g._specOnly) return; // Zuschauer werten nichts

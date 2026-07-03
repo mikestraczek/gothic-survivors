@@ -223,6 +223,7 @@ export class Game {
     this.camCtrl.snap(this.player.position);
     this._wireUI();
     this._applySettings();
+    this._installUnloadScore(); // Tab-Schließen mitten im Run wertet den Score noch
     this._prewarm(); // Shader hinter dem Ladescreen kompilieren (keine Erste-Nutzung-Ruckler)
     document.getElementById('loading').classList.add('hidden');
     this._bootFlow();
@@ -313,6 +314,8 @@ export class Game {
   _phaseTick(dt) { return RunControl._phaseTick(this, dt); }
 
   _updateMapSpecials(dt) { return RunControl._updateMapSpecials(this, dt); }
+
+  _installUnloadScore() { return RunControl._installUnloadScore(this); }
 
   _phaseTarget() { return RunControl._phaseTarget(this); }
 

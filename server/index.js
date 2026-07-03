@@ -51,7 +51,20 @@ if (process.env.DATABASE_URL) {
 const app = express();
 app.use(express.json({ limit: '8kb' }));
 
-app.get('/api/health', (req, res) => res.json({ ok: true, db: !!pool }));
+app.get('/api/health', async (req, res) => {
+  // db: true nur, wenn die Datenbank wirklich antwortet — nicht nur, wenn DATABASE_URL gesetzt ist
+  let db = false;
+  let dbError = null;
+  if (pool) {
+    try {
+      await pool.query('SELECT 1');
+      db = true;
+    } catch (e) {
+      dbError = e.message;
+    }
+  }
+  res.json({ ok: true, db, ...(dbError ? { dbError } : {}) });
+});
 
 app.get('/api/scores', async (req, res) => {
   if (!pool) return res.json([]);
@@ -68,18 +81,25 @@ app.get('/api/scores', async (req, res) => {
   }
 });
 
-// simples In-Memory-Rate-Limit: max. 1 Score-Submit alle 10s pro IP
-const lastSubmit = new Map();
+// In-Memory-Rate-Limit: max. 4 Score-Submits pro 10s je IP.
+// WICHTIG: nicht 1/10s — beim Koop-Ende posten Host UND Gast in derselben Sekunde,
+// und hinter gemeinsamem NAT (gleiche Wohnung) teilen sie sich die IP.
+const lastSubmit = new Map(); // ip -> [timestamps]
 setInterval(() => {
   const cutoff = Date.now() - 60000;
-  for (const [ip, t] of lastSubmit) if (t < cutoff) lastSubmit.delete(ip);
+  for (const [ip, arr] of lastSubmit) {
+    const keep = arr.filter((t) => t > cutoff);
+    if (keep.length) lastSubmit.set(ip, keep);
+    else lastSubmit.delete(ip);
+  }
 }, 60000).unref();
 
 app.post('/api/scores', async (req, res) => {
   if (!pool) return res.json({ ok: false, stored: false }); // ohne DB: still annehmen, nicht speichern
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '?';
   const now = Date.now();
-  if (now - (lastSubmit.get(ip) || 0) < 10000) return res.status(429).json({ ok: false });
+  const recent = (lastSubmit.get(ip) || []).filter((t) => now - t < 10000);
+  if (recent.length >= 4) return res.status(429).json({ ok: false });
   const b = req.body || {};
   const num = (v, d = 0) => (Number.isFinite(+v) ? Math.max(0, Math.min(1e9, Math.floor(+v))) : d);
   const name = String(b.name || 'Anonym').slice(0, 24) || 'Anonym';
@@ -93,7 +113,8 @@ app.post('/api/scores', async (req, res) => {
     level <= 200 &&
     kills <= Math.max(60, time * 25); // mehr als ~25 Kills/s ist unmöglich
   if (!plausible) return res.status(400).json({ ok: false });
-  lastSubmit.set(ip, now);
+  recent.push(now);
+  lastSubmit.set(ip, recent);
   try {
     await pool.query(
       `INSERT INTO scores (name, time, kills, level, gold, map, coop, win) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,

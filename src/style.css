@@ -103,6 +103,7 @@ button.secondary {
   padding: 40px;
 }
 .game-title {
+  padding-left: 14px; /* gleicht das trailing letter-spacing aus -> Text wirklich mittig */
   font-size: 84px;
   letter-spacing: 14px;
   color: var(--gold-bright);
@@ -2070,4 +2071,26 @@ body.photosafe .intro-flash {
 }
 .li-watch:hover {
   background: rgba(60, 110, 190, 0.55);
+}
+
+/* Level-Up: Tasten-Hinweise + Inline-Kombinationsliste */
+.lc-key {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  font-size: 11px;
+  color: var(--gold, #c8a24a);
+  border: 1px solid rgba(200, 162, 74, 0.5);
+  border-radius: 4px;
+  padding: 0 5px;
+  opacity: 0.85;
+}
+.lvl-choice {
+  position: relative;
+}
+#lvl-combo-list {
+  max-height: 34vh;
+  overflow-y: auto;
+  margin-top: 12px;
+  text-align: left;
 }

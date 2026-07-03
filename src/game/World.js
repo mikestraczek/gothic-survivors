@@ -216,7 +216,7 @@ export class World {
     this._waterMat = null;
     this._treeFade = null;
     this.bogPools = null;
-    this.tank = null;
+    this.tanks = null;
     this.lore = null;
     this.boostPads = null;
     this._buildSky();
@@ -1036,8 +1036,9 @@ export class World {
     }
     // brennende Fässer als Lichtquellen
     for (const [bx, bz] of [[0, 6], [-20, 24], [14, -10]]) this._buildBarrelFire(bx, bz);
-    // Map-Special: fahrbarer Panzer
+    // Map-Special: zwei fahrbare Panzer (Respawn-Logik in RunControl)
     this._buildTank(-8, 34);
+    this._buildTank(18, -16);
   }
 
   // Fahrbarer Panzer (Map-Special Frontlinie). Fahr-Logik lebt in RunControl._updateMapSpecials;
@@ -1061,9 +1062,10 @@ export class World {
     g.position.set(x, terrainHeight(x, z), z);
     g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     this.group.add(g);
-    this.tank = { group: g, taken: false, homeX: x, homeZ: z };
-    this.tankCollider = { x, z, r: 1.6 };
-    this.colliders.push(this.tankCollider);
+    const collider = { x, z, r: 1.6 };
+    this.colliders.push(collider);
+    if (!this.tanks) this.tanks = [];
+    this.tanks.push({ group: g, taken: false, homeX: x, homeZ: z, collider, respawn: 0 });
   }
 
   _buildBarrelFire(x, z) {
@@ -1499,8 +1501,11 @@ export class World {
   }
   clampBounds(o, m = 4) {
     if (this.theme.bounds === 'corridor') {
-      o.x = Math.max(-(CORRIDOR_LEN - m), Math.min(CORRIDOR_LEN - m, o.x));
-      o.z = Math.max(-(CORRIDOR_HALF - m), Math.min(CORRIDOR_HALF - m, o.z));
+      // Korridor: kleiner Rand-Puffer, sonst frisst der Arena-Margin die halbe Wegbreite
+      const mz = Math.min(m, 0.6);
+      const mx = Math.min(m, 2);
+      o.x = Math.max(-(CORRIDOR_LEN - mx), Math.min(CORRIDOR_LEN - mx, o.x));
+      o.z = Math.max(-(CORRIDOR_HALF - mz), Math.min(CORRIDOR_HALF - mz, o.z));
       return;
     }
     const r = Math.hypot(o.x, o.z);

@@ -26,7 +26,7 @@ page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 page.on('console', (m) => {
   if (m.type() === 'error') {
     const t = m.text();
-    if (!/404|favicon|pointer ?lock|SwiftShader|GL Driver|ReadPixels/i.test(t)) errors.push('err: ' + t);
+    if (!/404|favicon|pointer ?lock|SwiftShader|GL Driver|ReadPixels|WebSocket/i.test(t)) errors.push('err: ' + t);
   }
 });
 

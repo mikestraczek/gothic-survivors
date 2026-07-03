@@ -68,7 +68,8 @@ dieselbe (synchronisierte) Horde. **Jeder Spieler levelt unabhängig** und wähl
 **seine eigenen Upgrades/Waffen**. Stirbt einer, **beobachtet** er den/die
 Überlebende:n weiter; der Run endet erst, wenn alle gefallen sind. Eine
 **Minimap** zeigt Mitspieler, Gegner & Bosse; am Ende gibt es **Statistiken pro
-Spieler**.
+Spieler**. Laufende **Solo-Runs erscheinen im Lobby-Browser** — mit „👁
+Zuschauen" kann jeder live zusehen (ESC beendet das Zuschauen).
 
 #### Im selben Netzwerk (LAN) mit Freunden zocken — am einfachsten:
 
@@ -103,11 +104,11 @@ hat ihr eigenes **Map-Special**:
 
 | Karte | Stil | Special |
 | ----- | ---- | ------- |
-| Tal der Kolonie | Gothic-Tal, Altes Lager | ⚡ Die Barriere schleudert Blitze auf Gegner |
-| Sumpf der Bruderschaft (Unlock) | Morast, Regen | 🥾 Tümpel bremsen dich — Positionsspiel! |
-| Der Hohlweg | schmaler, (gefühlt) endloser Pass | 🛤 Eine Minen-Lore rast periodisch durchs Gleis |
+| Tal der Kolonie | Gothic-Tal, Altes Lager | ⚡ Ketten-Blitze der Barriere (alle ~15 s, bis zu 3 Ziele) |
+| Sumpf der Bruderschaft (Unlock) | Morast, Regen | 🫧 Gift-Geysire verätzen Gegner in Tümpeln · 🥾 Morast bremst dich |
+| Der Hohlweg | schmaler, (gefühlt) endloser Pass | 🛤 Minen-Lore rast alle ~15 s durchs Gleis |
 | Neon-Distrikt 7 | Cyberpunk, Regen & Neon | ⚡ Boost-Pads geben Tempo-Schübe |
-| Frontlinie 1944 | Weltkriegs-Schlachtfeld | 🛡 **Fahrbarer Panzer**: überrollt Gegner, Kanone feuert automatisch |
+| Frontlinie 1944 | Weltkriegs-Schlachtfeld | 🛡 **Zwei fahrbare Panzer** (Respawn ~45 s): überrollen Gegner, Auto-Kanone |
 
 Held, Karte & Schwierigkeit wählst du vor dem Start (im Koop wählt der Host
 Karte & Schwierigkeit, jeder Spieler seinen eigenen Helden). Dev-Tipp:
@@ -126,9 +127,11 @@ Schatten werden über **Achievements** freigeschaltet.
 - **Bewegung mit WASD** (bzw. virtueller Joystick auf Touch-Geräten) — mehr
   nicht. **Angriffe laufen automatisch.** **Leertaste** = Ausweichen (i-Frames).
 - Erlege Feinde → sie lassen **Edelsteine** (Erfahrung) fallen → einsammeln.
-- Bei jedem **Stufenaufstieg** wählst du aus 3 zufälligen **Upgrades** mit
-  sichtbaren **Seltenheitsstufen**; dazu gibt es **Neuwürfe** (🎲) und
-  **Verbannen** (🚫, entfernt eine Karte für den Rest des Runs).
+- Bei jedem **Stufenaufstieg** wählst du aus 3 zufälligen **Upgrades** —
+  Passive erscheinen in **Seltenheitsstufen mit besseren Werten** (selten ×1,35,
+  rar ×1,8); dazu **Neuwürfe** (🎲/R), **Verbannen** (🚫/B) und ein
+  **Kombinations-Nachschlagewerk** (📖/K) direkt im Level-Up. Auswahl auch per
+  Tastatur: **1–3**.
 - Die Schwierigkeit **steigt mit der Zeit**: mehr, stärkere und
   vielfältigere Gegner, Eliten und Boss-Enrage-Phasen.
 - Beim Tod endet der Run. Das gesammelte **Erz** wird gebucht und bleibt
@@ -189,7 +192,11 @@ Zeit/Stufe, Erz), die Helden, Waffen und die Sumpf-Karte freischalten
 
 ⚙ **Optionen** (Menü & Pause): Musik-/Effekt-Lautstärke, **Renderauflösung**
 (50–100 %, für schwächere Geräte), Screen Shake, Schadenszahlen, Schatten,
-Bloom, Retro-Pixel-Filter — persistent gespeichert.
+Bloom, Retro-Pixel-Filter und **„Reduzierte Lichtblitze"** (Fotosensitivität —
+dazu erscheint beim ersten Start eine Epilepsie-Warnung) — persistent
+gespeichert. Verschmolzene Waffen zeigen überall **eigene Icons & Namen**
+(HUD, DPS-Panel, Endbildschirm). Wer einen Run über „Hauptmenü" beendet
+(auch Endlos!), landet trotzdem in der **Bestenliste**.
 Prozedurale **Musik** (Karten-Themes + Boss-Theme) und SFX laufen komplett
 über die Web Audio API (keine Audiodateien). **Touch-Support**: virtueller
 Joystick + Ausweich-Button, das Spiel läuft auch auf Tablets/Smartphones.

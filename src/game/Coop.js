@@ -440,7 +440,7 @@ export function _sendSnapshot(g) {
   const p2 = g.remotePlayer;
   const w2 = g.weapons2;
   const stat = (p) => [p.level, p.xp, p.xpToNext, p.kills, Math.floor(p.gold)];
-  const ld = (w) => w.ownedList().map((x) => ({ id: x.id, l: x.level, e: x.evolved ? 1 : 0 }));
+  const ld = (w) => w.ownedList().map((x) => ({ id: x.id, l: x.level, e: x.evolved ? 1 : 0, n: x.evoName }));
   g.net.send({
     k: 'snap',
     pl: [enc(g.player), p2 ? enc(p2) : DUMMY],
@@ -466,7 +466,7 @@ export function _sendSnapshot(g) {
     t: Math.round(g.runElapsed),
     // Map-Specials (Panzer/Lore) für die Gast-Anzeige
     ms: {
-      tk: g.world.tank ? [g.world.tank.group.visible ? 1 : 0, Math.round(g.world.tank.group.position.x * 10) / 10, Math.round(g.world.tank.group.position.z * 10) / 10, Math.round(g.world.tank.group.rotation.y * 100) / 100] : 0,
+      tk: g.world.tanks ? g.world.tanks.map((t) => [t.group.visible ? 1 : 0, Math.round(t.group.position.x * 10) / 10, Math.round(t.group.position.z * 10) / 10, Math.round(t.group.rotation.y * 100) / 100]) : 0,
       lo: g.world.lore && g.world.lore.active ? Math.round(g.world.lore.x * 10) / 10 : null,
     },
   });
@@ -495,19 +495,23 @@ export function _applySnapshot(g, d) {
   g._clientDanger = !!d.dg;
   g._clientWrath = d.wr || 0;
   // eigene Waffen = ld2, Host-Waffen = ld1
-  if (d.ld2) g.weapons.setLoadout(d.ld2.map((w) => ({ id: w.id, level: w.l, evolved: !!w.e })));
-  if (d.ld1) g.weapons2.setLoadout(d.ld1.map((w) => ({ id: w.id, level: w.l, evolved: !!w.e })));
+  if (d.ld2) g.weapons.setLoadout(d.ld2.map((w) => ({ id: w.id, level: w.l, evolved: !!w.e, evoName: w.n })));
+  if (d.ld1) g.weapons2.setLoadout(d.ld1.map((w) => ({ id: w.id, level: w.l, evolved: !!w.e, evoName: w.n })));
   g.enemies.setSnapshot(d.en || []);
   g.gems.applySnapshot(d.gm || [], 0);
   g.pickups.applySnapshot(d.pk || []);
   if (d.fx) g.fx.replay(d.fx);
   // Map-Special-Visuals (Panzer folgt Fahrer, Lore rast durch)
   if (d.ms) {
-    if (g.world.tank && d.ms.tk) {
-      const [vis, tx, tz, ry] = d.ms.tk;
-      g.world.tank.group.visible = vis === 1;
-      g.world.tank.group.position.set(tx, g.world.getHeight(tx, tz), tz);
-      g.world.tank.group.rotation.y = ry;
+    if (g.world.tanks && Array.isArray(d.ms.tk)) {
+      d.ms.tk.forEach((row, i) => {
+        const t = g.world.tanks[i];
+        if (!t || !Array.isArray(row)) return;
+        const [vis, tx, tz, ry] = row;
+        t.group.visible = vis === 1;
+        t.group.position.set(tx, g.world.getHeight(tx, tz), tz);
+        t.group.rotation.y = ry;
+      });
     }
     if (g.world.lore) {
       const lx = d.ms.lo;
@@ -533,12 +537,15 @@ export function _toastFor(g, who, msg, type = 'gold', sound = null) {
 // Solo-Run als beobachtbaren Raum anmelden (best effort — ohne Server passiert nichts)
 export async function _startSoloBroadcast(g) {
   if (g.role) return; // nur echte Solo-Runs
+  if (g._soloBcFailed) return; // Server war schon nicht erreichbar — nicht erneut probieren
   try {
     if (!g.net.connected) await g.net.connect();
     g.net.solo(g._playerName(), g.mapKey, g.difficulty, g.heroKey);
     g._broadcasting = true;
     g._watchers = 0;
-  } catch (e) { /* Server nicht erreichbar — Run läuft einfach lokal */ }
+  } catch (e) {
+    g._soloBcFailed = true; // Run läuft einfach lokal weiter
+  }
 }
 
 // Zuschauer-Modus: nutzt den Koop-Client-Pfad; der eigene Spieler ist ein toter Dummy,

@@ -101,8 +101,10 @@ export class HUD {
     let h = `<div class="dps-head"><span>Schaden</span><span>${fmt(total)}</span></div>`;
     for (const e of entries) {
       const def = WEAPON_DEFS[e.id] || {};
-      const tip = `<b>${def.name || e.id}</b><br>Gesamt: ${Math.round(e.total).toLocaleString('de-DE')}<br>DPS: ${Math.round(e.dps).toLocaleString('de-DE')}`;
-      h += `<div class="dps-row" data-tip="${tip}"><span class="dps-ic">${WICON[e.id] || '◆'}</span><span class="dps-name">${def.name || e.id}</span><span class="dps-tot">${fmt(e.total)}</span><span class="dps-val">${fmt(e.dps)}</span></div>`;
+      const name = e.name || def.name || e.id;
+      const icon = e.icon || WICON[e.id] || '◆';
+      const tip = `<b>${name}</b><br>Gesamt: ${Math.round(e.total).toLocaleString('de-DE')}<br>DPS: ${Math.round(e.dps).toLocaleString('de-DE')}`;
+      h += `<div class="dps-row" data-tip="${tip}"><span class="dps-ic">${icon}</span><span class="dps-name">${name}</span><span class="dps-tot">${fmt(e.total)}</span><span class="dps-val">${fmt(e.dps)}</span></div>`;
     }
     el.innerHTML = h;
   }
@@ -138,7 +140,9 @@ export class HUD {
       this._allySig = sig;
       const wIcons = weapons.map((w) => {
         const def = WEAPON_DEFS[w.id] || {};
-        return `<div class="wicon sm" data-tip="<b>${def.name || w.id}</b> · ${w.evolved ? 'verschmolzen ★' : 'Stufe ' + w.level}"><span class="wi-emoji">${WICON[w.id] || '◆'}</span><span class="wi-lv">${w.evolved ? '★' : w.level}</span></div>`;
+        const name = (w.evolved && w.evoName) || def.name || w.id;
+        const icon = (w.evolved && w.evoIcon) || WICON[w.id] || '◆';
+        return `<div class="wicon sm" data-tip="<b>${name}</b> · ${w.evolved ? 'verschmolzen ★' : 'Stufe ' + w.level}"><span class="wi-emoji">${icon}</span><span class="wi-lv">${w.evolved ? '★' : w.level}</span></div>`;
       }).join('');
       const pIcons = Object.keys(pc).map((k) => {
         const pi = PASSIVE_INFO[k] || {};
@@ -273,14 +277,16 @@ export class HUD {
     vg.style.setProperty('--lp', lp.toFixed(3));
     vg.classList.toggle('pulsing', lp > 0);
 
-    const sig = weapons.ownedList().map((w) => w.id + w.level + (w.evolved ? 'e' : '')).join(',');
+    const sig = weapons.ownedList().map((w) => w.id + w.level + (w.evolved ? 'e' : '') + (w.evoName || '')).join(',');
     if (sig !== this._lastWeapons) {
       this._lastWeapons = sig;
       this.$('weapon-row').innerHTML = weapons.ownedList().map((w) => {
         const def = WEAPON_DEFS[w.id] || {};
+        const name = (w.evolved && w.evoName) || def.name || w.id;
+        const icon = (w.evolved && w.evoIcon) || WICON[w.id] || '◆';
         const lv = w.evolved ? 'verschmolzen ★' : 'Stufe ' + w.level;
-        const tip = `<b>${def.name || w.id}</b> · ${lv}<br>${def.desc || ''}`;
-        return `<div class="wicon" data-tip="${tip}"><span class="wi-emoji">${WICON[w.id] || '◆'}</span><span class="wi-lv">${w.evolved ? '★' : w.level}</span></div>`;
+        const tip = `<b>${name}</b> · ${lv}<br>${def.desc || ''}`;
+        return `<div class="wicon" data-tip="${tip}"><span class="wi-emoji">${icon}</span><span class="wi-lv">${w.evolved ? '★' : w.level}</span></div>`;
       }).join('');
     }
 

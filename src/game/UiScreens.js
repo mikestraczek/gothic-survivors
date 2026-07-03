@@ -335,6 +335,13 @@ export function _saveAndQuit(g) {
 }
 export function _quitToMenu(g) {
   if (g._broadcasting) { g.net.close(); g._broadcasting = false; g._watchers = 0; }
+  // „Hauptmenü" aus einem laufenden Run = Run beenden -> Ergebnis zählt (wichtig für Endlos!)
+  if ((g.mode === 'paused' || g.mode === 'play' || g.mode === 'levelup') && g.runElapsed > 20 && !g._specOnly && !g.levelWon) {
+    g._recordScore(false);
+    g._recordMeta(false);
+    g._clearSave();
+    g.hud.toast('Run beendet — Ergebnis in der Bestenliste gewertet', 'gold');
+  }
   document.getElementById('pause-screen').classList.add('hidden');
   if (g.role) g.net.close();
   g.role = null;

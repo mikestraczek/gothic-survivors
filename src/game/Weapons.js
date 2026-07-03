@@ -85,6 +85,14 @@ export const WEAPON_DEFS = {
 // Kombinationen — zwei Rezept-Formen:
 //  1) ZWEI Waffen (beide Maxlevel): `base` wird verstärkt (evolved), `consume` wird entfernt -> Slot frei.
 //  2) Waffe (Maxlevel) + PASSIV (mehrfach genommen): `base` wird verstärkt, kein Slot frei, Passiv bleibt.
+// Icons der verschmolzenen Formen (Anzeige in HUD/DPS/Endscreen)
+export const COMBO_ICONS = {
+  Klingensturm: '🌪', 'Höllensturm': '🌋', 'Ewiger Winter': '🧊', Seuchenhagel: '☣️',
+  Sternenregen: '🌠', 'Geweihte Klingen': '⚜️', Kataklysmus: '💥', 'Göttlicher Zorn': '🌩',
+  'Urteil des Henkers': '⚖️', Sturmruf: '⛈', Pestwind: '🦠', Seelenwacht: '👻',
+};
+export const WEAPON_ICONS = { whirl: '🌀', axe: '🪓', fireball: '🔥', orbit: '✦', lightning: '⚡', frost: '❄️', spear: '🦴', poison: '☠️', holy: '✝️', daggers: '🗡️', meteor: '☄️' };
+
 export const COMBINATIONS = [
   { base: 'whirl', consume: 'axe', name: 'Klingensturm', desc: 'Klingenwirbel + Wurfäxte zu einer verheerenden Waffe' },
   { base: 'fireball', consume: 'lightning', name: 'Höllensturm', desc: 'Feuerbälle + Blitze zu einem Inferno' },
@@ -177,12 +185,12 @@ export class Weapons {
   }
 
   serialize() {
-    return { owned: this.ownedList().map((w) => ({ id: w.id, level: w.level, evolved: !!w.evolved })), dealt: { ...this._dealt } };
+    return { owned: this.ownedList().map((w) => ({ id: w.id, level: w.level, evolved: !!w.evolved, evoName: w.evoName })), dealt: { ...this._dealt } };
   }
   loadSave(data) {
     this.owned = {};
     this.ownedSince = {};
-    for (const w of data.owned || []) { this.owned[w.id] = { id: w.id, level: w.level, evolved: !!w.evolved, cdTimer: 0.3 }; this.ownedSince[w.id] = 0; }
+    for (const w of data.owned || []) { this.owned[w.id] = { id: w.id, level: w.level, evolved: !!w.evolved, evoName: w.evoName, evoIcon: w.evoName ? COMBO_ICONS[w.evoName] || '✨' : undefined, cdTimer: 0.3 }; this.ownedSince[w.id] = 0; }
     this._dealt = { ...(data.dealt || {}) };
     this._rebuildWhirl();
     this._rebuildOrbs();
@@ -195,7 +203,7 @@ export class Weapons {
     this._ldSig = sig;
     this.owned = {};
     for (const w of ld) {
-      this.owned[w.id] = { id: w.id, level: w.level, evolved: !!w.evolved, cdTimer: 0 };
+      this.owned[w.id] = { id: w.id, level: w.level, evolved: !!w.evolved, evoName: w.evoName, evoIcon: w.evoName ? COMBO_ICONS[w.evoName] || '✨' : undefined, cdTimer: 0 };
       if (this.ownedSince[w.id] == null) this.ownedSince[w.id] = this.elapsed; // Client: Besitz-Zeitpunkt
     }
     this._rebuildWhirl();
@@ -265,6 +273,20 @@ export class Weapons {
     if (!this.canCombine(c, player)) return;
     if (c.consume) this.remove(c.consume);
     this.evolve(c.base);
+    // verschmolzene Form merkt sich Namen + Icon (HUD/DPS/Endscreen zeigen die Evolution)
+    const w = this.owned[c.base];
+    if (w) {
+      w.evoName = c.name;
+      w.evoIcon = COMBO_ICONS[c.name] || '✨';
+    }
+  }
+
+  // Anzeigename + Icon einer Waffe — verschmolzene Formen zeigen ihre Kombo-Identität
+  displayInfo(id) {
+    const w = this.owned[id];
+    if (w && w.evolved && w.evoName) return { name: w.evoName, icon: w.evoIcon || '✨' };
+    const def = WEAPON_DEFS[id];
+    return { name: (def && def.name) || id, icon: WEAPON_ICONS[id] || '◆' };
   }
 
   // Schaden anwenden + der Waffe gutschreiben (für Endstatistik)

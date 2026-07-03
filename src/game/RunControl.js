@@ -30,8 +30,13 @@ export function _makeOnKill(g, p) {
       if (e.elite) {
         g.fx.explosion(e.x, e.z, 3, 0xffd24a);
         g.camCtrl.addShake(0.25);
-        g.pickups.spawnAt('chest', e.x, e.z); // Eliten hinterlassen Truhen
-        g.hud.toast(`⭐ ${g.enemies.eliteName(e)} besiegt — Truhe!`, 'gold');
+        // Truhen sind besonders — nur ~30% der Eliten lassen eine fallen
+        if (Math.random() < 0.3) {
+          g.pickups.spawnAt('chest', e.x, e.z);
+          g.hud.toast(`⭐ ${g.enemies.eliteName(e)} besiegt — eine Truhe!`, 'gold');
+        } else {
+          g.hud.toast(`⭐ ${g.enemies.eliteName(e)} besiegt!`, 'gold');
+        }
       }
     }
   };
@@ -264,20 +269,7 @@ export function _phaseTick(g, dt) {
         const sa = Math.random() * Math.PI * 2;
         g.pickups.spawnAt('shrine', c.x + Math.cos(sa) * 9, c.z + Math.sin(sa) * 9);
         g.hud.toast('🕯 Ein Schrein der Barriere ist erschienen!', 'gold');
-        // Frontlinie: neuer Panzer nach jedem Anführer
-        if (g.world.tank) {
-          const t = g.world.tank;
-          t.taken = false;
-          t.group.visible = true;
-          t.group.position.set(t.homeX, g.world.getHeight(t.homeX, t.homeZ), t.homeZ);
-          t.group.rotation.y = 0;
-          if (g.world.tankCollider) {
-            g.world.tankCollider.r = 1.6;
-            g.world.tankCollider.x = t.homeX;
-            g.world.tankCollider.z = t.homeZ;
-          }
-          g.hud.toast('🛡 Nachschub: Ein neuer Panzer ist eingetroffen!', 'gold');
-        }
+
       }
     }
   } else if (g.phaseStage === 'final') {
@@ -301,7 +293,8 @@ export function _updateDps(g, dt, dealt, weapons) {
     const cur = dealt[wid];
     if (cur <= 0) continue;
     const dur = Math.max(1, elapsed - (since[wid] || 0));
-    entries.push({ id: wid, total: cur, dps: cur / dur });
+    const info = weapons && weapons.displayInfo ? weapons.displayInfo(wid) : null;
+    entries.push({ id: wid, total: cur, dps: cur / dur, name: info && info.name, icon: info && info.icon });
   }
   entries.sort((a, b) => b.total - a.total);
   g.hud.setDps(entries);
@@ -614,7 +607,8 @@ export function _dmgRowsHtml(g, dealt) {
   if (!ents.length) return '';
   let h = '<div class="dmg-title">Schaden pro Waffe</div>';
   for (const [id, v] of ents) {
-    const name = (WEAPON_DEFS[id] && WEAPON_DEFS[id].name) || id;
+    const info = g.weapons && g.weapons.displayInfo ? g.weapons.displayInfo(id) : null;
+    const name = (info && info.name) || (WEAPON_DEFS[id] && WEAPON_DEFS[id].name) || id;
     h += `<div class="dmg-row"><span>${name}</span><span>${Math.round(v).toLocaleString('de-DE')}</span></div>`;
   }
   return h;
@@ -692,44 +686,62 @@ export function _updateMapSpecials(g, dt) {
     }
   }
 
-  // --- Frontlinie 1944: Panzer ---
-  if (w.tank) {
-    const t = w.tank;
-    let driver = null;
-    for (const p of ps) if (p.vehicle) { driver = p; break; }
-    if (driver) {
-      driver.vehicle.t -= dt;
-      t.group.visible = true;
-      t.group.position.set(driver.position.x, driver.position.y, driver.position.z);
-      t.group.rotation.y = -driver.yaw + Math.PI / 2; // Rohr in Blickrichtung (Modell zeigt +X)
-      // Ketten überrollen alles
-      const crushed = g.enemies.inRadius(driver.position.x, driver.position.z, 2.0);
-      const ok = g._onKillFor(driver);
-      for (const e of crushed) g.enemies.damage(e, 160 * dt + 2, { x: (e.x - driver.position.x) * 2, z: (e.z - driver.position.z) * 2 }, ok);
-      // Kanone feuert automatisch auf den nächsten Gegner
-      driver.vehicle.gun -= dt;
-      if (driver.vehicle.gun <= 0) {
-        driver.vehicle.gun = 1.6;
-        const tgt = g.enemies.nearest(driver.position.x, driver.position.z, 18);
-        if (tgt) {
-          g.fx.explosion(tgt.x, tgt.z, 3, 0xffa040);
-          g.camCtrl.addShake(0.16);
-          g.audio.kill();
-          for (const e of g.enemies.inRadius(tgt.x, tgt.z, 3)) g.enemies.damage(e, 90, null, ok);
+  // --- Frontlinie 1944: Panzer (mehrere, mit Respawn-Timer) ---
+  if (w.tanks) {
+    for (const t of w.tanks) {
+      const driver = ps.find((p) => p.vehicle && p.vehicle.tank === t);
+      if (driver) {
+        driver.vehicle.t -= dt;
+        t.group.visible = true;
+        t.group.position.set(driver.position.x, driver.position.y, driver.position.z);
+        t.group.rotation.y = -driver.yaw + Math.PI / 2; // Rohr in Blickrichtung (Modell zeigt +X)
+        // Ketten überrollen alles
+        const crushed = g.enemies.inRadius(driver.position.x, driver.position.z, 2.0);
+        const ok = g._onKillFor(driver);
+        for (const e of crushed) g.enemies.damage(e, 160 * dt + 2, { x: (e.x - driver.position.x) * 2, z: (e.z - driver.position.z) * 2 }, ok);
+        // Kanone feuert automatisch auf den nächsten Gegner
+        driver.vehicle.gun -= dt;
+        if (driver.vehicle.gun <= 0) {
+          driver.vehicle.gun = 1.6;
+          const tgt = g.enemies.nearest(driver.position.x, driver.position.z, 18);
+          if (tgt) {
+            g.fx.explosion(tgt.x, tgt.z, 3, 0xffa040);
+            g.camCtrl.addShake(0.16);
+            g.audio.kill();
+            for (const e of g.enemies.inRadius(tgt.x, tgt.z, 3)) g.enemies.damage(e, 90, null, ok);
+          }
         }
+        if (driver.vehicle.t <= 0) {
+          driver.vehicle = null;
+          t.group.visible = false;
+          t.respawn = 45; // Nachschub rollt automatisch an
+          g._toastFor(driver, '🛢 Treibstoff leer — Panzer verlassen (Nachschub in 45s)', 'gold');
+        }
+        continue;
       }
-      if (driver.vehicle.t <= 0) {
-        driver.vehicle = null;
-        t.group.visible = false; // verbraucht — der nächste Anführer bringt Nachschub
-        g._toastFor(driver, '🛢 Treibstoff leer — Panzer verlassen', 'gold');
+      if (t.taken) {
+        // verbraucht: Respawn-Timer läuft
+        t.respawn -= dt;
+        if (t.respawn <= 0) {
+          t.taken = false;
+          t.group.visible = true;
+          t.group.position.set(t.homeX, w.getHeight(t.homeX, t.homeZ), t.homeZ);
+          t.group.rotation.y = 0;
+          t.collider.r = 1.6;
+          t.collider.x = t.homeX;
+          t.collider.z = t.homeZ;
+          g.hud.toast('🛡 Nachschub: Ein neuer Panzer ist eingetroffen!', 'gold');
+        }
+        continue;
       }
-    } else if (!t.taken) {
+      // Einsteigen
       for (const p of ps) {
-        if (p.dead) continue;
+        if (p.dead || p.vehicle) continue;
         if (Math.hypot(p.position.x - t.group.position.x, p.position.z - t.group.position.z) < 2.4) {
           t.taken = true;
-          if (w.tankCollider) w.tankCollider.r = 0;
-          p.vehicle = { t: 22, gun: 0.6 };
+          t.respawn = 45;
+          t.collider.r = 0;
+          p.vehicle = { t: 22, gun: 0.6, tank: t };
           g._toastFor(p, '🛡 PANZER! 22 Sekunden — überrolle alles!', 'gold', 'levelup');
           g.camCtrl.addShake(0.3);
           break;
@@ -747,7 +759,7 @@ export function _updateMapSpecials(g, dt) {
         lo.active = true;
         lo.dir = Math.random() > 0.5 ? 1 : -1;
         lo.x = -lo.dir * 375;
-        lo.timer = 22 + Math.random() * 14;
+        lo.timer = 12 + Math.random() * 8; // rollt deutlich öfter
         g.hud.toast('⚠ LORE IM ANMARSCH — runter vom Gleis!', 'blood');
         g.audio.boss();
       }
@@ -777,8 +789,8 @@ export function _updateMapSpecials(g, dt) {
       for (const p of ps) {
         if (p.dead) continue;
         if (Math.hypot(p.position.x - pad.x, p.position.z - pad.z) < 1.5) {
-          pad.cd = 5;
-          p.boost = 3;
+          pad.cd = 3.5;
+          p.boost = 3.5;
           g.fx.ring(pad.x, pad.z, 3, 0x2fd0ff);
           g._toastFor(p, '⚡ Boost!', 'gold', 'pickup');
           break;
@@ -789,17 +801,36 @@ export function _updateMapSpecials(g, dt) {
 
   // --- Tal der Kolonie: die Barriere zürnt (Blitz auf einen zufälligen Gegner) ---
   if (g.mapKey === 'valley') {
-    g._barrierBoltT = (g._barrierBoltT ?? 28) - dt;
+    g._barrierBoltT = (g._barrierBoltT ?? 14) - dt;
     if (g._barrierBoltT <= 0) {
-      g._barrierBoltT = 35 + Math.random() * 15;
+      g._barrierBoltT = 14 + Math.random() * 8;
       const list = g.enemies.inRadius(g.player.position.x, g.player.position.z, 26);
-      if (list.length) {
+      // Kettenblitz: bis zu 3 zufällige Ziele
+      const n = Math.min(3, list.length);
+      for (let i = 0; i < n; i++) {
         const e = list[Math.floor(Math.random() * list.length)];
+        if (!e.alive) continue;
         g.fx.bolt(e.x, e.z);
         g.enemies.damage(e, 180, null, g._onKillP1);
+      }
+      if (n) {
         g.hud.toast('⚡ Die Barriere zürnt!', 'gold');
         g.audio.kill();
       }
+    }
+  }
+
+  // --- Sumpf: Gift-Geysire — Tümpel speien periodisch und verätzen Gegner darin ---
+  if (w.bogPools) {
+    g._geyserT = (g._geyserT ?? 6) - dt;
+    if (g._geyserT <= 0) {
+      g._geyserT = 7 + Math.random() * 5;
+      const pool = w.bogPools[Math.floor(Math.random() * w.bogPools.length)];
+      g.fx.ring(pool.x, pool.z, pool.r, 0x6abf3a);
+      g.fx.sparksBurst(pool.x, 0.8, pool.z, 0x6abf3a, 16, 6);
+      const hit = g.enemies.inRadius(pool.x, pool.z, pool.r);
+      for (const e of hit) g.enemies.damage(e, 45, null, g._onKillP1, 1.2);
+      if (hit.length) g.hud.toast('🫧 Gift-Geysir!', 'gold');
     }
   }
 }

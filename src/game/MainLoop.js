@@ -63,6 +63,9 @@ export function _drawCombatUI(g) {
 }
 export function update(g) {
   const rawDt = Math.min(0.05, g.clock.getDelta());
+  // Sprite-Animations-Uhr: läuft IMMER lokal weiter — der Client bekommt runElapsed
+  // nur sekundengenau aus Snapshots, damit ruckelte die Helden-Animation beim Gast
+  g._animT = (g._animT || 0) + rawDt;
   let dt = rawDt;
   if (g._hitStopT > 0) {
     g._hitStopT -= rawDt;
@@ -81,6 +84,7 @@ export function update(g) {
   const frozen = g.mode === 'levelup' || g.mode === 'paused' || (g.role === 'client' && g._clientPaused);
   if (g.fx) g.fx.update(frozen ? 0 : dt);
 
+  if (g.mode === 'play') g._autoQuality(); // FPS-Wächter: Renderauflösung dynamisch
   if (g.mode === 'play' && g.role !== 'client') g._updatePlayHost(dt);
   else if (g.mode === 'play' && g.role === 'client') g._updatePlayClient(dt);
   else {

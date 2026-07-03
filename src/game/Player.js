@@ -41,7 +41,8 @@ export class Player {
     this.hitFlash = 0;
     this.rooted = 0; // Festgewurzelt (Boss-Fähigkeit): blockt Bewegung, per Tastenhämmern lösbar
     this.blessing = 0; // Schrein-Segen: Restzeit des Schadens-Buffs
-    this.vehicle = null; // Map-Special: Panzer (Frontlinie 1944)
+    this.vehicle = null;
+    this.shieldT = 0; // Map-Special: Panzer (Frontlinie 1944)
     this.boost = 0; // Map-Special: Boost-Pad-Restzeit (Neon-Distrikt)
     this.mud = false; // Map-Special: im Morast (Sumpf)
     this.moving = false;
@@ -115,6 +116,7 @@ export class Player {
     this.rooted = 0;
     this.blessing = 0;
     this.vehicle = null;
+    this.shieldT = 0;
     this.boost = 0;
     this.mud = false;
     this.passivesTaken.clear();
@@ -187,6 +189,7 @@ export class Player {
 
   takeDamage(amount, srcType) {
     if (this.dead || this.iframe > 0) return 0;
+    if (this.shieldT > 0) amount *= 0.45; // Schutzsegen: Schild dämpft
     const dmg = Math.max(1, Math.round(amount - this.armor - (this.vehicle ? 18 : 0))); // Panzer schluckt viel
     this.hp = Math.max(0, this.hp - dmg);
     this.iframe = 0.45;
@@ -235,6 +238,7 @@ export class Player {
     }
 
     if (this.iframe > 0) this.iframe -= dt;
+    if (this.shieldT > 0) this.shieldT -= dt; // Schutzsegen
     if (this.hitFlash > 0) this.hitFlash -= dt;
     const regen = this.hpRegen + (this.aura ? 1.2 : 0); // Nähe-Aura: Extra-Regeneration
     if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + regen * dt);

@@ -2,6 +2,12 @@ import * as THREE from 'three';
 
 // Waffen-Definitionen: Werte skalieren per Formel mit dem Level.
 export const WEAPON_DEFS = {
+  heal: {
+    name: 'Lebensfunke',
+    desc: 'Heilt dich und Verbündete in der Nähe',
+    maxLevel: 10,
+    stats: (lv) => ({ heal: 4 + lv * 1.2, radius: 10, cd: Math.max(2.6, 4.4 - lv * 0.12) }),
+  },
   whirl: {
     name: 'Klingenwirbel',
     desc: 'Schaden an allen Feinden in der Nähe',
@@ -87,11 +93,12 @@ export const WEAPON_DEFS = {
 //  2) Waffe (Maxlevel) + PASSIV (mehrfach genommen): `base` wird verstärkt, kein Slot frei, Passiv bleibt.
 // Icons der verschmolzenen Formen (Anzeige in HUD/DPS/Endscreen)
 export const COMBO_ICONS = {
+  Gletscherdorn: '💠', Mahlstrom: '🌊', Schutzsegen: '🕊', 'Quell des Lebens': '⛲',
   Klingensturm: '🌪', 'Höllensturm': '🌋', 'Ewiger Winter': '🧊', Seuchenhagel: '☣️',
   Sternenregen: '🌠', 'Geweihte Klingen': '⚜️', Kataklysmus: '💥', 'Göttlicher Zorn': '🌩',
   'Urteil des Henkers': '⚖️', Sturmruf: '⛈', Pestwind: '🦠', Seelenwacht: '👻',
 };
-export const WEAPON_ICONS = { whirl: '🌀', axe: '🪓', fireball: '🔥', orbit: '✦', lightning: '⚡', frost: '❄️', spear: '🦴', poison: '☠️', holy: '✝️', daggers: '🗡️', meteor: '☄️' };
+export const WEAPON_ICONS = { heal: '💚', whirl: '🌀', axe: '🪓', fireball: '🔥', orbit: '✦', lightning: '⚡', frost: '❄️', spear: '🦴', poison: '☠️', holy: '✝️', daggers: '🗡️', meteor: '☄️' };
 
 export const COMBINATIONS = [
   { base: 'whirl', consume: 'axe', name: 'Klingensturm', desc: 'Der Wirbel schleudert zusätzlich Klingen nach außen' },
@@ -102,7 +109,11 @@ export const COMBINATIONS = [
   { base: 'holy', consume: 'daggers', name: 'Geweihte Klingen', desc: 'Die Aura wirft geweihte Dolche auf den nächsten Gegner' },
   { base: 'meteor', consume: 'fireball', name: 'Kataklysmus', desc: 'Einschläge lösen Schockwellen aus, die alles wegschleudern' },
   { base: 'holy', consume: 'lightning', name: 'Göttlicher Zorn', desc: 'Die Aura straft Gegner regelmäßig mit heiligen Blitzen' },
+  { base: 'spear', consume: 'frost', name: 'Gletscherdorn', desc: 'Eisspeere frieren jeden Treffer ein' },
+  { base: 'heal', consume: 'holy', name: 'Schutzsegen', desc: 'Heilpulse gewähren kurz einen Schutzschild (−55% Schaden)' },
   // Waffe + Passiv (3× genommen)
+  { base: 'whirl', passive: 'speed', passiveCount: 3, name: 'Mahlstrom', desc: 'Der Wirbel saugt Gegner an, statt sie wegzustoßen' },
+  { base: 'heal', passive: 'regen', passiveCount: 3, name: 'Quell des Lebens', desc: 'Heilpulse hinterlassen heilende Felder' },
   { base: 'axe', passive: 'might', passiveCount: 3, name: 'Urteil des Henkers', desc: 'Riesenäxte richten angeschlagene Gegner sofort hin' },
   { base: 'lightning', passive: 'proj', passiveCount: 3, name: 'Sturmruf', desc: 'Blitze springen als Kette auf weitere Gegner über' },
   { base: 'poison', passive: 'area', passiveCount: 3, name: 'Pestwind', desc: 'Giftwolken wandern mit dem Wind und verlangsamen' },
@@ -269,6 +280,9 @@ export class Weapons {
     return false;
   }
   // Verschmelzen: consume entfernen (falls Waffen-Rezept), base verstärken.
+  ally = null; // optionaler Getter auf den Verbündeten (Koop) — von Coop verdrahtet
+  healZones = [];
+
   combine(c, player = null) {
     if (!this.canCombine(c, player)) return;
     if (c.consume) this.remove(c.consume);
@@ -298,6 +312,7 @@ export class Weapons {
 
   reset() {
     this.owned = {};
+    this.healZones = [];
     this._dealt = {};
     this.ownedSince = {};
     for (const p of this.projectiles) {
@@ -347,11 +362,16 @@ export class Weapons {
     const lv = this.level('whirl');
     if (!lv) return;
     // Klingensturm: goldglühende Klingen statt Stahl
-    const evolved = this.owned.whirl && this.owned.whirl.evolved;
+    const wOwn = this.owned.whirl;
+    const evolved = wOwn && wOwn.evolved;
+    const maelstrom = evolved && wOwn.evoName === 'Mahlstrom';
     if (evolved && !this._bladeMatEvo) {
       this._bladeMatEvo = new THREE.MeshStandardMaterial({ color: 0xf0d8a0, metalness: 0.9, roughness: 0.25, emissive: 0xc88a20, emissiveIntensity: 1.1 });
     }
-    const mat = evolved ? this._bladeMatEvo : this._bladeMat;
+    if (maelstrom && !this._bladeMatIce) {
+      this._bladeMatIce = new THREE.MeshStandardMaterial({ color: 0xbfe6ff, metalness: 0.7, roughness: 0.2, emissive: 0x2a7ac0, emissiveIntensity: 1.0 });
+    }
+    const mat = maelstrom ? this._bladeMatIce : evolved ? this._bladeMatEvo : this._bladeMat;
     const n = 2 + Math.floor(lv / 2); // wenige, mehr pro 2 Stufen
     for (let i = 0; i < n; i++) {
       const mesh = new THREE.Mesh(this._bladeGeo, mat);
@@ -366,8 +386,14 @@ export class Weapons {
     const lv = this.level('orbit');
     if (!lv) return;
     const s = WEAPON_DEFS.orbit.stats(lv);
+    const evolvedO = this.owned.orbit && this.owned.orbit.evolved;
+    if (evolvedO && !this._orbMatEvo) {
+      this._orbMatEvo = this._orbMat.clone();
+      this._orbMatEvo.color.setHex(0x9df0b0);
+      if (this._orbMatEvo.emissive) this._orbMatEvo.emissive.setHex(0x2e9a50);
+    }
     for (let i = 0; i < s.count; i++) {
-      const mesh = new THREE.Mesh(this._orbGeo, this._orbMat);
+      const mesh = new THREE.Mesh(this._orbGeo, evolvedO ? this._orbMatEvo : this._orbMat);
       mesh.castShadow = true;
       this.group.add(mesh);
       this.orbs.push({ mesh, phase: (i / s.count) * Math.PI * 2 });
@@ -405,6 +431,7 @@ export class Weapons {
     c.vx = 0;
     c.vz = 0;
     c.slow = 0;
+    c.evo = false;
     c.mesh.visible = true;
     c.mesh.scale.setScalar(r * 0.7);
     c.mesh.position.set(x, c.y, z);
@@ -441,6 +468,8 @@ export class Weapons {
     p.plague = false;
     p.storm = false;
     p._pl = 0;
+    p.trailCol = 0;
+    p.slowHit = 0;
     p.mesh.scale.setScalar(1);
     p.mesh.visible = true;
     p.mesh.position.set(x, 1.1, z);
@@ -498,6 +527,7 @@ export class Weapons {
       // Verschmelzung: deutlich stärker
       if (w.evolved) {
         s.damage *= 1.7;
+        if (s.heal) s.heal *= 1.6;
         if (s.cd) s.cd *= 0.6;
         if (s.count) s.count += 2;
         if (s.radius) s.radius *= 1.5;
@@ -512,24 +542,47 @@ export class Weapons {
       if (w.cdTimer > 0) continue;
       w.cdTimer = cd;
 
-      if (w.id === 'whirl') {
+      if (w.id === 'heal') {
+        const targets = [player];
+        if (this.ally) { const al = this.ally(); if (al && !al.dead) targets.push(al); }
+        let any = false;
+        for (const t of targets) {
+          const near = t === player || Math.hypot(t.position.x - player.position.x, t.position.z - player.position.z) <= s.radius;
+          if (!near) continue;
+          if (t.hp < t.maxHp) { t.heal(s.heal); any = true; }
+          // Schutzsegen: Puls legt kurzzeitig einen Schild um alle Geheilten
+          if (w.evolved && w.evoName === 'Schutzsegen') { t.shieldT = Math.max(t.shieldT || 0, 1.5); any = true; }
+          if (this.fx && near) { this.fx.ring(t.position.x, t.position.z, 1.6, 0x7ce68a); this.fx.sparksBurst(t.position.x, 1.2, t.position.z, 0x9df0a8, 6, 3); }
+        }
+        // Quell des Lebens: heilendes Feld am eigenen Standort
+        if (w.evolved && w.evoName === 'Quell des Lebens') {
+          this.healZones.push({ x: player.position.x, z: player.position.z, r: 2.6, t: 3, tick: 0 });
+        }
+        if (!any && !w.evolved) w.cdTimer = Math.min(w.cdTimer, 0.8); // alle voll -> bald erneut prüfen
+      } else if (w.id === 'whirl') {
         const r = s.radius * areaMult;
         const dmg = s.damage * might;
-        const hit = enemies.inRadius(player.position.x, player.position.z, r + 0.6);
+        const maelstrom = w.evolved && w.evoName === 'Mahlstrom';
+        const hit = enemies.inRadius(player.position.x, player.position.z, r + (maelstrom ? 2.2 : 0.6));
         for (const e of hit) {
-          this._dmg(enemies, e, dmg, { x: (e.x - player.position.x) * 1.5, z: (e.z - player.position.z) * 1.5 }, onKill, 'whirl');
-          if (this.fx) this.fx.sparksBurst(e.x, 1.0, e.z, 0xfff0c0, 3, 4);
+          // Mahlstrom: SAUGT Gegner in den Wirbel, statt sie wegzustoßen
+          const kb = maelstrom
+            ? { x: (player.position.x - e.x) * 1.4, z: (player.position.z - e.z) * 1.4 }
+            : { x: (e.x - player.position.x) * 1.5, z: (e.z - player.position.z) * 1.5 };
+          this._dmg(enemies, e, dmg, kb, onKill, 'whirl');
+          if (this.fx) this.fx.sparksBurst(e.x, 1.0, e.z, maelstrom ? 0x8fd8ff : 0xfff0c0, 3, 4);
         }
         if (this.fx) {
-          this.fx.ring(player.position.x, player.position.z, r, 0xffb060);
-          this.fx.slash(player.position.x, player.position.z, r, this._whirlSpin, 0xeaf2ff);
+          this.fx.ring(player.position.x, player.position.z, r, maelstrom ? 0x6ad0ff : w.evolved ? 0xffd24a : 0xffb060);
+          this.fx.slash(player.position.x, player.position.z, r, this._whirlSpin, maelstrom ? 0x9fe0ff : w.evolved ? 0xffe9b0 : 0xeaf2ff);
         }
         // Klingensturm: schleudert bei jedem Wirbel zwei Klingen nach außen
-        if (w.evolved) {
+        if (w.evolved && !maelstrom) {
           for (let i = 0; i < 2; i++) {
             const a = this._whirlSpin * 2.7 + i * Math.PI;
             const pj = this._spawnProjectile('axe', player.position.x, player.position.z, Math.sin(a) * 16, Math.cos(a) * 16, dmg * 0.7, 2, 0.6 * areaMult, 0.9);
             pj.wid = 'whirl';
+            pj.trailCol = 0xffd24a;
           }
         }
       } else if (w.id === 'axe') {
@@ -547,6 +600,7 @@ export class Weapons {
           if (w.evolved) {
             p.execute = 0.2;
             p.mesh.scale.setScalar(1.8);
+            p.trailCol = 0xffd24a;
           }
         }
       } else if (w.id === 'fireball') {
@@ -562,6 +616,7 @@ export class Weapons {
           p.explodeR = s.area * areaMult;
           p.wid = 'fireball';
           p.storm = w.evolved; // Höllensturm: Einschlag ruft einen Blitz
+          if (w.evolved) p.trailCol = 0xff4a10;
         }
       } else if (w.id === 'lightning') {
         const count = s.count + extra;
@@ -609,7 +664,10 @@ export class Weapons {
           p.speed = sp;
           p.owner = player;
           p.wid = 'spear';
-          p.plague = w.evolved && i < 2; // Seuchenhagel: die vorderen Speere ziehen Gift-Spuren
+          const glacier = w.evolved && w.evoName === 'Gletscherdorn';
+          p.plague = w.evolved && !glacier && i < 2; // Seuchenhagel: die vorderen Speere ziehen Gift-Spuren
+          if (glacier) { p.slowHit = 1.6; p.trailCol = 0x9fe0ff; } // Gletscherdorn: Treffer frieren ein
+          else if (w.evolved) p.trailCol = 0x9fe06a;
         }
       } else if (w.id === 'poison') {
         const target = enemies.nearest(player.position.x, player.position.z, 30);
@@ -623,6 +681,7 @@ export class Weapons {
           c.vx = Math.cos(wa) * 1.6;
           c.vz = Math.sin(wa) * 1.6;
           c.slow = 1.0;
+          c.evo = true;
         }
       } else if (w.id === 'holy') {
         const r = s.radius * areaMult;
@@ -636,6 +695,7 @@ export class Weapons {
             const a = Math.atan2(t.x - player.position.x, t.z - player.position.z);
             const pj = this._spawnProjectile('axe', player.position.x, player.position.z, Math.sin(a) * 26, Math.cos(a) * 26, s.damage * might * 2.2, 3, 0.5 * areaMult, 1.2);
             pj.wid = 'holy';
+            pj.trailCol = 0xffe9b0;
           }
         } else if (w.evolved && w.evoName === 'Göttlicher Zorn') {
           // jeder zweite Tick: strafender Blitz auf einen Gegner im erweiterten Umkreis
@@ -658,6 +718,7 @@ export class Weapons {
           const a = baseAng + (i - (count - 1) / 2) * 0.16;
           const p = this._spawnProjectile('axe', player.position.x, player.position.z, Math.sin(a) * sp, Math.cos(a) * sp, s.damage * might, s.pierce, 0.5 * areaMult, 1.3);
           p.wid = 'daggers';
+          if (w.evolved) p.trailCol = 0x9fd8ff;
         }
         // Sternenregen: jede Salve ruft zwei Mini-Meteore auf zufällige Gegner
         if (w.evolved) {
@@ -697,6 +758,9 @@ export class Weapons {
       this.holyRing.position.set(player.position.x, player.position.y + 0.12, player.position.z);
       this.holyRing.scale.setScalar(r);
       this.holyRing.material.opacity = 0.14 + 0.06 * (0.5 + 0.5 * Math.sin(this.elapsed * 5));
+      if (this._holyBaseCol == null) this._holyBaseCol = this.holyRing.material.color.getHex();
+      const hw = this.owned.holy;
+      this.holyRing.material.color.setHex(hw.evolved ? (hw.evoName === 'Göttlicher Zorn' ? 0xfff0b0 : 0xffdf90) : this._holyBaseCol);
     }
 
     // ---- Giftwolken (Schaden über Zeit) ----
@@ -711,7 +775,11 @@ export class Weapons {
       }
       c.mesh.position.set(c.x, this._cloudY(c) + Math.sin(this.elapsed * 2 + c.x) * 0.1, c.z);
       c.mesh.scale.setScalar(c.r * (0.7 + 0.3 * k));
-      c.mesh.material = this._cloudMat;
+      if (c.evo && !this._cloudMatEvo) {
+        this._cloudMatEvo = this._cloudMat.clone();
+        this._cloudMatEvo.color.setHex(0xa8e04a);
+      }
+      c.mesh.material = c.evo ? this._cloudMatEvo : this._cloudMat;
       if (c.tick <= 0) {
         c.tick = 0.5;
         for (const e of enemies.inRadius(c.x, c.z, c.r)) this._dmg(enemies, e, c.dmg, null, onKill, 'poison', c.slow || undefined);
@@ -720,6 +788,24 @@ export class Weapons {
         c.alive = false;
         c.mesh.visible = false;
       }
+    }
+
+    // ---- Heilfelder (Quell des Lebens) ----
+    if (this.healZones && this.healZones.length) {
+      for (const z of this.healZones) {
+        z.t -= dt;
+        z.tick -= dt;
+        if (z.tick <= 0) {
+          z.tick = 0.5;
+          if (this.fx) this.fx.ring(z.x, z.z, z.r, 0x7ce68a);
+          const targets = [player];
+          if (this.ally) { const al = this.ally(); if (al && !al.dead) targets.push(al); }
+          for (const t of targets) {
+            if (Math.hypot(t.position.x - z.x, t.position.z - z.z) <= z.r && t.hp < t.maxHp) t.heal(2);
+          }
+        }
+      }
+      this.healZones = this.healZones.filter((z) => z.t > 0);
     }
 
     // ---- Persistenter Klingenwirbel (dauerhaft sichtbar) ----
@@ -799,7 +885,8 @@ export class Weapons {
         if (p._pl > 0.3) {
           p._pl = 0;
           const gy = this.fx && this.fx.heightAt ? this.fx.heightAt(p.x, p.z) : 0;
-          this._spawnCloud(p.x, p.z, 1.1, p.dmg * 0.12, 1.3, gy);
+          const tc = this._spawnCloud(p.x, p.z, 1.1, p.dmg * 0.12, 1.3, gy);
+          if (tc) tc.evo = true;
         }
       }
       // Partikel-Schweife
@@ -807,9 +894,9 @@ export class Weapons {
         p._tr = (p._tr || 0) + dt;
         if (p._tr > 0.04) {
           p._tr = 0;
-          if (p.kind === 'fire') this.fx.sparksBurst(p.x, 1.1, p.z, 0xff8a2a, 2, 1.5);
-          else if (p.kind === 'spear') this.fx.sparksBurst(p.x, 1.1, p.z, 0xcfe0ff, 1, 1.2);
-          else if (p.kind === 'axe') this.fx.sparksBurst(p.x, 1.1, p.z, 0xbfc8d8, 1, 1.0);
+          if (p.kind === 'fire') this.fx.sparksBurst(p.x, 1.1, p.z, p.trailCol || 0xff8a2a, 2, 1.5);
+          else if (p.kind === 'spear') this.fx.sparksBurst(p.x, 1.1, p.z, p.trailCol || 0xcfe0ff, 1, 1.2);
+          else if (p.kind === 'axe') this.fx.sparksBurst(p.x, 1.1, p.z, p.trailCol || 0xbfc8d8, 1, 1.0);
         }
       }
 
@@ -834,7 +921,7 @@ export class Weapons {
             hitDmg = e.hp + (e.shield || 0) + 999;
             if (this.fx) this.fx.slash(e.x, e.z, 1.6, 0, 0xffd24a);
           }
-          this._dmg(enemies, e, hitDmg, { x: p.vx * 0.3, z: p.vz * 0.3 }, onKill, p.wid || 'axe');
+          this._dmg(enemies, e, hitDmg, { x: p.vx * 0.3, z: p.vz * 0.3 }, onKill, p.wid || 'axe', p.slowHit || undefined);
           if (this.fx) this.fx.sparksBurst(e.x, 1.1, e.z, 0xffe0a0, 5, 5);
           p.pierce--;
           if (p.pierce < 0) {
@@ -849,7 +936,7 @@ export class Weapons {
 
   _explode(p, enemies, onKill) {
     const r = p.explodeR || 1.5;
-    if (this.fx) this.fx.explosion(p.x, p.z, r, 0xffa030);
+    if (this.fx) this.fx.explosion(p.x, p.z, r, p.storm ? 0xff5a18 : 0xffa030);
     for (const e of enemies.inRadius(p.x, p.z, r)) {
       this._dmg(enemies, e, p.dmg, { x: (e.x - p.x) * 2, z: (e.z - p.z) * 2 }, onKill, 'fireball');
     }

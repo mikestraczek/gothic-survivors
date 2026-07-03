@@ -139,6 +139,9 @@ export function _ensureCoop(g) {
     g.weapons2 = new Weapons(g.scene);
     g.weapons2.fx = g.fx;
   }
+  // Lebensfunke & Co.: wer der „Verbündete" der jeweiligen Waffen-Instanz ist
+  g.weapons.ally = () => g.remotePlayer;
+  g.weapons2.ally = () => g.player;
 }
 export function _onNetData(g, d) {
   if (!d) return;

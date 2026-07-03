@@ -31,7 +31,7 @@ function rollRarity() {
   return { rarity: 'rare', f: 1.8 };
 }
 
-const WEAPON_ICON = { whirl: '🌀', axe: '🪓', fireball: '🔥', orbit: '✦', lightning: '⚡', frost: '❄️', spear: '🦴', poison: '☠️', holy: '✝️', daggers: '🗡️', meteor: '☄️' };
+const WEAPON_ICON = { heal: '💚', whirl: '🌀', axe: '🪓', fireball: '🔥', orbit: '✦', lightning: '⚡', frost: '❄️', spear: '🦴', poison: '☠️', holy: '✝️', daggers: '🗡️', meteor: '☄️' };
 const PASSIVE_ICON = { might: '💪', speed: '👟', hp: '❤', armor: '🛡', cd: '⏱', area: '💥', pickup: '🧲', regen: '✚', proj: '➹', dash: '💨', amount: '✛' };
 
 // für HUD-Tooltips
@@ -48,6 +48,19 @@ export class Upgrades {
   generate(player, weapons, n = 3) {
     const out = [];
     const banned = player.banished || new Set();
+    // Hinweis auf Karten: „diese Wahl führt zu einer Kombination mit deinem Bestand"
+    const hintFor = (wid) => {
+      const hints = [];
+      for (const c of COMBINATIONS) {
+        if (c.base === wid && !(weapons.owned[wid] && weapons.owned[wid].evolved)) {
+          if (c.consume && weapons.has(c.consume)) hints.push(`🔗 ${COMBO_ICONS[c.name] || '✨'} <b>${c.name}</b> — mit ${WEAPON_DEFS[c.consume].name}`);
+          else if (c.passive && (player.passiveCounts[c.passive] || 0) > 0) hints.push(`🔗 ${COMBO_ICONS[c.name] || '✨'} <b>${c.name}</b> — mit ${(PASSIVE_INFO[c.passive] && PASSIVE_INFO[c.passive].name) || c.passive} (3×)`);
+        } else if (c.consume === wid && weapons.has(c.base) && !(weapons.owned[c.base] && weapons.owned[c.base].evolved)) {
+          hints.push(`🔗 ${COMBO_ICONS[c.name] || '✨'} <b>${c.name}</b> — mit ${WEAPON_DEFS[c.base].name}`);
+        }
+      }
+      return hints.length ? `<div class="lc-hint">${hints.join('<br>')}</div>` : '';
+    };
     // Hinweis: Verschmelzungen laufen über das separate Kombinations-Popup (Game).
     // Waffen aufwerten
     for (const w of weapons.ownedList()) {
@@ -57,7 +70,7 @@ export class Upgrades {
       const toMax = w.level + 1 >= (def.maxLevel || 10);
       out.push({
         weight: 5, bid: 'up:' + w.id, rarity: toMax ? 'rare' : 'uncommon',
-        icon: WEAPON_ICON[w.id], title: `${def.name} → Stufe ${w.level + 1}`, sub: def.desc,
+        icon: WEAPON_ICON[w.id], title: `${def.name} → Stufe ${w.level + 1}`, sub: def.desc + hintFor(w.id),
         apply: () => weapons.add(w.id),
       });
     }
@@ -70,7 +83,7 @@ export class Upgrades {
         const def = WEAPON_DEFS[id];
         out.push({
           weight: 4, bid: 'new:' + id, rarity: 'uncommon',
-          icon: WEAPON_ICON[id], title: `Neue Waffe: ${def.name}`, sub: def.desc,
+          icon: WEAPON_ICON[id], title: `Neue Waffe: ${def.name}`, sub: def.desc + hintFor(id),
           apply: () => weapons.add(id),
         });
       }
@@ -83,7 +96,7 @@ export class Upgrades {
         weight: pa.rare ? 1 : 3, bid: 'pa:' + pa.id, rarity: roll.rarity,
         icon: PASSIVE_ICON[pa.id] || '◆',
         title: pa.name,
-        sub: pa.sub(roll.f),
+        sub: pa.sub(roll.f) + COMBINATIONS.filter((c) => c.passive === pa.id && weapons.has(c.base) && !(weapons.owned[c.base] && weapons.owned[c.base].evolved)).map((c) => `<div class="lc-hint">🔗 ${COMBO_ICONS[c.name] || '✨'} <b>${c.name}</b> — mit ${WEAPON_DEFS[c.base].name} (3× nötig)</div>`).join(''),
         apply: () => {
           pa.apply(player, roll.f);
           player.passivesTaken.add(pa.id);

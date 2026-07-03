@@ -173,7 +173,7 @@ export function _tintHero(g, im, pl, heroKey) {
   im.instanceColor.needsUpdate = true;
 }
 export function _updateHeroSprites(g) {
-  const fr = Math.floor(g.runElapsed * 7) % SPRITE_FRAMES;
+  const fr = Math.floor((g._animT || 0) * 7) % SPRITE_FRAMES;
   // im Panzer sitzt der Held IM Fahrzeug; als Zuschauer gibt es keinen eigenen Helden
   g.playerSprite.visible = !g.player.vehicle && !g._specOnly;
   if (g.playerSprite.visible) g._placeSprite(g.playerSprite, g.player.position, 2.9, fr, g._heroFlip(g.player, '_pFlip'));
@@ -227,4 +227,35 @@ export function _onResize(g) {
   if (g.bloom) g.bloom.setSize(w, h);
   g._syncPixelResolution();
   if (g.hud) g.hud.resize(w, h);
+}
+
+
+// Auto-Qualität: misst die echte Frame-Zeit und senkt bei Last die Renderauflösung
+// stufenweise (bis 55%) — hebt sie wieder an, wenn Luft ist. Großer Hebel für Gast-Geräte.
+const AQ_STEPS = [1, 0.85, 0.7, 0.55];
+export function _autoQuality(g) {
+  const now = performance.now();
+  const q = g._aq || (g._aq = { last: now, ema: 16.7, cd: 0, level: 0, toasted: false });
+  const raw = Math.min(100, now - q.last);
+  q.last = now;
+  q.ema += (raw - q.ema) * 0.05;
+  if (q.cd > 0) { q.cd -= raw / 1000; return; }
+  if (q.ema > 26 && q.level < AQ_STEPS.length - 1) {
+    q.level++;
+    q.cd = 3; // erst wirken lassen
+    g._applyDynScale();
+    if (!q.toasted) { q.toasted = true; g.hud.toast('⚙ Auto-Qualität: Auflösung reduziert (flüssiger)', 'gold'); }
+  } else if (q.ema < 14 && q.level > 0) {
+    q.level--;
+    q.cd = 6; // Hysterese gegen Pumpen
+    g._applyDynScale();
+  }
+}
+
+export function _applyDynScale(g) {
+  const s = g.settings || {};
+  const dyn = AQ_STEPS[(g._aq && g._aq.level) || 0];
+  const pr = Math.min(window.devicePixelRatio, 2) * (s.renderScale || 1) * dyn;
+  g.renderer.setPixelRatio(pr);
+  g._onResize();
 }

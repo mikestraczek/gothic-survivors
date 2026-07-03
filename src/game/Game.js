@@ -318,6 +318,10 @@ export class Game {
 
   _installUnloadScore() { return RunControl._installUnloadScore(this); }
 
+  _autoQuality() { return Visuals._autoQuality(this); }
+
+  _applyDynScale() { return Visuals._applyDynScale(this); }
+
   _phaseTarget() { return RunControl._phaseTarget(this); }
 
   _updateDps(dt, dealt, weapons) { return RunControl._updateDps(this, dt, dealt, weapons); }

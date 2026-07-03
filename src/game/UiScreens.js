@@ -102,7 +102,7 @@ export function _applySettings(g) {
     g.scene.traverse((o) => { if (o.isMesh && o.material) o.material.needsUpdate = true; });
   }
   // Renderauflösung: skaliert den PixelRatio — größter Performance-Hebel für schwache Geräte
-  const pr = Math.min(window.devicePixelRatio, 2) * (s.renderScale || 1);
+  const pr = Math.min(window.devicePixelRatio, 2) * (s.renderScale || 1) * (g._aq ? [1, 0.85, 0.7, 0.55][g._aq.level] : 1);
   if (Math.abs(g.renderer.getPixelRatio() - pr) > 0.001) {
     g.renderer.setPixelRatio(pr);
     g._onResize();

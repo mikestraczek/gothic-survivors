@@ -120,9 +120,13 @@ export class HUD {
     this.$('dodge-row').innerHTML = h;
   }
 
-  setSpectate(name) {
+  setSpectate(name, watchOnly = false) {
     const el = this.$('spectate-banner');
-    if (name) { el.classList.remove('hidden'); el.textContent = `Du bist gefallen — du beobachtest ${name}`; }
+    if (name) {
+      el.classList.remove('hidden');
+      // Zuschauer sind nie „gefallen" — sie schauen nur zu
+      el.textContent = watchOnly ? `👁 Du schaust ${name} zu — ESC zum Verlassen` : `Du bist gefallen — du beobachtest ${name}`;
+    }
     else el.classList.add('hidden');
   }
 

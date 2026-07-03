@@ -276,7 +276,8 @@ export function _updatePlayClient(g, dt) {
   g.enemies.renderBoltGhosts(g._ghostBolts || [], dt); // Boss-Kugeln
   g.pickups.animate(dt);
 
-  g.hud.setSpectate(spectating ? 'deinen Mitspieler' : null);
+  if (g._specOnly) g.hud.setSpectate(g._specName || 'dem Runner', true);
+  else g.hud.setSpectate(spectating ? 'deinen Mitspieler' : null);
   g.camCtrl.update(dt, g.input, g._camTarget());
   g.hud.update(g.player, g.weapons, g.runElapsed, g.enemies.ghostCount);
   g.hud.setPhase(g._phaseText());

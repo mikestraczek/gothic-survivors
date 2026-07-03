@@ -24,12 +24,17 @@ export const ACHIEVEMENTS = [
   { id: 'evolve', name: 'Verschmelzer', desc: 'Führe eine Waffen-Verschmelzung durch', unlock: 'Waffe: Meteor', check: (s) => s.evolves >= 1, prog: (s) => [Math.min(s.evolves, 1), 1] },
   { id: 'boss_10', name: 'Anführer-Schreck', desc: 'Besiege 10 Bosse oder Anführer', unlock: 'Waffe: Giftwolke', check: (s) => s.bossKills >= 10, prog: (s) => [s.bossKills, 10] },
   { id: 'gold_1000', name: 'Erzbaron', desc: 'Sammle insgesamt 1000 Erz', unlock: 'Waffe: Wächtergeister', check: (s) => s.totalGold >= 1000, prog: (s) => [s.totalGold, 1000] },
+  { id: 'wins_3', name: 'Veteran der Kolonie', desc: 'Gewinne 3 Level', unlock: 'Schwierigkeit: Schwer', check: (s) => s.wins >= 3, prog: (s) => [s.wins, 3] },
+  { id: 'win_corridor', name: 'Durchbruch', desc: 'Gewinne im Hohlweg', unlock: 'Belohnung: 150 Erz', reward: 150, check: (s) => (s.mapWins && s.mapWins.corridor) >= 1, prog: (s) => [Math.min((s.mapWins && s.mapWins.corridor) || 0, 1), 1] },
+  { id: 'win_cyber', name: 'Neon-Legende', desc: 'Gewinne im Neon-Distrikt 7', unlock: 'Belohnung: 150 Erz', reward: 150, check: (s) => (s.mapWins && s.mapWins.cyber) >= 1, prog: (s) => [Math.min((s.mapWins && s.mapWins.cyber) || 0, 1), 1] },
+  { id: 'win_ww2', name: 'Frontheld', desc: 'Gewinne an der Frontlinie 1944', unlock: 'Belohnung: 150 Erz', reward: 150, check: (s) => (s.mapWins && s.mapWins.ww2) >= 1, prog: (s) => [Math.min((s.mapWins && s.mapWins.ww2) || 0, 1), 1] },
 ];
 
 // Was hängt an welchem Achievement?
 const HERO_REQ = { hunter: 'kills_500', templar: 'survive_10', shadow: 'level_20' };
 const WEAPON_REQ = { meteor: 'evolve', poison: 'boss_10', orbit: 'gold_1000' };
 const MAP_REQ = { swamp: 'first_win' };
+const DIFF_REQ = { hard: 'wins_3' }; // „Schwer" muss verdient werden
 
 const EMPTY_STATS = { wins: 0, totalKills: 0, bestTime: 0, bestLevel: 0, evolves: 0, bossKills: 0, totalGold: 0 };
 
@@ -118,6 +123,15 @@ export class Meta {
     const a = ACHIEVEMENTS.find((x) => x.id === MAP_REQ[key]);
     return a ? a.desc : '';
   }
+  diffUnlocked(key) {
+    if (this.devUnlock) return true;
+    const req = DIFF_REQ[key];
+    return !req || this.hasAchievement(req);
+  }
+  diffReq(key) {
+    const a = ACHIEVEMENTS.find((x) => x.id === DIFF_REQ[key]);
+    return a ? a.desc : '';
+  }
   // Waffen, die noch NICHT freigeschaltet sind (für den Level-Up-Pool)
   lockedWeaponSet() {
     if (this.devUnlock) return new Set();
@@ -130,9 +144,28 @@ export class Meta {
 
   // Run-Ergebnis in die kumulierten Statistiken einrechnen und neue Achievements prüfen.
   // Gibt die Liste frisch freigeschalteter Achievements zurück (für Toasts).
-  recordRun({ time = 0, kills = 0, level = 0, win = false, bossKills = 0, evolves = 0, goldEarned = 0 }) {
+  // Stiller Abgleich: Bestands-Stats erfüllen evtl. schon neue Erfolge (z. B. wins_3 -> Schwer)
+  syncAchievements() {
     const s = this.data.stats;
-    if (win) s.wins++;
+    if (!s.mapWins) s.mapWins = {};
+    let changed = false;
+    for (const a of ACHIEVEMENTS) {
+      if (!this.data.achievements[a.id] && a.check(s)) {
+        this.data.achievements[a.id] = true;
+        if (a.reward) this.data.gold += a.reward;
+        changed = true;
+      }
+    }
+    if (changed) this._save();
+  }
+
+  recordRun({ time = 0, kills = 0, level = 0, win = false, bossKills = 0, evolves = 0, goldEarned = 0, map = null }) {
+    const s = this.data.stats;
+    if (!s.mapWins) s.mapWins = {};
+    if (win) {
+      s.wins++;
+      if (map) s.mapWins[map] = (s.mapWins[map] || 0) + 1;
+    }
     s.totalKills += kills;
     s.bestTime = Math.max(s.bestTime, Math.round(time));
     s.bestLevel = Math.max(s.bestLevel, level);
@@ -143,6 +176,7 @@ export class Meta {
     for (const a of ACHIEVEMENTS) {
       if (!this.data.achievements[a.id] && a.check(s)) {
         this.data.achievements[a.id] = true;
+        if (a.reward) this.data.gold += a.reward; // Erz-Belohnung sofort gutschreiben
         fresh.push(a);
       }
     }

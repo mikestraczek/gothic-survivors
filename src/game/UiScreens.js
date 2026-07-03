@@ -363,8 +363,12 @@ export function _renderSelectors(g, mapElId, diffElId, heroElId = null, heroDesc
     mapEl.querySelectorAll('[data-map]').forEach((b) => b.addEventListener('click', () => { g._selMap = b.getAttribute('data-map'); g._renderSelectors(mapElId, diffElId, heroElId, heroDescId); g._lobbyUpdate(); }));
   }
   if (diffEl) {
-    diffEl.innerHTML = Object.keys(DIFFS).map((k) => `<button class="sel-btn ${k === g._selDiff ? 'active' : ''}" data-diff="${k}">${DIFFS[k].name}</button>`).join('');
-    diffEl.querySelectorAll('[data-diff]').forEach((b) => b.addEventListener('click', () => { g._selDiff = b.getAttribute('data-diff'); g._renderSelectors(mapElId, diffElId, heroElId, heroDescId); g._lobbyUpdate(); }));
+    if (!g.meta.diffUnlocked(g._selDiff)) g._selDiff = 'normal';
+    diffEl.innerHTML = Object.keys(DIFFS).map((k) => {
+      const locked = !g.meta.diffUnlocked(k);
+      return `<button class="sel-btn ${k === g._selDiff ? 'active' : ''} ${locked ? 'locked' : ''}" data-diff="${k}" ${locked ? `disabled title="${g.meta.diffReq(k)}"` : ''}>${locked ? '🔒 ' : ''}${DIFFS[k].name}</button>`;
+    }).join('');
+    diffEl.querySelectorAll('[data-diff]:not([disabled])').forEach((b) => b.addEventListener('click', () => { g._selDiff = b.getAttribute('data-diff'); g._renderSelectors(mapElId, diffElId, heroElId, heroDescId); g._lobbyUpdate(); }));
   }
   if (heroElId) g._renderHeroSelector(heroElId, heroDescId, () => g._renderSelectors(mapElId, diffElId, heroElId, heroDescId));
 }

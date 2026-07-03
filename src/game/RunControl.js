@@ -59,6 +59,7 @@ export function _recordMeta(g, win) {
     bossKills: g._bossKills || 0,
     evolves: g._evolvesThisRun || 0,
     goldEarned: Math.floor(g.player.gold),
+    map: g.mapKey,
   });
   let delay = 400;
   for (const a of fresh) {

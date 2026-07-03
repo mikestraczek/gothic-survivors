@@ -223,6 +223,7 @@ export class Game {
     this.camCtrl.snap(this.player.position);
     this._wireUI();
     this._applySettings();
+    this.meta.syncAchievements(); // Bestands-Stats gegen neue Erfolge abgleichen
     this._installUnloadScore(); // Tab-Schließen mitten im Run wertet den Score noch
     this._prewarm(); // Shader hinter dem Ladescreen kompilieren (keine Erste-Nutzung-Ruckler)
     document.getElementById('loading').classList.add('hidden');

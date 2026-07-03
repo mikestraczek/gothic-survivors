@@ -90,8 +90,11 @@ button.secondary {
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: center;
+  /* flex-start + margin:auto am Kind statt center/center: bei Inhalten höher als der
+     Viewport schneidet justify-content:center sonst den KOPF unerreichbar ab */
+  align-items: flex-start;
   justify-content: center;
+  overflow-y: auto;
   background: radial-gradient(circle at 50% 35%, rgba(18, 13, 8, 0.9), rgba(0, 0, 0, 0.98));
   z-index: 50;
   backdrop-filter: blur(4px);
@@ -2093,4 +2096,26 @@ body.photosafe .intro-flash {
   overflow-y: auto;
   margin-top: 12px;
   text-align: left;
+}
+
+
+/* Overlay-Inhalte: vertikal zentriert solange sie passen, sonst von oben scrollbar */
+.overlay > .start-inner,
+.overlay > .lobby-inner,
+.overlay > .death-inner,
+.overlay > .win-inner,
+.overlay > .lvl-inner,
+.overlay > .shop-inner {
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+/* Kombinationsliste scrollt intern — Header + Zurück bleiben stehen */
+#combos-list {
+  max-height: 58vh;
+  overflow-y: auto;
+}
+#lb-list {
+  max-height: 56vh;
+  overflow-y: auto;
 }

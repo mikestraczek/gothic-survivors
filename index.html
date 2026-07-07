@@ -71,6 +71,7 @@
             <button id="achievements-button" class="secondary">🎖 Erfolge</button>
             <button id="shop-button" class="secondary">Halle der Erzbarone</button>
             <button id="combos-button" class="secondary">Kombinationen</button>
+            <button id="changelog-button" class="secondary">📜 Neuigkeiten<span id="changelog-badge" class="cl-badge hidden">●</span></button>
             <button id="settings-button" class="secondary">⚙ Optionen</button>
           </div>
           <div class="controls-hint">
@@ -203,6 +204,17 @@
       <div id="shop" class="overlay hidden"></div>
 
       <!-- Kombinationen-Übersicht -->
+      <div id="changelog-screen" class="overlay hidden">
+        <div class="start-inner combos-inner">
+          <h1 class="game-title" style="font-size: 44px">NEUIGKEITEN</h1>
+          <p class="lvl-sub">Was sich zuletzt geändert hat.</p>
+          <div id="changelog-list"></div>
+          <div class="menu-buttons">
+            <button id="changelog-back" class="secondary">Zurück</button>
+          </div>
+        </div>
+      </div>
+
       <div id="combos-screen" class="overlay hidden">
         <div class="start-inner combos-inner">
           <h1 class="game-title" style="font-size: 44px">KOMBINATIONEN</h1>

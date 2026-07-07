@@ -1,4 +1,5 @@
 import { MAP_LIST } from './World.js';
+import * as Changelog from './Changelog.js';
 import { saveSettings } from './Settings.js';
 import { HEROES, HERO_KEYS } from './Heroes.js';
 import { Net } from '../net/Net.js';
@@ -13,6 +14,19 @@ export function _wireUI(g) {
   document.getElementById('resume-button').addEventListener('click', () => g.resumeRun());
   document.getElementById('shop-button').addEventListener('click', () => g.openShop('menu'));
   document.getElementById('combos-button').addEventListener('click', () => g._openCombos('menu'));
+  document.getElementById('changelog-button').addEventListener('click', () => {
+    Changelog.markSeen();
+    document.getElementById('changelog-badge').classList.add('hidden');
+    document.getElementById('changelog-list').innerHTML = Changelog.changelogHtml();
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('changelog-screen').classList.remove('hidden');
+  });
+  document.getElementById('changelog-back').addEventListener('click', () => {
+    document.getElementById('changelog-screen').classList.add('hidden');
+    document.getElementById('start-screen').classList.remove('hidden');
+  });
+  // roter Punkt, solange es ungelesene Neuigkeiten gibt
+  if (Changelog.hasUnseen()) document.getElementById('changelog-badge').classList.remove('hidden');
   const pauseCombos = document.getElementById('pause-combos');
   if (pauseCombos) pauseCombos.addEventListener('click', () => g._openCombos('pause'));
   document.getElementById('combos-back').addEventListener('click', () => {
@@ -288,6 +302,12 @@ export function _renderLbRows(g, el, scores, global) {
 export function _onEsc(g) {
   // Offene Unter-Screens (Kombinationen/Optionen) schließt ESC zuerst — zurück zur
   // richtigen Ebene (Pause bzw. Hauptmenü), statt das Spiel mit offenem Fenster fortzusetzen.
+  const cl = document.getElementById('changelog-screen');
+  if (cl && !cl.classList.contains('hidden')) {
+    cl.classList.add('hidden');
+    document.getElementById('start-screen').classList.remove('hidden');
+    return;
+  }
   const combos = document.getElementById('combos-screen');
   if (combos && !combos.classList.contains('hidden')) {
     combos.classList.add('hidden');

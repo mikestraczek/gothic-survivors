@@ -326,13 +326,39 @@ export class HUD {
   }
 
   // self {x,z}, allies, enemies, pickups, pings
-  drawMinimap(self, allies, enemies, pickups, pings) {
+  drawMinimap(self, allies, enemies, pickups, pings, bounds) {
     const c = this.mm, S = 170, R = 75;
     c.clearRect(0, 0, S, S);
     c.fillStyle = 'rgba(8,10,14,0.6)';
     c.beginPath(); c.arc(S / 2, S / 2, S / 2 - 2, 0, Math.PI * 2); c.fill();
     c.strokeStyle = 'rgba(201,164,92,0.5)'; c.lineWidth = 2; c.stroke();
     const to = (x, z) => [S / 2 + ((x - self.x) / R) * (S / 2 - 6), S / 2 + ((z - self.z) / R) * (S / 2 - 6)];
+    // Weltgrenze: gestrichelte rote Linie, auf den runden Minimap-Bereich geclippt
+    if (bounds) {
+      c.save();
+      c.beginPath(); c.arc(S / 2, S / 2, S / 2 - 3, 0, Math.PI * 2); c.clip();
+      c.strokeStyle = 'rgba(255,80,60,0.85)';
+      c.lineWidth = 2;
+      c.setLineDash([5, 4]);
+      c.beginPath();
+      const k = (S / 2 - 6) / R; // Welt-Einheiten -> Pixel
+      if (bounds.kind === 'radial') {
+        const [cx, cy] = to(0, 0);
+        c.arc(cx, cy, bounds.r * k, 0, Math.PI * 2);
+      } else {
+        const [, top] = to(0, -bounds.halfZ);
+        const [, bot] = to(0, bounds.halfZ);
+        const [left] = to(-bounds.halfX, 0);
+        const [right] = to(bounds.halfX, 0);
+        c.moveTo(left, top); c.lineTo(right, top);
+        c.moveTo(left, bot); c.lineTo(right, bot);
+        c.moveTo(left, top); c.lineTo(left, bot);
+        c.moveTo(right, top); c.lineTo(right, bot);
+      }
+      c.stroke();
+      c.setLineDash([]);
+      c.restore();
+    }
     const dot = (x, z, col, r) => { const [px, py] = to(x, z); if (px < 2 || px > S - 2 || py < 2 || py > S - 2) return; c.fillStyle = col; c.beginPath(); c.arc(px, py, r, 0, Math.PI * 2); c.fill(); };
     for (const e of enemies) dot(e.x, e.z, e.boss ? '#ff3030' : '#d05a4a', e.boss ? 4 : 1.6);
     for (const p of pickups) dot(p.x, p.z, PICKUP_COLORS[p.t] || '#49e06a', 2.2);

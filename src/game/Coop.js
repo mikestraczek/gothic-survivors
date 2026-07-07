@@ -356,6 +356,31 @@ export function _updateBuffs(g) {
   if (mine && !g._lastStandActive) g.hud.toast('🔥 Last Stand — verstärkt, bis dein Mate wieder steht!', 'gold');
   g._lastStandActive = mine;
 }
+// Leucht-Beacon am gefallenen Mitspieler: grüne Lichtsäule + Puls-Ringe — im Getümmel findbar
+export function _updateMateBeacon(g, dt) {
+  const rp = g.remotePlayer;
+  const show = !!g.role && !!rp && rp.dead && !g._specOnly;
+  if (show && !g._mateBeacon) {
+    const geo = new THREE.CylinderGeometry(0.9, 1.3, 12, 12, 1, true);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x6af08a, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    g._mateBeacon = new THREE.Mesh(geo, mat);
+    g._mateBeacon.renderOrder = 5;
+    g.scene.add(g._mateBeacon);
+  }
+  if (!g._mateBeacon) return;
+  g._mateBeacon.visible = show;
+  if (!show) return;
+  g._mateBeacon.position.set(rp.position.x, rp.position.y + 6, rp.position.z);
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 220);
+  g._mateBeacon.material.opacity = 0.18 + 0.16 * pulse;
+  g._mateBeacon.scale.set(1 + 0.25 * pulse, 1, 1 + 0.25 * pulse);
+  g._mateRingT = (g._mateRingT || 0) - dt;
+  if (g._mateRingT <= 0) {
+    g._mateRingT = 0.7;
+    g.fx.ring(rp.position.x, rp.position.z, 3.2, 0x6af08a);
+  }
+}
+
 // Richtungspfeil zum Mitspieler (nur wenn er off-screen oder gefallen ist)
 export function _updateMateArrow(g) {
   const mate = g.remotePlayer;

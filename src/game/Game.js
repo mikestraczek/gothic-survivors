@@ -182,7 +182,7 @@ export class Game {
       },
       greed: (it, p) => {
         const who = p || this.player;
-        const g = 10 + Math.floor(this.enemies.elapsed / 30) * 5;
+        const g = 6 + Math.floor(this.enemies.elapsed / 60) * 3;
         who.gold += g * who.goldMult;
         this._toastFor(who, `Erzader — +${g} Erz`, 'gold', 'pickup');
       },
@@ -190,7 +190,7 @@ export class Game {
       chest: (it, p) => {
         const who = p || this.player;
         const wp = who === this.remotePlayer ? this.weapons2 : this.weapons;
-        const g = 12 + Math.floor(this.enemies.elapsed / 40);
+        const g = 8 + Math.floor(this.enemies.elapsed / 60);
         who.gold += g * (who.goldMult || 1);
         const upgradable = wp.ownedList().filter((w) => !wp.isMax(w.id));
         if (upgradable.length) {
@@ -353,6 +353,8 @@ export class Game {
   _beginClientRun(d) { return Coop._beginClientRun(this, d); }
 
   _beginSpectate(d) { return Coop._beginSpectate(this, d); }
+
+  _updateMateBeacon(dt) { return Coop._updateMateBeacon(this, dt); }
 
   _startSoloBroadcast() { return Coop._startSoloBroadcast(this); }
 

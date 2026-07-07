@@ -186,6 +186,7 @@ export class Effects {
   // ---------- öffentliche Spawner ----------
   sparksBurst(x, y, z, color, count = 8, speed = 6) {
     if (this.record) this.events.push({ k: 'sparks', x, z, a: color, b: count });
+    if (this.crowd) count = Math.max(1, Math.round(count * (1 - 0.65 * this.crowd))); // volles Feld -> weniger Funken
     const c = new THREE.Color(color);
     for (let i = 0; i < count; i++) {
       let sp = this.sparks.find((s) => !s.alive);
@@ -334,7 +335,7 @@ export class Effects {
   // ---------- Update ----------
   update(dt) {
     // Schadenszahlen: Pop-in, aufsteigen, ausblenden
-    this._dmgBudget = 14;
+    this._dmgBudget = this.crowd ? Math.max(4, Math.round(14 * (1 - 0.6 * this.crowd))) : 14; // volles Feld -> weniger Zahlen
     for (const d of this._dmgPool) {
       if (!d.alive) continue;
       d.t += dt;

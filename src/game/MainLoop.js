@@ -19,7 +19,11 @@ export function _drawMinimap(g) {
   else enemies = g.enemies.enemies.filter((e) => e.alive).map((e) => ({ x: e.x, z: e.z, boss: e.def.boss }));
   // Truhen bleiben eine Überraschung — nicht auf der Minimap; alle anderen Items mit Typ (Farbe)
   const pickups = g.pickups.items.filter((it) => it.alive && it.type !== 'chest').map((it) => ({ x: it.x, z: it.z, t: it.type }));
-  g.hud.drawMinimap(self, allies, enemies, pickups, g._pings);
+  // Weltgrenze für die Minimap (radiale Arena oder Korridor)
+  const bounds = g.world.theme.bounds === 'corridor'
+    ? { kind: 'corridor', halfZ: 13, halfX: 380 }
+    : { kind: 'radial', r: g.world.barrierRadius };
+  g.hud.drawMinimap(self, allies, enemies, pickups, g._pings, bounds);
 }
 // Lebensbalken über beschädigten Gegnern + Boss-Balken oben
 export function _drawCombatUI(g) {
@@ -90,6 +94,14 @@ export function update(g) {
   if (g.fx) g.fx.update(frozen ? 0 : dt);
 
   if (g.mode === 'play') g._autoQuality(); // FPS-Wächter: Renderauflösung dynamisch
+  if (g.mode === 'play' || g.mode === 'levelup') {
+    // Endgame-Sichtbarkeit: je voller das Feld, desto dezenter Funken & Bloom
+    const alive = g.role === 'client' ? g.enemies.ghostCount : g.enemies.aliveCount;
+    const crowd = Math.min(1, Math.max(0, (alive - 60) / 120)); // ab 60 Gegnern dämpfen
+    g.fx.crowd = crowd;
+    if (g.bloom && g._bloomBase == null) g._bloomBase = g.bloom.strength;
+    if (g.bloom && g._bloomBase != null) g.bloom.strength = g._bloomBase * (1 - 0.45 * crowd);
+  }
   if (g.mode === 'play' && g.role !== 'client') g._updatePlayHost(dt);
   else if (g.mode === 'play' && g.role === 'client') g._updatePlayClient(dt);
   else {
@@ -198,6 +210,7 @@ export function _updatePlayHost(g, dt) {
   // Spectate-Banner für den Host, wenn er tot ist
   if (co && g.player.dead && !g.remotePlayer.dead) g.hud.setSpectate('deinen Mitspieler');
   else g.hud.setSpectate(null);
+  g._updateMateBeacon(dt);
 
   g.hud.update(g.player, g.weapons, g.runElapsed, g.enemies.aliveCount);
   g.hud.setPhase(g._phaseText());
@@ -287,6 +300,7 @@ export function _updatePlayClient(g, dt) {
 
   if (g._specOnly) g.hud.setSpectate(g._specName || 'dem Runner', true);
   else g.hud.setSpectate(spectating ? 'deinen Mitspieler' : null);
+  g._updateMateBeacon(dt);
   g.camCtrl.update(dt, g.input, g._camTarget());
   g.hud.update(g.player, g.weapons, g.runElapsed, g.enemies.ghostCount);
   g.hud.setPhase(g._phaseText());

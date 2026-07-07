@@ -201,7 +201,7 @@ export class EnemyManager {
     return {
       hp: (1 + m * 0.28 + m * m * 0.008) * this.diff * ph * (1 + em * 0.12),
       dmg: (1 + m * 0.1) * this.diff * (1 + this.phase * 0.06) * (1 + em * 0.08),
-      speed: 1 + Math.min(0.3, m * 0.022 + em * 0.01),
+      speed: 1 + Math.min(this.endlessMode ? 0.55 : 0.3, m * 0.022 + em * 0.018),
     };
   }
 
@@ -221,6 +221,13 @@ export class EnemyManager {
     if (t > 250) pool.push('shooter', 'exploder');
     if (t > 270) pool.push('troll', 'demon');
     if (t > 330) pool.push('troll', 'gargoyle', 'demon', 'splitter');
+    // Endlos: gefährlicher Mix — mehr Fernkämpfer (die echte Bedrohung) und Schwergewichte
+    if (this.endlessMode) {
+      const et = this.endlessT;
+      if (et > 30) pool.push('shooter', 'demon');
+      if (et > 120) pool.push('shooter', 'troll', 'gargoyle');
+      if (et > 240) pool.push('shooter', 'exploder', 'demon', 'troll');
+    }
     return pool;
   }
 
@@ -919,9 +926,13 @@ export class EnemyManager {
     e.flash = 0.12;
     if (this.fx) this.fx.dmgNumber(e.x, e.y + e.scale * 2.6, e.z, amount, e.def.boss ? '#ffc46a' : '#ffe9a0', amount >= 100);
     if (slow) e.slow = slow;
-    if (knock) {
-      e.kx += knock.x;
-      e.kz += knock.z;
+    if (knock && !e.def.boss) { // Bosse lassen sich nicht schieben
+      // Schwere Gegner + Eliten wehren sich gegen Dauerschubsen; im Endlos härtet ALLES ab
+      let f = e.def.radius >= 0.9 ? 0.35 : 1;
+      if (e.elite) f *= 0.5;
+      if (this.endlessMode) f *= Math.max(0.3, 1 - this.endlessT / 240);
+      e.kx = Math.max(-16, Math.min(16, e.kx + knock.x * f));
+      e.kz = Math.max(-16, Math.min(16, e.kz + knock.z * f));
     }
     if (e.hp <= 0) {
       e.alive = false;

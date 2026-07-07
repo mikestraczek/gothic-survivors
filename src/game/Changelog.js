@@ -17,6 +17,12 @@ export const CHANGELOG = [
       '🎁 Hebt eine Truhe deine Waffe auf Maximalstufe, wird eine mögliche Verschmelzung sofort angeboten — mehrere nacheinander',
       '🔄 FRISCHER START: Bestenliste und Schmiede-Fortschritt wurden für alle zurückgesetzt — gleiche Chancen für alle! (Name & Einstellungen bleiben)',
       '🏆 Bestenliste zeigt jetzt Datum + Uhrzeit jedes Runs und akzeptiert die riesigen Kill-Zahlen aus dem Endlos-Modus',
+      '🗺 Der Kartenrand ist jetzt auf der Minimap als rote gestrichelte Linie sichtbar',
+      '⬆ Level-Ups werden mit einem goldenen Effekt gefeiert — auch der Mitspieler sieht, wenn du aufsteigst',
+      '⚔️ Endlos deutlich gefährlicher: Gegner härten gegen Rückstoß ab (schwere & Eliten sowieso, Bosse sind unverrückbar), werden schneller und der Mix wird fieser (mehr Schützen!)',
+      '⛏ Erz nochmal deutlich seltener — die Schmiede ist ein echtes Langzeitziel',
+      '💚 Gefallene Mitspieler sind jetzt leicht zu finden: grüne Lichtsäule + Puls-Ringe am Boden',
+      '👁 Bessere Sicht im Endgame: Bei vollen Schlachtfeldern dimmen Funken, Glühen und Schadenszahlen automatisch',
     ],
   },
   {

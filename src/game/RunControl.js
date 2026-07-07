@@ -12,13 +12,13 @@ export function _makeOnKill(g, p) {
     p.kills++;
     g._phaseKills++;
     g.audio.kill();
-    p.gold += (e.def.gold || 0) * (e.xpMult || 1) * (p.goldMult || 1) * 0.55; // Erz ist kostbar
+    p.gold += (e.def.gold || 0) * Math.min(e.xpMult || 1, 2) * (p.goldMult || 1) * 0.25; // Erz ist RAR (Elite-Mult gedeckelt)
     g.fx.sparksBurst(e.x, e.y + 0.6, e.z, e.def.boss ? 0xff5a3a : 0xc89060, e.def.boss ? 26 : 7, e.def.boss ? 9 : 5);
     if (e.def.boss) {
       g._bossKills = (g._bossKills || 0) + 1;
       const gv = Math.max(8, Math.round(e.def.xp / 6));
       for (let i = 0; i < 9; i++) g.gems.spawn(e.x + (Math.random() - 0.5) * 5, e.z + (Math.random() - 0.5) * 5, gv);
-      p.gold += 3 * (p.goldMult || 1);
+      p.gold += 2 * (p.goldMult || 1);
       g.fx.explosion(e.x, e.z, 6, 0x9a4aff);
       g.camCtrl.addShake(0.55);
       g.hitStop(0.16);
@@ -475,6 +475,14 @@ export function startRun(g, mapKey = g._selMap, diff = g._selDiff) {
 export function _collectXp(g, value, who) {
   g.audio.gem();
   const lv = who.addXp(value);
+  if (lv > 0) {
+    // Level-Up-Moment sichtbar feiern — läuft über fx.record auch beim Mitspieler
+    const pp = who.position;
+    g.fx.ring(pp.x, pp.z, 2.5, 0xffe9a0);
+    g.fx.ring(pp.x, pp.z, 5, 0xffd24a);
+    g.fx.slash(pp.x, pp.z, 3.2, Math.random() * 6, 0xfff0c0);
+    g.fx.sparksBurst(pp.x, pp.y + 1.6, pp.z, 0xffe08a, 26, 9);
+  }
   if (who === g.player) g.pendingLevelUps += lv;
   else g.pendingRemoteLevelUps += lv;
 }

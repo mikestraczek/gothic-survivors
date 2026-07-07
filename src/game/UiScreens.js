@@ -110,6 +110,7 @@ export function _applySettings(g) {
   if (g.bloom) {
     g.bloom.enabled = s.bloom;
     g.bloom.strength = s.photoSafe ? 0.2 : 0.38; // Photosafe: deutlich weniger Glühen
+    g._bloomBase = g.bloom.strength; // Basis für die Getümmel-Dämpfung mitziehen
   }
   document.body.classList.toggle('photosafe', !!s.photoSafe);
   if (g.pixelPass) g.pixelPass.enabled = s.pixelArt;

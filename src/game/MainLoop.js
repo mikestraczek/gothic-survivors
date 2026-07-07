@@ -97,10 +97,10 @@ export function update(g) {
   if (g.mode === 'play' || g.mode === 'levelup') {
     // Endgame-Sichtbarkeit: je voller das Feld, desto dezenter Funken & Bloom
     const alive = g.role === 'client' ? g.enemies.ghostCount : g.enemies.aliveCount;
-    const crowd = Math.min(1, Math.max(0, (alive - 60) / 120)); // ab 60 Gegnern dämpfen
+    const crowd = Math.min(1, Math.max(0, (alive - 40) / 100)); // ab 40 Gegnern dämpfen
     g.fx.crowd = crowd;
     if (g.bloom && g._bloomBase == null) g._bloomBase = g.bloom.strength;
-    if (g.bloom && g._bloomBase != null) g.bloom.strength = g._bloomBase * (1 - 0.45 * crowd);
+    if (g.bloom && g._bloomBase != null) g.bloom.strength = g._bloomBase * (1 - 0.6 * crowd);
   }
   if (g.mode === 'play' && g.role !== 'client') g._updatePlayHost(dt);
   else if (g.mode === 'play' && g.role === 'client') g._updatePlayClient(dt);

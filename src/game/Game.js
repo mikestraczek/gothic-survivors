@@ -117,6 +117,10 @@ export class Game {
     this.player.group.visible = false;
     this.playerSprite = this._makeSprite('player');
     this.remoteSprite = this._makeSprite('player');
+    // Helden-Lesbarkeit: nach den additiven Effekten (renderOrder <= 5) zeichnen,
+    // damit Funken/Ringe/Explosionen den eigenen Charakter nicht zukleistern
+    this.playerSprite.renderOrder = 10;
+    this.remoteSprite.renderOrder = 10;
     this.remoteSprite.visible = false;
     // Blob-Schatten verankern die Helden-Sprites am Boden
     this.playerShadow = this._makeBlobShadow();

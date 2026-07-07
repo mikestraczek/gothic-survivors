@@ -23,6 +23,10 @@ export const CHANGELOG = [
       '⛏ Erz nochmal deutlich seltener — die Schmiede ist ein echtes Langzeitziel',
       '💚 Gefallene Mitspieler sind jetzt leicht zu finden: grüne Lichtsäule + Puls-Ringe am Boden',
       '👁 Bessere Sicht im Endgame: Bei vollen Schlachtfeldern dimmen Funken, Glühen und Schadenszahlen automatisch',
+      '🔗 Fix: Level-Up-Karten werben nicht mehr mit Kombinationen, deren Zutat bereits in einer Verschmelzung steckt',
+      '⚖️ Verschmelzungen gezähmt: moderatere Grundwerte (v. a. Höllensturm & Kataklysmus) — die Zusatzeffekte bleiben; Endlos skaliert dafür nochmal steiler (bis 3× Gegnermasse)',
+      '🎨 Klarere Sicht: Dein Held wird jetzt ÜBER den Effekten gezeichnet und die Getümmel-Dämpfung greift früher und stärker (Funken −80 %, Glühen −60 %, halbierte Ringe/Hiebe)',
+      '🏆 Die Bestenliste nimmt jetzt JEDEN Run an — die zu strenge „Unmöglich"-Prüfung, die epische Endlos-Runs verworfen hat, ist komplett entfernt',
     ],
   },
   {

@@ -53,7 +53,8 @@ export class Upgrades {
       const hints = [];
       for (const c of COMBINATIONS) {
         if (c.base === wid && !(weapons.owned[wid] && weapons.owned[wid].evolved)) {
-          if (c.consume && weapons.has(c.consume)) hints.push(`🔗 ${COMBO_ICONS[c.name] || '✨'} <b>${c.name}</b> — mit ${WEAPON_DEFS[c.consume].name}`);
+          // Partner muss vorhanden UND unverschmolzen sein (Verschmolzenes ist keine Zutat)
+          if (c.consume && weapons.has(c.consume) && !weapons.owned[c.consume].evolved) hints.push(`🔗 ${COMBO_ICONS[c.name] || '✨'} <b>${c.name}</b> — mit ${WEAPON_DEFS[c.consume].name}`);
           else if (c.passive && (player.passiveCounts[c.passive] || 0) > 0) hints.push(`🔗 ${COMBO_ICONS[c.name] || '✨'} <b>${c.name}</b> — mit ${(PASSIVE_INFO[c.passive] && PASSIVE_INFO[c.passive].name) || c.passive} (3×)`);
         } else if (c.consume === wid && weapons.has(c.base) && !(weapons.owned[c.base] && weapons.owned[c.base].evolved)) {
           hints.push(`🔗 ${COMBO_ICONS[c.name] || '✨'} <b>${c.name}</b> — mit ${WEAPON_DEFS[c.base].name}`);

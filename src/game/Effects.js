@@ -186,7 +186,7 @@ export class Effects {
   // ---------- öffentliche Spawner ----------
   sparksBurst(x, y, z, color, count = 8, speed = 6) {
     if (this.record) this.events.push({ k: 'sparks', x, z, a: color, b: count });
-    if (this.crowd) count = Math.max(1, Math.round(count * (1 - 0.65 * this.crowd))); // volles Feld -> weniger Funken
+    if (this.crowd) count = Math.max(1, Math.round(count * (1 - 0.8 * this.crowd))); // volles Feld -> weniger Funken
     const c = new THREE.Color(color);
     for (let i = 0; i < count; i++) {
       let sp = this.sparks.find((s) => !s.alive);
@@ -216,6 +216,8 @@ export class Effects {
 
   ring(x, z, maxR, color) {
     if (this.record) this.events.push({ k: 'ring', x, z, a: maxR, b: color });
+    // volles Feld: jeden zweiten Feedback-Ring auslassen (Telegraphen sind separat!)
+    if (this.crowd > 0.5 && (this._ringSkip = !this._ringSkip)) return;
     const e = this._getFx('ring', this.ringGeo, color);
     e.mesh.rotation.x = -Math.PI / 2;
     e.dur = 0.4;
@@ -230,6 +232,7 @@ export class Effects {
 
   slash(x, z, r, angle, color = 0xfff0c0) {
     if (this.record) this.events.push({ k: 'slash', x, z, a: r, b: color });
+    if (this.crowd > 0.5 && (this._slashSkip = !this._slashSkip)) return;
     const e = this._getFx('slash', this.slashGeo, color);
     e.mesh.rotation.set(-Math.PI / 2, 0, -angle);
     e.dur = 0.28;
@@ -335,7 +338,7 @@ export class Effects {
   // ---------- Update ----------
   update(dt) {
     // Schadenszahlen: Pop-in, aufsteigen, ausblenden
-    this._dmgBudget = this.crowd ? Math.max(4, Math.round(14 * (1 - 0.6 * this.crowd))) : 14; // volles Feld -> weniger Zahlen
+    this._dmgBudget = this.crowd ? Math.max(3, Math.round(14 * (1 - 0.75 * this.crowd))) : 14; // volles Feld -> weniger Zahlen
     for (const d of this._dmgPool) {
       if (!d.alive) continue;
       d.t += dt;

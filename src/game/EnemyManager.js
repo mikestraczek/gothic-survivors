@@ -199,8 +199,8 @@ export class EnemyManager {
     // Endlos: zusätzlich wachsender Druck (+12% HP / +8% Schaden pro Minute)
     const em = (this.endlessT || 0) / 60;
     return {
-      hp: (1 + m * 0.28 + m * m * 0.008) * this.diff * ph * (1 + em * 0.12),
-      dmg: (1 + m * 0.1) * this.diff * (1 + this.phase * 0.06) * (1 + em * 0.08),
+      hp: (1 + m * 0.28 + m * m * 0.008) * this.diff * ph * (1 + em * 0.2),
+      dmg: (1 + m * 0.1) * this.diff * (1 + this.phase * 0.06) * (1 + em * 0.12),
       speed: 1 + Math.min(this.endlessMode ? 0.55 : 0.3, m * 0.022 + em * 0.018),
     };
   }
@@ -369,7 +369,7 @@ export class EnemyManager {
       // Konstante Ziel-Population statt immer schnellerer Wellen -> Platz zum Ausweichen
       const cap = this.maxAlive || HARD_CAP;
       // Endlos: Population wächst kontinuierlich (Deckel ~2.3×), ohne die Boss-Drosselung (spawnScale) zu überschreiben
-      const endlessPop = this.endlessMode ? Math.min(2.3, 1 + (this.endlessT / 60) * 0.18) : 1;
+      const endlessPop = this.endlessMode ? Math.min(3.0, 1 + (this.endlessT / 60) * 0.22) : 1;
       const target = Math.min(cap, Math.round((24 + this.phase * 9) * this.diff * this.spawnScale * this.coopScale * (0.7 + 0.3 * players.length) * endlessPop));
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {

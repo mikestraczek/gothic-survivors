@@ -114,17 +114,11 @@ app.post('/api/scores', async (req, res) => {
   const b = req.body || {};
   const num = (v, d = 0) => (Number.isFinite(+v) ? Math.max(0, Math.min(1e9, Math.floor(+v))) : d);
   const name = String(b.name || 'Anonym').slice(0, 24) || 'Anonym';
-  // Plausibilität: absurde Werte gar nicht erst speichern (Scores sind clientseitig gemeldet)
   const time = num(b.time);
   const kills = num(b.kills);
   const level = num(b.level, 1);
-  // Endlos-Runs erreichen legitim zehntausende Kills — die Schranken sind nur Anti-Unsinn
-  const plausible =
-    time <= 6 * 3600 &&
-    kills <= 150000 &&
-    level <= 500 &&
-    kills <= Math.max(60, time * 60); // >60 Kills/s im Schnitt ist Unsinn
-  if (!plausible) return res.status(400).json({ ok: false });
+  // KEINE Plausibilitätsprüfung mehr — jeder Run zählt (Wunsch vom 07.07.2026:
+  // die Schranken haben wiederholt legitime Endlos-Runs verworfen).
   recent.push(now);
   lastSubmit.set(ip, recent);
   try {

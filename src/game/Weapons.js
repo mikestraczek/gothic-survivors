@@ -538,13 +538,14 @@ export class Weapons {
       const s = def.stats(w.level);
       // Verschmelzung: deutlich stärker
       if (w.evolved) {
-        s.damage *= 1.7;
-        if (s.heal) s.heal *= 1.6;
-        if (s.cd) s.cd *= 0.6;
-        if (s.count) s.count += 2;
-        if (s.radius) s.radius *= 1.5;
-        if (s.area) s.area *= 1.5;
-        if (s.pierce) s.pierce += 3;
+        // moderater als früher (1.7/0.6/+2/1.5): die Zusatzeffekte sind die eigentliche Stärke
+        s.damage *= 1.45;
+        if (s.heal) s.heal *= 1.4;
+        if (s.cd) s.cd *= 0.72;
+        if (s.count) s.count += 1;
+        if (s.radius) s.radius *= 1.32;
+        if (s.area) s.area *= 1.32;
+        if (s.pierce) s.pierce += 2;
       }
       w.cdTimer -= dt;
 
@@ -958,8 +959,8 @@ export class Weapons {
     // Höllensturm: Blitz schlägt in den Krater ein (+50% Blitzschaden, etwas größerer Radius)
     if (p.storm) {
       if (this.fx) this.fx.bolt(p.x, p.z, 0xcfe6ff);
-      for (const e of enemies.inRadius(p.x, p.z, r * 1.25)) {
-        this._dmg(enemies, e, p.dmg * 0.5, null, onKill, 'fireball');
+      for (const e of enemies.inRadius(p.x, p.z, r * 1.15)) {
+        this._dmg(enemies, e, p.dmg * 0.35, null, onKill, 'fireball');
       }
     }
   }

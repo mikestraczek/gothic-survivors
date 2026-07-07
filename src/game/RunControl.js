@@ -143,7 +143,7 @@ export function _saveRun(g) {
     const data = {
       v: 2, player: g.player.serialize(), weapons: g.weapons.serialize(),
       elapsed: g.runElapsed, enemyElapsed: g.enemies.elapsed,
-      map: g.mapKey, diff: g.difficulty, phaseIndex: g.phaseIndex, phaseKills: g._phaseKills, phaseStage: g.phaseStage, endless: g.endless,
+      map: g.mapKey, diff: g.difficulty, phaseIndex: g.phaseIndex, phaseKills: g._phaseKills, phaseStage: g.phaseStage, endless: g.endless, endlessT: Math.round(g.enemies.endlessT || 0),
       hero: g.heroKey, bossKills: g._bossKills || 0, evolves: g._evolvesThisRun || 0,
     };
     localStorage.setItem('gothicSurvivorsRun', JSON.stringify(data));
@@ -181,6 +181,8 @@ export function resumeRun(g) {
   g._phaseKills = data.phaseKills || 0;
   g.enemies.phase = g.phaseIndex;
   g.endless = !!data.endless;
+  g.enemies.endlessMode = g.endless;
+  g.enemies.endlessT = data.endlessT || 0;
   g.phaseStage = data.phaseStage || 'horde';
   const c = g.player.position;
   if (g.endless) {
@@ -242,6 +244,8 @@ export function _startEndless(g) {
   g._finalBoss = null;
   g.enemies.spawnEnabled = true;
   g.enemies.spawnScale = 1;
+  g.enemies.endlessMode = true; // kontinuierlich wachsender Druck
+  g.enemies.endlessT = 0;
   g.enemies.autoBoss = true; // wiederkehrende Bosse
   g.enemies.bossTimer = 55;
   g.enemies.bossInterval = 70; // Bosse kommen häufiger als im normalen Lauf (100)

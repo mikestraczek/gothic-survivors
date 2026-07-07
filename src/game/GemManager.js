@@ -94,6 +94,7 @@ export class GemManager {
     g.y = this.world.getHeight(x, z) + 0.5;
     g.value = value;
     g.magnet = false;
+    g.rush = false;
     g.phase = Math.random() * 6;
     const tier = gemTier(value);
     g.color = this._tierColors[tier];
@@ -102,7 +103,8 @@ export class GemManager {
 
   // alle Gems anziehen (z. B. nach Level-Up Bonus) – optional
   attractAll() {
-    for (const g of this.gems) if (g.alive) g.magnet = true;
+    // kartenweit einsaugen: mit normalem Tempo (16) kämen ferne Gems nie an
+    for (const g of this.gems) if (g.alive) { g.magnet = true; g.rush = true; }
   }
 
   update(dt, players, onCollect) {
@@ -127,7 +129,7 @@ export class GemManager {
         const dx = tp.position.x - g.x;
         const dz = tp.position.z - g.z;
         const d = Math.sqrt(dd) || 1;
-        const speed = 16;
+        const speed = g.rush ? 70 : 16;
         g.x += (dx / d) * speed * dt;
         g.z += (dz / d) * speed * dt;
         g.y += (tp.position.y + 0.8 - g.y) * Math.min(1, dt * 8);

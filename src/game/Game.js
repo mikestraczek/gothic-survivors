@@ -173,7 +173,9 @@ export class Game {
         const ok = this._onKillFor(who);
         for (const e of this.enemies.allAlive()) {
           this.fx.sparksBurst(e.x, 1.0, e.z, 0xff6a3a, 3, 4);
-          this.enemies.damage(e, dmg * who.might, null, ok);
+          // normale Gegner sterben KARTENWEIT sicher; nur Bosse nehmen „nur" Schaden
+          const lethal = !e.def.boss;
+          this.enemies.damage(e, lethal ? e.hp + (e.shield || 0) + 999 : dmg * who.might, null, ok);
         }
         this.fx.explosion(who.position.x, who.position.z, 8, 0xff5a3a);
         this._toastFor(who, 'Zorn der Barriere — Feinde getroffen!', 'blood', 'boss');

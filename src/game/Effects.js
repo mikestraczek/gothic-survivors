@@ -158,7 +158,12 @@ export class Effects {
     if (this.record) this.events.push({ k: 'dmg', x, y, z, a: Math.round(amount), b: color, c: big ? 1 : 0 });
     const d = this._getDmgSprite();
     if (!d) return;
-    const txt = String(Math.max(1, Math.round(amount)));
+    // Werte bucketen: ab 50 auf 5er, ab 250 auf 25er gerundet -> Textur-Cache trifft
+    // fast immer (statt für 843, 847, 851 … je eine neue Canvas-Textur hochzuladen)
+    let v = Math.max(1, Math.round(amount));
+    if (v >= 250) v = Math.round(v / 25) * 25;
+    else if (v >= 50) v = Math.round(v / 5) * 5;
+    const txt = String(v);
     const mat = d.spr.material;
     const hadMap = !!mat.map;
     mat.map = this._dmgTexture(txt, color, big);

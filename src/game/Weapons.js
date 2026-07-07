@@ -177,9 +177,21 @@ export class Weapons {
   // Shader-Prewarm: je ein Mesh pro Projektil-Material einmal rendern lassen,
   // damit die erste echte Nutzung im Kampf keinen Kompilier-Ruckler erzeugt.
   prewarm() {
+    // Evolutions-Materialien EAGER erzeugen — sonst kompiliert ihr Shader beim
+    // ersten Verschmelzen mitten im Kampf (spürbarer Ruckler)
+    if (!this._bladeMatEvo) this._bladeMatEvo = new THREE.MeshStandardMaterial({ color: 0xf0d8a0, metalness: 0.9, roughness: 0.25, emissive: 0xc88a20, emissiveIntensity: 1.1 });
+    if (!this._bladeMatIce) this._bladeMatIce = new THREE.MeshStandardMaterial({ color: 0xbfe6ff, metalness: 0.7, roughness: 0.2, emissive: 0x2a7ac0, emissiveIntensity: 1.0 });
+    if (!this._cloudMatEvo) { this._cloudMatEvo = this._cloudMat.clone(); this._cloudMatEvo.color.setHex(0xa8e04a); }
+    if (!this._orbMatEvo) {
+      this._orbMatEvo = this._orbMat.clone();
+      this._orbMatEvo.color.setHex(0x9df0b0);
+      if (this._orbMatEvo.emissive) this._orbMatEvo.emissive.setHex(0x2e9a50);
+    }
     const pairs = [
       [this._bladeGeo, this._bladeMat], [this._axeGeo, this._axeMat], [this._fireGeo, this._fireMat],
       [this._orbGeo, this._orbMat], [this._spearGeo, this._spearMat], [this._cloudGeo, this._cloudMat],
+      [this._bladeGeo, this._bladeMatEvo], [this._bladeGeo, this._bladeMatIce],
+      [this._cloudGeo, this._cloudMatEvo], [this._orbGeo, this._orbMatEvo],
     ];
     this._prewarmMeshes = pairs.map(([geo, mat]) => {
       const m = new THREE.Mesh(geo, mat);
@@ -275,7 +287,7 @@ export class Weapons {
   // eine zweite Max-Waffe (consume) oder ein mehrfach genommenes Passiv (passive, braucht player).
   canCombine(c, player = null) {
     if (!this.has(c.base) || !this.isMax(c.base) || this.owned[c.base].evolved) return false;
-    if (c.consume) return this.has(c.consume) && this.isMax(c.consume);
+    if (c.consume) return this.has(c.consume) && this.isMax(c.consume) && !this.owned[c.consume].evolved; // Verschmolzenes ist keine Zutat!
     if (c.passive) return !!player && (player.passiveCounts?.[c.passive] || 0) >= (c.passiveCount || 3);
     return false;
   }

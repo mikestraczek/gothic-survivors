@@ -161,6 +161,8 @@ export class EnemyManager {
     this.phase = 0;
     this.spawnEnabled = true;
     this.spawnScale = 1;
+    this.endlessMode = false;
+    this.endlessT = 0;
     this.maxAlive = HARD_CAP;
     this.coopScale = 1;
     this.bossInterval = 100;
@@ -194,10 +196,12 @@ export class EnemyManager {
   _scaleFactor() {
     const m = this.elapsed / 60;
     const ph = 1 + this.phase * 0.22;
+    // Endlos: zusätzlich wachsender Druck (+12% HP / +8% Schaden pro Minute)
+    const em = (this.endlessT || 0) / 60;
     return {
-      hp: (1 + m * 0.28 + m * m * 0.008) * this.diff * ph,
-      dmg: (1 + m * 0.1) * this.diff * (1 + this.phase * 0.06),
-      speed: 1 + Math.min(0.22, m * 0.022),
+      hp: (1 + m * 0.28 + m * m * 0.008) * this.diff * ph * (1 + em * 0.12),
+      dmg: (1 + m * 0.1) * this.diff * (1 + this.phase * 0.06) * (1 + em * 0.08),
+      speed: 1 + Math.min(0.3, m * 0.022 + em * 0.01),
     };
   }
 
@@ -336,6 +340,7 @@ export class EnemyManager {
   // centers = Liste der Spielerpositionen (Singleplayer: 1, Koop: 2)
   update(dt, players, onKill) {
     this.elapsed += dt;
+    if (this.endlessMode) this.endlessT += dt;
     // wiederverwendete Puffer statt Allokationen pro Frame
     const centers = this._centers || (this._centers = []);
     centers.length = 0;
@@ -356,7 +361,9 @@ export class EnemyManager {
     if (anyAlive && this.spawnEnabled) {
       // Konstante Ziel-Population statt immer schnellerer Wellen -> Platz zum Ausweichen
       const cap = this.maxAlive || HARD_CAP;
-      const target = Math.min(cap, Math.round((24 + this.phase * 9) * this.diff * this.spawnScale * this.coopScale * (0.7 + 0.3 * players.length)));
+      // Endlos: Population wächst kontinuierlich (Deckel ~2.3×), ohne die Boss-Drosselung (spawnScale) zu überschreiben
+      const endlessPop = this.endlessMode ? Math.min(2.3, 1 + (this.endlessT / 60) * 0.18) : 1;
+      const target = Math.min(cap, Math.round((24 + this.phase * 9) * this.diff * this.spawnScale * this.coopScale * (0.7 + 0.3 * players.length) * endlessPop));
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
         this.spawnTimer = 0.55;

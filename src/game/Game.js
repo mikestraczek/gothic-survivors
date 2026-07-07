@@ -202,6 +202,12 @@ export class Game {
         }
         this.fx.sparksBurst(it.x, 1.0, it.z, 0xffd24a, 16, 6);
         this.camCtrl.addShake(0.15);
+        // Truhe kann eine Waffe auf Maximalstufe heben -> Verschmelzung SOFORT anbieten
+        // (statt aufs nächste Level-Up zu warten); mehrere kommen nacheinander
+        if (this.mode === 'play') {
+          const shown = this._resolveCombos();
+          if (shown && this.mode === 'levelup' && this.role === 'host') this.net.send({ k: 'pause', on: true });
+        }
       },
       // Schrein der Barriere: volle Heilung + 15s Schadens-Segen
       shrine: (it, p) => {

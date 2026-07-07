@@ -14,6 +14,7 @@ export const CHANGELOG = [
       '🗺 Minimap: Items erscheinen jetzt in ihrer echten Farbe (Heiltrank grün, Seelenruf blau, Erzader gold …) — Truhen bleiben eine Überraschung und werden nicht mehr angezeigt',
       '🙂 Fix: Die Level-Up-Auswahl per Taste 1–3 löst im Koop kein Emote mehr aus',
       '🎥 Fix: Beim Start des Endlos-Modus zoomt die Kamera nicht mehr wie beim Run-Intro heran',
+      '🎁 Hebt eine Truhe deine Waffe auf Maximalstufe, wird eine mögliche Verschmelzung sofort angeboten — mehrere nacheinander',
     ],
   },
   {

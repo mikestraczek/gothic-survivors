@@ -589,6 +589,9 @@ export function _finishLevelUp(g) {
 }
 // Bietet anstehende Verschmelzungen an (eine nach der anderen). true = Popup gezeigt, Spiel bleibt pausiert.
 export function _resolveCombos(g) {
+  // Kann jetzt auch VOR dem ersten Level-Up laufen (Truhen-Trigger) -> Sets sicherstellen
+  if (!g._declinedCombos) g._declinedCombos = new Set();
+  if (!g._declinedRemoteCombos) g._declinedRemoteCombos = new Set();
   const local = g.upgrades.availableCombos(g.player, g.weapons, g._declinedCombos);
   if (local.length) {
     const c = local[0];

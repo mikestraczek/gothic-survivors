@@ -264,7 +264,7 @@ export function _startEndless(g) {
   g.mode = 'play';
   g.audio.levelup();
   g.hud.toast('ENDLOS-MODUS — überlebe so lange du kannst!', 'gold');
-  g._playIntro();
+  // KEIN _playIntro(): der Kamera-Zoom aufs Gesicht gehört nur an den Run-ANFANG
   if (g.role === 'host') g.net.send({ k: 'endless' });
 }
 export function _phaseTick(g, dt) {

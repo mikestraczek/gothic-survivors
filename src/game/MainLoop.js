@@ -17,7 +17,8 @@ export function _drawMinimap(g) {
   let enemies;
   if (g.role === 'client') enemies = (g.enemies._ghostList || []).map((gh) => ({ x: gh.x, z: gh.z, boss: gh.def && gh.def.boss }));
   else enemies = g.enemies.enemies.filter((e) => e.alive).map((e) => ({ x: e.x, z: e.z, boss: e.def.boss }));
-  const pickups = g.pickups.items.filter((it) => it.alive).map((it) => ({ x: it.x, z: it.z }));
+  // Truhen bleiben eine Überraschung — nicht auf der Minimap; alle anderen Items mit Typ (Farbe)
+  const pickups = g.pickups.items.filter((it) => it.alive && it.type !== 'chest').map((it) => ({ x: it.x, z: it.z, t: it.type }));
   g.hud.drawMinimap(self, allies, enemies, pickups, g._pings);
 }
 // Lebensbalken über beschädigten Gegnern + Boss-Balken oben
@@ -66,6 +67,10 @@ export function update(g) {
   // Sprite-Animations-Uhr: läuft IMMER lokal weiter — der Client bekommt runElapsed
   // nur sekundengenau aus Snapshots, damit ruckelte die Helden-Animation beim Gast
   g._animT = (g._animT || 0) + rawDt;
+  // Level-Up-Auswahl per Taste 1-3: derselbe Tastendruck liegt im nächsten Frame noch im
+  // Input-Puffer und würde sofort ein Emote (Digit1-4) auslösen -> kurz stummschalten
+  if (g._lastMode === 'levelup' && g.mode !== 'levelup') g._emoteMuteUntil = performance.now() + 400;
+  g._lastMode = g.mode;
   let dt = rawDt;
   if (g._hitStopT > 0) {
     g._hitStopT -= rawDt;

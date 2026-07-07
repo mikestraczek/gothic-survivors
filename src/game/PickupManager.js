@@ -10,6 +10,9 @@ const DEFS = {
   shrine: { color: 0x86e0ff, name: 'Schrein der Barriere', desc: 'Segen: Heilung + Schadens-Buff' },
 };
 
+// Item-Farben für die Minimap (CSS-Strings aus den 3D-Farben abgeleitet)
+export const PICKUP_COLORS = Object.fromEntries(Object.entries(DEFS).map(([k, v]) => [k, '#' + v.color.toString(16).padStart(6, '0')]));
+
 // Reihenfolge für Snapshot-Codes — nur anhängen, nie umsortieren!
 const SNAP_ORDER = ['heal', 'magnet', 'nova', 'greed', 'chest', 'shrine'];
 

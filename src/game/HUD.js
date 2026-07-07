@@ -1,4 +1,5 @@
 import { WEAPON_DEFS } from './Weapons.js';
+import { PICKUP_COLORS } from './PickupManager.js';
 import { PASSIVE_INFO } from './Upgrades.js';
 
 const WICON = { heal: '💚', whirl: '🌀', axe: '🪓', fireball: '🔥', orbit: '✦', lightning: '⚡', frost: '❄️', spear: '🦴', poison: '☠️', holy: '✝️', daggers: '🗡️', meteor: '☄️' };
@@ -334,7 +335,7 @@ export class HUD {
     const to = (x, z) => [S / 2 + ((x - self.x) / R) * (S / 2 - 6), S / 2 + ((z - self.z) / R) * (S / 2 - 6)];
     const dot = (x, z, col, r) => { const [px, py] = to(x, z); if (px < 2 || px > S - 2 || py < 2 || py > S - 2) return; c.fillStyle = col; c.beginPath(); c.arc(px, py, r, 0, Math.PI * 2); c.fill(); };
     for (const e of enemies) dot(e.x, e.z, e.boss ? '#ff3030' : '#d05a4a', e.boss ? 4 : 1.6);
-    for (const p of pickups) dot(p.x, p.z, '#49e06a', 2.2);
+    for (const p of pickups) dot(p.x, p.z, PICKUP_COLORS[p.t] || '#49e06a', 2.2);
     for (const a of allies) dot(a.x, a.z, a.dead ? '#777' : '#6aa6e6', 3.2);
     if (pings) for (const p of pings) { const r = 4 + (1 - Math.min(1, p.t / 3.5)) * 4; dot(p.x, p.z, '#49e0ff', r); }
     c.fillStyle = '#fff'; c.beginPath(); c.arc(S / 2, S / 2, 3.5, 0, Math.PI * 2); c.fill();

@@ -397,6 +397,7 @@ export function _pingInput(g) {
 // Emotes nur im Koop (an den Mitspieler)
 export function _coopInput(g) {
   if (g.mode !== 'play') return;
+  if (g._emoteMuteUntil && performance.now() < g._emoteMuteUntil) return; // Level-Up-Taste war kein Emote
   for (let i = 1; i <= 4; i++) if (g.input.pressed('Digit' + i)) g._emote(i);
 }
 // Anzahl frischer Tastendrücke diesen Frame (fürs Losreißen aus dem Festwurzeln)

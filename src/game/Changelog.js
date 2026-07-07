@@ -11,6 +11,9 @@ export const CHANGELOG = [
       '🧲 Seelenruf zieht jetzt wirklich ALLE Edelsteine der Karte blitzschnell an',
       '💥 Zorn der Barriere tötet jetzt alle normalen Gegner kartenweit — Bosse nehmen weiterhin hohen Schaden',
       '🚀 Weniger Ruckler: Verschmelzungs-Effekte werden vorgeladen, Schadenszahlen sind effizienter',
+      '🗺 Minimap: Items erscheinen jetzt in ihrer echten Farbe (Heiltrank grün, Seelenruf blau, Erzader gold …) — Truhen bleiben eine Überraschung und werden nicht mehr angezeigt',
+      '🙂 Fix: Die Level-Up-Auswahl per Taste 1–3 löst im Koop kein Emote mehr aus',
+      '🎥 Fix: Beim Start des Endlos-Modus zoomt die Kamera nicht mehr wie beim Run-Intro heran',
     ],
   },
   {

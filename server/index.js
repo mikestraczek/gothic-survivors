@@ -36,7 +36,18 @@ if (process.env.DATABASE_URL) {
         win BOOLEAN DEFAULT false,
         created_at TIMESTAMPTZ DEFAULT now()
       )`)
-      .then(() => console.log('Postgres verbunden — Leaderboard aktiv.'))
+      .then(async () => {
+        // Einmaliger Wipe (07.07.2026): kompletter Spiel-Reset — alte Scores raus
+        const WIPE_TAG = '2026-07-07';
+        await pool.query('CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)');
+        const { rows } = await pool.query(`SELECT value FROM kv WHERE key = 'wipe'`);
+        if (!rows.length || rows[0].value !== WIPE_TAG) {
+          await pool.query('DELETE FROM scores');
+          await pool.query(`INSERT INTO kv (key, value) VALUES ('wipe', $1) ON CONFLICT (key) DO UPDATE SET value = $1`, [WIPE_TAG]);
+          console.log('Leaderboard-Wipe ausgeführt:', WIPE_TAG);
+        }
+        console.log('Postgres verbunden — Leaderboard aktiv.');
+      })
       .catch((e) => {
         console.error('DB-Init fehlgeschlagen:', e.message);
         if (tries < 5) setTimeout(() => initDb(tries + 1), 3000); // DB startet evtl. später
@@ -72,7 +83,7 @@ app.get('/api/scores', async (req, res) => {
   const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
   try {
     const { rows } = await pool.query(
-      `SELECT name, time, kills, level, gold, map, coop, win FROM scores ORDER BY ${sort} DESC, time DESC LIMIT $1`,
+      `SELECT name, time, kills, level, gold, map, coop, win, ROUND(EXTRACT(EPOCH FROM created_at) * 1000) AS ts FROM scores ORDER BY ${sort} DESC, time DESC LIMIT $1`,
       [limit]
     );
     res.json(rows);
@@ -107,11 +118,12 @@ app.post('/api/scores', async (req, res) => {
   const time = num(b.time);
   const kills = num(b.kills);
   const level = num(b.level, 1);
+  // Endlos-Runs erreichen legitim zehntausende Kills — die Schranken sind nur Anti-Unsinn
   const plausible =
-    time <= 3 * 3600 && // länger als 3h gibt es nicht
-    kills <= 20000 &&
-    level <= 200 &&
-    kills <= Math.max(60, time * 25); // mehr als ~25 Kills/s ist unmöglich
+    time <= 6 * 3600 &&
+    kills <= 150000 &&
+    level <= 500 &&
+    kills <= Math.max(60, time * 60); // >60 Kills/s im Schnitt ist Unsinn
   if (!plausible) return res.status(400).json({ ok: false });
   recent.push(now);
   lastSubmit.set(ip, recent);

@@ -89,12 +89,6 @@ export function _installUnloadScore(g) {
       ts: Date.now(),
     };
     try {
-      const scores = JSON.parse(localStorage.getItem('gothicScores') || '[]');
-      scores.push(entry);
-      scores.sort((a, b) => b.time - a.time);
-      localStorage.setItem('gothicScores', JSON.stringify(scores.slice(0, 100)));
-    } catch (e) { /* ignore */ }
-    try {
       navigator.sendBeacon('/api/scores', new Blob([JSON.stringify(entry)], { type: 'application/json' }));
     } catch (e) { /* ignore */ }
   });
@@ -122,12 +116,7 @@ export function _recordScore(g, win) {
     entry.level = Math.max(g.player.level, g.remotePlayer.level || 1);
     entry.gold = Math.floor(g.player.gold + (g.remotePlayer.gold || 0));
   }
-  try {
-    const scores = JSON.parse(localStorage.getItem('gothicScores') || '[]');
-    scores.push(entry);
-    scores.sort((a, b) => b.time - a.time);
-    localStorage.setItem('gothicScores', JSON.stringify(scores.slice(0, 100)));
-  } catch (e) { /* ignore */ }
+  // Bestenliste lebt NUR auf dem Server (keine verwirrende Lokal-Kopie mehr)
   // Gast postet nicht — der Team-Eintrag des Hosts zählt (verhindert Doppel-Einträge)
   if (coop && g.role === 'client') return;
   try {

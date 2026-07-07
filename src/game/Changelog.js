@@ -15,6 +15,8 @@ export const CHANGELOG = [
       '🙂 Fix: Die Level-Up-Auswahl per Taste 1–3 löst im Koop kein Emote mehr aus',
       '🎥 Fix: Beim Start des Endlos-Modus zoomt die Kamera nicht mehr wie beim Run-Intro heran',
       '🎁 Hebt eine Truhe deine Waffe auf Maximalstufe, wird eine mögliche Verschmelzung sofort angeboten — mehrere nacheinander',
+      '🔄 FRISCHER START: Bestenliste und Schmiede-Fortschritt wurden für alle zurückgesetzt — gleiche Chancen für alle! (Name & Einstellungen bleiben)',
+      '🏆 Bestenliste zeigt jetzt Datum + Uhrzeit jedes Runs und akzeptiert die riesigen Kill-Zahlen aus dem Endlos-Modus',
     ],
   },
   {

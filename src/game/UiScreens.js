@@ -275,26 +275,24 @@ export async function _renderLeaderboard(g, sortBy) {
     if (r.ok) { const data = await r.json(); if (Array.isArray(data)) server = data; }
   } catch (e) { /* Server nicht erreichbar */ }
   if (g._lbSort !== sortBy || (g._lbMode || 'solo') !== mode) return; // Tab wurde inzwischen gewechselt
-  const byMode = (list) => list.filter((s) => !!s.coop === wantCoop);
-  if (server && server.length) {
-    const rows = byMode(server);
-    if (rows.length) { g._renderLbRows(el, rows, true); return; }
-  }
-  // leer oder offline -> lokale Liste
-  let local = [];
-  try { local = JSON.parse(localStorage.getItem('gothicScores') || '[]'); } catch (e) {}
-  local = byMode(local);
-  local.sort((a, b) => (sortBy === 'kills' ? b.kills - a.kills : b.time - a.time));
-  g._renderLbRows(el, local.slice(0, 15), false);
+  // Bestenliste lebt NUR auf dem Server — keine lokale Kopie mehr
+  if (!server) { el.innerHTML = '<div class="lb-empty">⚠ Server nicht erreichbar — Bestenliste derzeit nicht verfügbar</div>'; return; }
+  g._renderLbRows(el, server.filter((s) => !!s.coop === wantCoop), true);
 }
 export function _renderLbRows(g, el, scores, global) {
   if (!scores || !scores.length) { el.innerHTML = '<div class="lb-empty">Noch keine Einträge — überlebe einen Run!</div>'; return; }
   const fmtT = (t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
-  let h = `<div class="lb-src">${global ? '🌐 Global' : '💾 Lokal (Server offline)'}</div>`;
-  h += `<div class="lb-row lb-head"><span class="lb-rank">#</span><span class="lb-name">Name</span><span class="lb-val">Zeit</span><span class="lb-val">Kills</span><span class="lb-val">Stufe</span></div>`;
+  const fmtWhen = (ts) => {
+    const n = Number(ts);
+    if (!n) return '—';
+    const d = new Date(n);
+    return `${d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} ${d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`;
+  };
+  let h = `<div class="lb-src">🌐 Global</div>`;
+  h += `<div class="lb-row lb-head"><span class="lb-rank">#</span><span class="lb-name">Name</span><span class="lb-val">Zeit</span><span class="lb-val">Kills</span><span class="lb-val">Stufe</span><span class="lb-when">Datum</span></div>`;
   scores.slice(0, 15).forEach((s, i) => {
     const nm = s.coop ? `🤝 ${g._esc(s.name)}` : g._esc(s.name);
-    h += `<div class="lb-row"><span class="lb-rank">${i + 1}</span><span class="lb-name">${nm}${s.win ? ' 🏆' : ''}</span><span class="lb-val">${fmtT(s.time)}</span><span class="lb-val">${s.kills}</span><span class="lb-val">${s.level}</span></div>`;
+    h += `<div class="lb-row"><span class="lb-rank">${i + 1}</span><span class="lb-name">${nm}${s.win ? ' 🏆' : ''}</span><span class="lb-val">${fmtT(s.time)}</span><span class="lb-val">${s.kills}</span><span class="lb-val">${s.level}</span><span class="lb-when">${fmtWhen(s.ts)}</span></div>`;
   });
   el.innerHTML = h;
 }

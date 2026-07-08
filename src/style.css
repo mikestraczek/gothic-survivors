@@ -1384,7 +1384,8 @@ button.secondary {
   font-size: 13px;
   letter-spacing: 1px;
 }
-#player-name {
+#player-name,
+#player-pass {
   width: 180px;
   padding: 8px 10px;
   background: rgba(0, 0, 0, 0.5);
@@ -2204,4 +2205,15 @@ body.photosafe .intro-flash {
   font-size: 11.5px;
   margin-top: 4px;
   padding-top: 3px;
+}
+
+/* Konto-Screen */
+#player-pass {
+  display: block;
+  margin: 10px auto 0;
+}
+.auth-error {
+  color: #ff7a6a;
+  font-size: 13px;
+  margin-top: 10px;
 }

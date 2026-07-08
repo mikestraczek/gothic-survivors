@@ -34,7 +34,10 @@ await poll(() => window.__game && !document.getElementById('epilepsy-screen').cl
 await page.click('#epilepsy-ok').catch(() => {});
 await poll(() => window.__game && !document.getElementById('name-screen').classList.contains('hidden'), 30000);
 await page.type('#player-name', 'Shot');
+await page.type('#player-pass', 'test1234').catch(() => {});
 await page.click('#name-confirm');
+await new Promise((r) => setTimeout(r, 1500));
+await page.click('#name-guest').catch(() => {}); // Preview ohne API -> Gast
 await poll(() => !document.getElementById('start-screen').classList.contains('hidden'));
 await page.evaluate((map, hero) => { window.__game._selHero = hero; window.__game.startRun(map, 'normal'); }, MAP, HERO);
 await poll(() => window.__game.mode === 'play' && window.__game._introT === 0, 20000);

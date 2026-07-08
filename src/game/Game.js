@@ -287,6 +287,8 @@ export class Game {
   _bootFlow() { return UiScreens._bootFlow(this); }
   _showNameScreen() { return UiScreens._showNameScreen(this); }
   _confirmName() { return UiScreens._confirmName(this); }
+
+  _authSubmit(isRegister) { return UiScreens._authSubmit(this, isRegister); }
   _esc(s) { return UiScreens._esc(this, s); }
   _recordMeta(win) { return RunControl._recordMeta(this, win); }
 

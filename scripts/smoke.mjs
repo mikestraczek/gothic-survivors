@@ -53,7 +53,10 @@ const nameScreen = await poll(() => {
 }, 20000);
 if (nameScreen) {
   await page.type('#player-name', 'SmokeTest');
-  await page.click('#name-confirm');
+  await page.type('#player-pass', 'test1234');
+  await page.click('#name-confirm'); // Preview hat kein /api -> Gast-Button erscheint
+  await poll(() => !document.getElementById('name-guest').classList.contains('hidden'), 8000);
+  await page.click('#name-guest').catch(() => {});
 }
 
 const menuReady = await poll(() => {

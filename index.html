@@ -47,12 +47,16 @@
         <div class="start-inner">
           <h1 class="game-title">GOTHIC</h1>
           <p class="game-subtitle">Survivors — Im Bann der Barriere</p>
-          <p class="name-prompt">Wie ist dein Name, Verbannter?</p>
-          <input id="player-name" maxlength="16" placeholder="Dein Name" autocomplete="off" spellcheck="false" />
+          <p class="name-prompt">Wer bist du, Verbannter?</p>
+          <input id="player-name" maxlength="16" placeholder="Dein Name" autocomplete="username" spellcheck="false" />
+          <input id="player-pass" type="password" maxlength="64" placeholder="Passwort" autocomplete="current-password" />
+          <div id="auth-error" class="auth-error hidden"></div>
           <div class="menu-buttons">
-            <button id="name-confirm" disabled>Eintreten</button>
+            <button id="name-confirm" disabled>Anmelden</button>
+            <button id="name-register" class="secondary" disabled>Neues Konto</button>
+            <button id="name-guest" class="secondary hidden">Offline als Gast spielen</button>
           </div>
-          <p class="name-hint">Dein Name erscheint in der Bestenliste.</p>
+          <p class="name-hint">Kein E-Mail nötig — nur Name + Passwort. Merke dir dein Passwort gut, es gibt keine Wiederherstellung! Dein Fortschritt (Erz, Schmiede, Erfolge) liegt sicher auf dem Server.</p>
         </div>
       </div>
 

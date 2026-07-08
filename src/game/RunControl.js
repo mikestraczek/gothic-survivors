@@ -60,6 +60,7 @@ export function _recordMeta(g, win) {
     evolves: g._evolvesThisRun || 0,
     goldEarned: Math.floor(g.player.gold),
     map: g.mapKey,
+    rt: g._runToken || null,
   });
   let delay = 400;
   for (const a of fresh) {
@@ -87,6 +88,7 @@ export function _installUnloadScore(g) {
       coop: !!g.role,
       win: false,
       rt: g._runToken || undefined,
+      sid: (() => { try { return localStorage.getItem('gothicSession') || undefined; } catch (e) { return undefined; } })(),
       ts: Date.now(),
     };
     try {
@@ -109,10 +111,13 @@ export function _recordScore(g, win) {
     coop,
     win: !!win,
     rt: g._runToken || undefined,
+    sid: (() => { try { return localStorage.getItem('gothicSession') || undefined; } catch (e) { return undefined; } })(),
+    mate: (coop && g.role === 'host' && g._remoteName) ? g._remoteName : undefined,
     ts: Date.now(),
   };
   // Koop: der Host meldet EINEN Team-Eintrag (beide Spieler zusammengezählt)
   if (coop && g.role === 'host' && g.remotePlayer) {
+    // name setzt der SERVER aus dem Konto (+ mate) — hier nur die Summen
     entry.name = `${g._playerName()} & ${g._remoteName || 'Mitspieler'}`;
     entry.kills = g.player.kills + (g.remotePlayer.kills || 0);
     entry.level = Math.max(g.player.level, g.remotePlayer.level || 1);

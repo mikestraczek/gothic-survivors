@@ -41,14 +41,22 @@ export function _wireUI(g) {
     const updName = () => {
       const v = nameEl.value.trim();
       try { localStorage.setItem('gothicName', v); } catch (e) {}
-      const btn = document.getElementById('name-confirm');
-      if (btn) btn.disabled = v.length === 0;
+      for (const id of ['name-confirm', 'name-register']) {
+        const btn = document.getElementById(id);
+        if (btn) btn.disabled = v.length === 0;
+      }
     };
     nameEl.addEventListener('input', updName);
-    nameEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') g._confirmName(); });
+    nameEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') g._authSubmit(false); });
+    const passEl = document.getElementById('player-pass');
+    if (passEl) passEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') g._authSubmit(false); });
   }
   const nameConfirm = document.getElementById('name-confirm');
-  if (nameConfirm) nameConfirm.addEventListener('click', () => g._confirmName());
+  if (nameConfirm) nameConfirm.addEventListener('click', () => g._authSubmit(false));
+  const nameRegister = document.getElementById('name-register');
+  if (nameRegister) nameRegister.addEventListener('click', () => g._authSubmit(true));
+  const nameGuest = document.getElementById('name-guest');
+  if (nameGuest) nameGuest.addEventListener('click', () => g._confirmName());
   const changeName = document.getElementById('change-name');
   if (changeName) changeName.addEventListener('click', () => g._showNameScreen());
   document.getElementById('leaderboard-button').addEventListener('click', () => g._openLeaderboard());
@@ -231,10 +239,72 @@ export function _bootFlow(g) {
   _bootName(g);
 }
 function _bootName(g) {
-  let name = '';
-  try { name = (localStorage.getItem('gothicName') || '').trim(); } catch (e) {}
-  if (name) g._showMenu();
-  else g._showNameScreen();
+  // Konto-Session prüfen: gültig -> Serverstand laden; sonst Login-Screen
+  let sid = null;
+  try { sid = localStorage.getItem('gothicSession'); } catch (e) {}
+  if (!sid) { g._showNameScreen(); return; }
+  fetch('/api/me', { headers: { Authorization: 'Bearer ' + sid } })
+    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((d) => {
+      g.meta.setServerProfile(d.profile);
+      try { localStorage.setItem('gothicName', d.profile.name); } catch (e) {}
+      g._showMenu();
+    })
+    .catch((status) => {
+      if (status === 401) {
+        try { localStorage.removeItem('gothicSession'); } catch (e) {}
+        g._showNameScreen();
+      } else {
+        // Server nicht erreichbar: als Gast weiterspielen (lokaler Stand)
+        let name = '';
+        try { name = (localStorage.getItem('gothicName') || '').trim(); } catch (e) {}
+        if (name) { g._showMenu(); g.hud.toast('⚠ Offline — Fortschritt nur lokal, keine Bestenliste', 'blood'); }
+        else g._showNameScreen();
+      }
+    });
+}
+// Anmelden / Registrieren (Name + Passwort, kein E-Mail)
+export async function _authSubmit(g, isRegister) {
+  const name = (document.getElementById('player-name').value || '').trim();
+  const pass = document.getElementById('player-pass').value || '';
+  const err = document.getElementById('auth-error');
+  const show = (m) => { if (err) { err.textContent = m; err.classList.remove('hidden'); } };
+  if (!name) return;
+  if (pass.length < 4) return show('Passwort: mindestens 4 Zeichen');
+  try {
+    const r = await fetch(isRegister ? '/api/register' : '/api/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, pass }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && (!d.token || !d.profile)) throw new Error('bad-response'); // z. B. Preview ohne API
+    if (!r.ok) {
+      if (r.status === 404 || r.status >= 500) {
+        // Kein Konto-System erreichbar (z. B. reiner Static-Host) -> Gast anbieten
+        show('Konto-Server nicht erreichbar — du kannst offline als Gast spielen');
+        const guest = document.getElementById('name-guest');
+        if (guest) guest.classList.remove('hidden');
+        return;
+      }
+      show(d.error || 'Fehler — bitte erneut versuchen');
+      // Tipp: falscher Button ist der häufigste Fehler
+      if (r.status === 401 && !isRegister) show('Name oder Passwort falsch — neu hier? Nutze „Neues Konto"');
+      if (r.status === 409) show('Name vergeben — wolltest du dich anmelden?');
+      return;
+    }
+    try {
+      localStorage.setItem('gothicSession', d.token);
+      localStorage.setItem('gothicName', d.profile.name);
+    } catch (e) {}
+    g.meta.setServerProfile(d.profile);
+    if (err) err.classList.add('hidden');
+    document.getElementById('name-screen').classList.add('hidden');
+    g._showMenu();
+    g.hud.toast(isRegister ? `Willkommen, ${d.profile.name}!` : `Willkommen zurück, ${d.profile.name}!`, 'gold');
+  } catch (e) {
+    show('Server nicht erreichbar');
+    const guest = document.getElementById('name-guest');
+    if (guest) guest.classList.remove('hidden');
+  }
 }
 export function _showNameScreen(g) {
   g.mode = 'menu';

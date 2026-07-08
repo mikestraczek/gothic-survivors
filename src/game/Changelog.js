@@ -9,6 +9,8 @@ export const CHANGELOG = [
       '🔄 RESET: Bestenliste und Schmiede-Fortschritt wurden erneut für alle zurückgesetzt — diesmal mit Schummel-Schutz',
       '🛡 Die Bestenliste ist jetzt gegen Manipulation geschützt: Die Run-Zeit wird vom Server gemessen und kann nicht mehr erfunden werden — echte Runs werden dabei NIE abgelehnt',
       '🔧 Debug-Zugänge (Konsolen-Zugriff, Freischalt-Parameter) funktionieren nur noch in der lokalen Entwicklung',
+      '👤 KONTEN: Melde dich mit Name + Passwort an (keine E-Mail nötig!) — dein Erz, deine Schmiede und deine Erfolge liegen jetzt sicher auf dem Server und begleiten dich auf jedes Gerät',
+      '🔒 Erz ist nicht mehr manipulierbar: Kontostand und Schmiede-Käufe werden komplett vom Server verwaltet und geprüft',
     ],
   },
   {

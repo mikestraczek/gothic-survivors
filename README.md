@@ -202,6 +202,14 @@ Zeit/Stufe, Erz), die Helden, Waffen und die Sumpf-Karte freischalten
 
 ## Optionen & Komfort
 
+**Konten ohne E-Mail:** Beim ersten Start legst du mit **Name + Passwort** ein
+Konto an (Passwort gut merken — es gibt keine Wiederherstellung!). Erz,
+Schmiede-Upgrades und Erfolge liegen **server-seitig** und sind damit nicht
+manipulierbar: Käufe werden vom Server geprüft, Erz-Gutschriften sind an die
+echte (server-gemessene) Run-Dauer gekoppelt. Ohne erreichbaren Server kann
+offline als Gast gespielt werden (Fortschritt dann nur lokal, keine
+Bestenliste).
+
 Die **Bestenliste** ist in **Solo und Koop** geteilt — Koop-Runs erscheinen
 als ein gemeinsamer Team-Eintrag („Anna & Ben", Kills/Erz beider Spieler
 zusammengezählt). Eine **Auto-Qualität** senkt bei schwachen Geräten die

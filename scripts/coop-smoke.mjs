@@ -44,7 +44,8 @@ for (const [p, nm] of [[host, 'HostSpieler'], [guest, 'GastSpieler']]) {
   await p.click('#epilepsy-ok').catch(() => {});
   await poll(p, () => !document.getElementById('name-screen').classList.contains('hidden'));
   await p.type('#player-name', nm);
-  await p.click('#name-confirm');
+  await p.type('#player-pass', 'test1234');
+  await p.click('#name-register'); // Konto anlegen (Server hat Memory-Fallback ohne DB)
   await poll(p, () => !document.getElementById('start-screen').classList.contains('hidden'));
 }
 

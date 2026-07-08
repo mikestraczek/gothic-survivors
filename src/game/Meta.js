@@ -48,6 +48,26 @@ export class Meta {
     this.devUnlock = typeof location !== 'undefined' && /[?&]unlock/.test(location.search) && ['localhost', '127.0.0.1'].includes(location.hostname);
   }
 
+  // Konto-Modus: Serverstand übernehmen — Gold/Upgrades sind ab jetzt server-autoritativ
+  setServerProfile(p) {
+    this.online = true;
+    this.data = {
+      gold: p.gold || 0,
+      upgrades: p.upgrades || {},
+      achievements: p.achievements || {},
+      stats: { ...EMPTY_STATS, ...(p.stats || {}) },
+    };
+    if (!this.data.stats.mapWins) this.data.stats.mapWins = {};
+    this._save(); // lokaler Cache (reine Anzeige)
+    if (this.el) this.render();
+  }
+  _authHeaders() {
+    try {
+      const t = localStorage.getItem('gothicSession');
+      return t ? { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+    } catch (e) { return { 'Content-Type': 'application/json' }; }
+  }
+
   _load() {
     let data = null;
     try {
@@ -147,6 +167,7 @@ export class Meta {
   // Gibt die Liste frisch freigeschalteter Achievements zurück (für Toasts).
   // Stiller Abgleich: Bestands-Stats erfüllen evtl. schon neue Erfolge (z. B. wins_3 -> Schwer)
   syncAchievements() {
+    if (this.online) return; // Serverstand gilt — nichts lokal nachvergeben
     const s = this.data.stats;
     if (!s.mapWins) s.mapWins = {};
     let changed = false;
@@ -160,7 +181,7 @@ export class Meta {
     if (changed) this._save();
   }
 
-  recordRun({ time = 0, kills = 0, level = 0, win = false, bossKills = 0, evolves = 0, goldEarned = 0, map = null }) {
+  recordRun({ time = 0, kills = 0, level = 0, win = false, bossKills = 0, evolves = 0, goldEarned = 0, map = null, rt = null }) {
     const s = this.data.stats;
     if (!s.mapWins) s.mapWins = {};
     if (win) {
@@ -182,6 +203,23 @@ export class Meta {
       }
     }
     this._save();
+    // Konto-Modus: Ergebnis an den Server melden — Gutschrift/Erfolge kommen autoritativ zurück
+    if (this.online) {
+      fetch('/api/run-finish', {
+        method: 'POST', headers: this._authHeaders(),
+        body: JSON.stringify({ rt, time, kills, level, win, bossKills, evolves, goldEarned: Math.max(0, Math.round(goldEarned)), map, achievements: fresh.map((a) => a.id) }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!d) return;
+          this.data.gold = d.gold;
+          this.data.achievements = { ...this.data.achievements, ...d.achievements };
+          if (d.stats) this.data.stats = { ...this.data.stats, ...d.stats };
+          this._save();
+          if (this.el && !this.el.classList.contains('hidden')) this.render();
+        })
+        .catch(() => {});
+    }
     return fresh;
   }
 
@@ -233,6 +271,21 @@ export class Meta {
     const cost = u.cost(l);
     if (this.data.gold < cost) {
       this.toast('Nicht genug Erz', 'blood');
+      return;
+    }
+    if (this.online) {
+      // Kauf läuft über den Server — der prüft Preis und Kontostand selbst
+      fetch('/api/shop/buy', { method: 'POST', headers: this._authHeaders(), body: JSON.stringify({ id }) })
+        .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+        .then(({ ok, d }) => {
+          if (!ok) { this.toast(d.error || 'Kauf fehlgeschlagen', 'blood'); return; }
+          this.data.gold = d.gold;
+          this.data.upgrades = d.upgrades;
+          this._save();
+          this.toast(`${u.name} Stufe ${d.upgrades[id]}`, 'gold');
+          this.render();
+        })
+        .catch(() => this.toast('Server nicht erreichbar', 'blood'));
       return;
     }
     this.data.gold -= cost;

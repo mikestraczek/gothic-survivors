@@ -34,6 +34,7 @@ export const CHANGELOG = [
       '🔒 Erz ist nicht mehr manipulierbar: Kontostand und Schmiede-Käufe werden komplett vom Server verwaltet und geprüft',
       '🛡 Bestenliste jetzt wirklich fälschungssicher: Erfolge und Einträge werden ausschließlich server-seitig aus dem echten Spielverlauf abgeleitet — Erfolge/Freischaltungen lassen sich nicht mehr per Netzwerk-Trick erschummeln',
       '🎯 Bestenlisten-Kills werden nun während des Runs laufend vom Server geprüft — ein Eintrag ohne echtes Spielen ist damit praktisch ausgeschlossen',
+      '🔐 Auch fortgesetzte Runs sind abgesichert: ein manipulierter Spielstand kann keinen zu hohen Eintrag mehr erzeugen',
       '⌨️ Login-Komfort: Tab wechselt zwischen den Feldern, Leerzeichen in Namen funktionieren, und Passwort-Manager-Popups (LastPass & Co.) bleiben draußen',
     ],
   },

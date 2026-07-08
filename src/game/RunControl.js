@@ -227,6 +227,10 @@ export function resumeRun(g) {
   g.input.enabled = true;
   g._autosaveAcc = 0;
   g.mode = 'play';
+  g._specOnly = false;
+  g._pendingBoard = null;
+  g._hbAcc = 0;
+  g._fetchRunToken(); // frisches Token: Bestenliste zählt nur ab HIER (kein Save-Injection-Score)
   g.audio.setMusic(g._musicTheme());
 }
 export function _applyLevel(g, mapKey, diff) {

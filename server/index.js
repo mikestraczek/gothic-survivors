@@ -171,7 +171,7 @@ app.post('/api/heartbeat', async (req, res) => {
   if (rl.length >= 20) return res.json({ ok: true }); // Flut -> ignorieren (nicht anrechnen)
   rl.push(now); hbLimit.set(tok, rl);
   const num = (v) => (Number.isFinite(+v) ? Math.max(0, Math.floor(+v)) : 0);
-  const t = Math.min(num(b.t), Math.round(age) + 45);
+  const t = Math.min(num(b.t), Math.round(age) + 8); // t folgt echter Token-Zeit (verhindert injiziertes elapsed)
   const att = await getAtt(tok);
   const dt = Math.max(0, t - (att.t || 0));
   const allow = Math.min(dt, MAX_INTERVAL) * MAX_KPS; // pro Heartbeat begrenztes Kill-Delta

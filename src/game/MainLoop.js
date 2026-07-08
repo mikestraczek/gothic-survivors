@@ -72,6 +72,12 @@ export function update(g) {
   // Sprite-Animations-Uhr: läuft IMMER lokal weiter — der Client bekommt runElapsed
   // nur sekundengenau aus Snapshots, damit ruckelte die Helden-Animation beim Gast
   g._animT = (g._animT || 0) + rawDt;
+  // Gameplay-Attestierung: alle 15 s ein Heartbeat an den Server (belegt den Kill-Verlauf
+  // für die Bestenliste — ohne diesen Strom zählen keine Kills)
+  if (g.mode === 'play' && g._runToken && g.meta && g.meta.online && !g._specOnly && !g._versus) {
+    g._hbAcc = (g._hbAcc || 0) + rawDt;
+    if (g._hbAcc >= 15) { g._hbAcc = 0; g._sendHeartbeat(); }
+  }
   // Level-Up-Auswahl per Taste 1-3: derselbe Tastendruck liegt im nächsten Frame noch im
   // Input-Puffer und würde sofort ein Emote (Digit1-4) auslösen -> kurz stummschalten
   if (g._lastMode === 'levelup' && g.mode !== 'levelup') g._emoteMuteUntil = performance.now() + 400;

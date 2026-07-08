@@ -20,6 +20,7 @@ export const CHANGELOG = [
       '🩸 Letzter Überlebender entschärft: die Zone bleibt anfangs weit offen (Schonfrist ~22s) und schrumpft danach deutlich gemächlicher',
       '🩸 Die sichere Zone hat jetzt eine klar sichtbare, am Boden verankerte violette Energiewand (statt eines pulsierenden Rings im Nichts) — zusätzlich als Kreis auf der Minimap',
       '🎛 „Spiel wählen"-Menü aufgeräumt & kompakter — alle Modi, Modifikatoren und Optionen passen wieder auf einen Blick',
+      '🃏 Level-Up-Bildschirm aufgeräumt: die Aktions-Buttons (Neu würfeln / Verbannen / Kombinationen) sowie die Karten sind jetzt alle einheitlich gleich hoch',
     ],
   },
   {
@@ -32,6 +33,7 @@ export const CHANGELOG = [
       '👤 KONTEN: Melde dich mit Name + Passwort an (keine E-Mail nötig!) — dein Erz, deine Schmiede und deine Erfolge liegen jetzt sicher auf dem Server und begleiten dich auf jedes Gerät',
       '🔒 Erz ist nicht mehr manipulierbar: Kontostand und Schmiede-Käufe werden komplett vom Server verwaltet und geprüft',
       '🛡 Bestenliste jetzt wirklich fälschungssicher: Erfolge und Einträge werden ausschließlich server-seitig aus dem echten Spielverlauf abgeleitet — Erfolge/Freischaltungen lassen sich nicht mehr per Netzwerk-Trick erschummeln',
+      '🎯 Bestenlisten-Kills werden nun während des Runs laufend vom Server geprüft — ein Eintrag ohne echtes Spielen ist damit praktisch ausgeschlossen',
       '⌨️ Login-Komfort: Tab wechselt zwischen den Feldern, Leerzeichen in Namen funktionieren, und Passwort-Manager-Popups (LastPass & Co.) bleiben draußen',
     ],
   },

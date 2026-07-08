@@ -56,6 +56,7 @@ if (process.env.DATABASE_URL) {
         await pool.query('CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, account_id INTEGER NOT NULL, created_at TIMESTAMPTZ DEFAULT now())');
         await pool.query('ALTER TABLE scores ADD COLUMN IF NOT EXISTS token TEXT'); // 1 Bestenlisten-Zeile je Run-Token
         await pool.query(`ALTER TABLE run_tokens ADD COLUMN IF NOT EXISTS applied JSONB DEFAULT '{}'`); // Idempotenz je Run
+        await pool.query(`ALTER TABLE run_tokens ADD COLUMN IF NOT EXISTS att JSONB DEFAULT '{}'`); // Heartbeat-Attestierung
         await pool.query(`DELETE FROM run_tokens WHERE started_at < now() - interval '24 hours'`);
         const { rows } = await pool.query(`SELECT value FROM kv WHERE key = 'wipe'`);
         if (!rows.length || rows[0].value !== WIPE_TAG) {
@@ -133,6 +134,51 @@ app.post('/api/run-start', async (req, res) => {
     try { await pool.query('INSERT INTO run_tokens (token) VALUES ($1)', [token]); } catch (e) { /* memTokens reicht */ }
   }
   res.json({ token });
+});
+
+// --- Gameplay-Attestierung: Kills zählen für die Bestenliste NUR, solange während des Runs
+// periodische Heartbeats fließen — pro Intervall begrenzt. „Token holen, warten, Max posten"
+// bringt damit fast nichts; ein Fake-Score braucht einen plausiblen Strom über die echte Dauer.
+// MAX_KPS bewusst WEIT über der realen Endgame-Kill-Rate (~150/s selbst bei tiefem Endlos
+// mit Splitter-Wellen + Nova-Bursts): kein legitimer Spieler wird je gekappt. Die eigentliche
+// Bot-Abwehr ist strukturell (Kills zählen nur, solange der Heartbeat-Strom über die ECHTE
+// Laufzeit fließt), NICHT die Rate — daher darf sie großzügig sein.
+const MAX_KPS = 500; // pro-Heartbeat-Rate (Sicherheitsfaktor ~3x über realem Maximum)
+const MAX_INTERVAL = 45; // max. anrechenbare Sekunden pro Heartbeat (verträgt ausgefallene Beats)
+const FINISH_GRACE = 8000; // Kill-Kulanz am Run-Ende (letzte ~15s zwischen letztem Beat und Tod)
+const memAtt = new Map(); // token -> { t, kills, level }
+async function getAtt(token) {
+  if (memAtt.has(token)) return memAtt.get(token);
+  if (pool) {
+    try { const { rows } = await pool.query('SELECT att FROM run_tokens WHERE token = $1', [token]); if (rows.length && rows[0].att) return rows[0].att; } catch (e) { /* leer */ }
+  }
+  return { t: 0, kills: 0, level: 0 };
+}
+async function setAtt(token, obj) {
+  memAtt.set(token, obj);
+  if (pool) { try { await pool.query('UPDATE run_tokens SET att = $2 WHERE token = $1', [token, JSON.stringify(obj)]); } catch (e) { /* mem reicht */ } }
+}
+const hbLimit = new Map(); // token -> [timestamps]
+app.post('/api/heartbeat', async (req, res) => {
+  const acc = await getAccountBySession(req);
+  if (!acc) return res.json({ ok: false });
+  const b = req.body || {};
+  const tok = String(b.rt || '').slice(0, 64);
+  const age = await tokenAgeSeconds(tok);
+  if (age == null) return res.json({ ok: false });
+  const now = Date.now();
+  const rl = (hbLimit.get(tok) || []).filter((t) => now - t < 60000);
+  if (rl.length >= 20) return res.json({ ok: true }); // Flut -> ignorieren (nicht anrechnen)
+  rl.push(now); hbLimit.set(tok, rl);
+  const num = (v) => (Number.isFinite(+v) ? Math.max(0, Math.floor(+v)) : 0);
+  const t = Math.min(num(b.t), Math.round(age) + 45);
+  const att = await getAtt(tok);
+  const dt = Math.max(0, t - (att.t || 0));
+  const allow = Math.min(dt, MAX_INTERVAL) * MAX_KPS; // pro Heartbeat begrenztes Kill-Delta
+  const attKills = Math.max(att.kills || 0, Math.min(num(b.kills), (att.kills || 0) + allow));
+  const attLevel = Math.max(att.level || 0, Math.min(num(b.level), (att.level || 0) + dt + 5));
+  await setAtt(tok, { t: Math.max(t, att.t || 0), kills: attKills, level: attLevel });
+  res.json({ ok: true });
 });
 
 // Was für DIESEN Token bereits aufs Konto angerechnet wurde (Idempotenz gegen Erz-/Stat-Farming)
@@ -313,10 +359,15 @@ app.post('/api/run-finish', async (req, res) => {
   const age = await tokenAgeSeconds(b.rt);
   if (age == null) return res.status(400).json({ error: 'Kein gültiger Run' });
   const num = (v) => (Number.isFinite(+v) ? Math.max(0, Math.floor(+v)) : 0);
-  // ALLE Werte gegen die echte (Token-)Laufzeit klemmen — Grundlage der Fälschungssicherheit
+  const tok = String(b.rt).slice(0, 64);
+  // Attestierte Obergrenze: nur was Heartbeats während des Runs belegt haben (+1 Intervall Gnade)
+  const att = await getAtt(tok);
+  const attKillCap = (att.kills || 0) + FINISH_GRACE; // nur die letzte Lücke abdecken
+  const attLevelCap = (att.level || 0) + 5;
+  // Werte gegen echte Laufzeit UND attestierten Verlauf klemmen — nie ablehnen, nur kappen
   const time = Math.min(num(b.time), Math.round(age) + 90);
-  const kills = Math.min(num(b.kills), (time + 60) * 100);
-  const level = Math.min(num(b.level), 999);
+  const kills = Math.min(num(b.kills), (time + 60) * MAX_KPS, attKillCap); // Zeitklemme = MAX_KPS (nicht 100)
+  const level = Math.min(num(b.level), 999, attLevelCap);
   const credit = Math.min(num(b.goldEarned), Math.ceil(age / 60) * 25 + 25);
   const boss = Math.min(num(b.bossKills), 200);
   const evolves = Math.min(num(b.evolves), 8);
@@ -324,7 +375,6 @@ app.post('/api/run-finish', async (req, res) => {
   const winNow = b.win ? 1 : 0;
   // IDEMPOTENZ: ein Token (mehrfach nutzbar für Endlos: Sieg + späterer Tod) darf Erz/Stats
   // nur EINMAL anrechnen. Wir buchen jeweils nur das Delta zum bereits Angerechneten.
-  const tok = String(b.rt).slice(0, 64);
   const prev = await getApplied(tok);
   const dCredit = Math.max(0, credit - (prev.credit || 0));
   const dKills = Math.max(0, kills - (prev.kills || 0));
@@ -360,8 +410,8 @@ app.post('/api/run-finish', async (req, res) => {
   if (pool && b.board) {
     const mate = typeof b.mate === 'string' && b.mate.trim() ? ' & ' + b.mate.trim().slice(0, 16) : '';
     const name = (acc.name + mate).slice(0, 40);
-    const bKills = Math.min(num(b.boardKills != null ? b.boardKills : kills), (time + 60) * 100);
-    const bLevel = Math.min(num(b.boardLevel != null ? b.boardLevel : level), 999);
+    const bKills = Math.min(num(b.boardKills != null ? b.boardKills : kills), (time + 60) * MAX_KPS, attKillCap);
+    const bLevel = Math.min(num(b.boardLevel != null ? b.boardLevel : level), 999, attLevelCap);
     try {
       await pool.query('DELETE FROM scores WHERE token = $1', [tok]);
       await pool.query(

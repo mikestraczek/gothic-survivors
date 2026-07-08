@@ -347,6 +347,8 @@ export class Game {
 
   _fetchRunToken() { return RunControl._fetchRunToken(this); }
 
+  _sendHeartbeat() { return RunControl._sendHeartbeat(this); }
+
   _autoQuality() { return Visuals._autoQuality(this); }
 
   _applyDynScale() { return Visuals._applyDynScale(this); }

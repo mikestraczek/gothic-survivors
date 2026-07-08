@@ -676,8 +676,24 @@ export function startRun(g, mapKey = g._selMap, diff = g._selDiff, modeKey = g._
   g._fetchRunToken(); // Server-Zeitstempel für die Bestenliste (best effort, mit Retry)
 }
 // Run-Token: der Server merkt sich den Run-Start — Submits ohne Token werden verworfen
+export function _sendHeartbeat(g) {
+  let sid;
+  try { sid = localStorage.getItem('gothicSession'); } catch (e) {}
+  if (!sid || !g._runToken) return;
+  // Host meldet TEAM-Kills (er simuliert beide) — passt zum Bestenlisten-Eintrag; sonst eigene
+  const team = g.role === 'host' && g.remotePlayer;
+  const kills = team ? g.player.kills + (g.remotePlayer.kills || 0) : g.player.kills;
+  const level = team ? Math.max(g.player.level, g.remotePlayer.level || 1) : g.player.level;
+  try {
+    fetch('/api/heartbeat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sid },
+      body: JSON.stringify({ rt: g._runToken, t: Math.round(g.runElapsed), kills, level }),
+    }).catch(() => {});
+  } catch (e) { /* egal */ }
+}
 export function _fetchRunToken(g) {
   g._runToken = null;
+  g._hbAcc = 0;
   const attempt = () => fetch('/api/run-start', { method: 'POST' })
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => { if (d && d.token) g._runToken = d.token; })

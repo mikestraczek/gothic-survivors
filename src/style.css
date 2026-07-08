@@ -874,16 +874,12 @@ button.secondary {
   margin: 6px 0 24px;
 }
 .lvl-choices {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-auto-rows: 1fr; /* alle Karten gleich hoch (so hoch wie die höchste — auch mit Kombo-Hinweis) */
   gap: 12px;
 }
-#lvl-reroll {
-  display: inline-block;
-  margin-top: 24px;
-  padding: 10px 22px;
-  font-size: 15px;
-}
+/* „Neu würfeln" hatte früher eine Sonderregel (kleiner + Versatz) -> alle Aktions-Buttons
+   sind jetzt einheitlich über .lvl-actions button gestylt (gleiche Höhe & Größe). */
 .combo-card {
   border-color: #c9a45c !important;
   box-shadow: 0 0 18px rgba(201, 164, 92, 0.35);
@@ -2280,6 +2276,8 @@ body.photosafe .intro-flash {
 .lvl-actions button {
   white-space: nowrap;
   margin: 0;
+  padding: 12px 22px; /* einheitliche Größe für alle Aktions-Buttons */
+  font-size: 15px;
 }
 /* Kombo-Hinweis kompakt, damit Karten nicht auseinanderlaufen */
 .lc-hint {

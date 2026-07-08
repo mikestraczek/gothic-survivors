@@ -43,9 +43,14 @@ export class Game {
     this._authSelf = null;
     this._authRemote = null;
     this._clientPaused = false;
-    // Level / Phasen
+    // Level / Phasen / Modus
     this._selMap = 'valley';
     this._selDiff = 'normal';
+    this._selMode = 'campaign'; // gewählter Spielmodus (Solo)
+    this._selLobbyMode = 'campaign'; // gewählter Modus in der Online-Lobby
+    this._selMuts = new Set(); // gewählte Mutatoren (Wahnsinn-Modus)
+    this._modeKey = 'campaign';
+    this._modeCfg = null;
     this.settings = loadSettings();
     this.heroKey = 'soldier'; // aktiver Held des laufenden Runs
     this._remoteHeroKey = 'soldier'; // Held des Mitspielers (Koop)
@@ -315,6 +320,10 @@ export class Game {
 
   _renderHeroSelector(elId, descId, rerender) { return UiScreens._renderHeroSelector(this, elId, descId, rerender); }
 
+  _renderModeSelector(elId, descId, ctx, onChange) { return UiScreens._renderModeSelector(this, elId, descId, ctx, onChange); }
+
+  _renderMutatorSelector(elId) { return UiScreens._renderMutatorSelector(this, elId); }
+
   _sendHeroInfo() { return Coop._sendHeroInfo(this); }
 
   _toastFor(who, msg, type = 'gold', sound = null) { return Coop._toastFor(this, who, msg, type, sound); }
@@ -325,6 +334,10 @@ export class Game {
   _applyLevel(mapKey, diff) { return RunControl._applyLevel(this, mapKey, diff); }
 
   _startEndless() { return RunControl._startEndless(this); }
+
+  _applyMode(key) { return RunControl._applyMode(this, key); }
+
+  _showVersusResult(d) { return RunControl._showVersusResult(this, d); }
 
   _phaseTick(dt) { return RunControl._phaseTick(this, dt); }
 
@@ -354,7 +367,7 @@ export class Game {
 
   _resetCommon() { return RunControl._resetCommon(this); }
 
-  startRun(mapKey = this._selMap, diff = this._selDiff) { return RunControl.startRun(this, mapKey, diff); }
+  startRun(mapKey = this._selMap, diff = this._selDiff, modeKey = this._selMode) { return RunControl.startRun(this, mapKey, diff, modeKey); }
 
   _hostStart() { return Coop._hostStart(this); }
 

@@ -4,6 +4,23 @@
 export const CHANGELOG = [
   {
     date: '2026-07-08',
+    title: 'Neue Spielmodi — allein & gegeneinander',
+    items: [
+      '🎮 NEU: Wähle beim „Neuer Run" jetzt einen Spielmodus! Sieben Modi solo, dazu Duelle im Online-Koop',
+      '⚔️ Kampagne: der klassische Lauf (3 Phasen + Endboss) — wie gehabt',
+      '♾️ Endlos ist jetzt direkt im Menü wählbar (nicht mehr nur nach einem Sieg)',
+      '👑 Boss-Rausch: kaum Fußvolk, nur eine Kette aus 8 immer stärkeren Bossen — schaffst du alle?',
+      '💀 Eiserner Modus: zähere Gegner, ein einziges Leben, kein Fortsetzen — nur für Hartgesottene',
+      '📅 Tages-Challenge: jeden Tag dieselbe Karte, derselbe Held und dieselben Modifikatoren für ALLE — ein Versuch, ein fairer Vergleich',
+      '🎲 Wahnsinn: stelle dir eigene Modifikatoren zusammen — Überzahl, Glaskanone, Blutrausch, Elite-Plage',
+      '🩸 Letzter Überlebender: die Barriere zieht sich zu (violette Zone = Tod) — solo zählt deine Zeit, im Koop gewinnt der letzte Lebende',
+      '🏁 Score-Wettlauf (Koop): gleiche Arena, jeder für sich — wer nach 8 Minuten mehr Kills hat, gewinnt',
+      '😈 Horden-Duell (Koop): Kill-Serien laden deinen Meter — voll geladen hetzt du dem Gegner einen Elite-Jäger auf den Hals',
+      '🏆 Duell-Ergebnis mit Sieg-/Niederlage-Bildschirm; Versus-Runs wandern nicht in die Bestenliste',
+    ],
+  },
+  {
+    date: '2026-07-08',
     title: 'Frischer Start & faire Bestenliste',
     items: [
       '🔄 RESET: Bestenliste und Schmiede-Fortschritt wurden erneut für alle zurückgesetzt — diesmal mit Schummel-Schutz',
@@ -11,6 +28,7 @@ export const CHANGELOG = [
       '🔧 Debug-Zugänge (Konsolen-Zugriff, Freischalt-Parameter) funktionieren nur noch in der lokalen Entwicklung',
       '👤 KONTEN: Melde dich mit Name + Passwort an (keine E-Mail nötig!) — dein Erz, deine Schmiede und deine Erfolge liegen jetzt sicher auf dem Server und begleiten dich auf jedes Gerät',
       '🔒 Erz ist nicht mehr manipulierbar: Kontostand und Schmiede-Käufe werden komplett vom Server verwaltet und geprüft',
+      '⌨️ Login-Komfort: Tab wechselt zwischen den Feldern, Leerzeichen in Namen funktionieren, und Passwort-Manager-Popups (LastPass & Co.) bleiben draußen',
     ],
   },
   {

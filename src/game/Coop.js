@@ -59,6 +59,8 @@ export async function _openLobby(g) {
   document.getElementById('lobby-room').classList.add('hidden');
   document.getElementById('lobby-start').classList.add('hidden');
   g._setLobbyStatus('');
+  const rrMode = () => { g._renderModeSelector('lobby-modes', 'lobby-mode-desc', 'lobby', rrMode); g._lobbyUpdate(); };
+  g._renderModeSelector('lobby-modes', 'lobby-mode-desc', 'lobby', rrMode);
   g._renderSelectors('lobby-maps', 'lobby-diffs', 'lobby-heroes', 'lobby-hero-desc');
   document.getElementById('lobby-list').innerHTML = '<div class="lobby-empty">Verbinde…</div>';
   if (await g._lobbyConnect()) g.net.list();
@@ -191,6 +193,17 @@ export function _onNetData(g, d) {
   }
   else if (d.k === 'gpause' && g.role === 'host') g._peerPause(d.on);
   else if (d.k === 'over' && g.role === 'client') g._clientGameOver(d);
+  else if (d.k === 'vend' && g.role === 'client') {
+    // Versus-Ende: der Host meldet das Ergebnis; der Gast ist die 'guest'-Perspektive
+    g.mode = 'won';
+    g.input.enabled = false;
+    g.audio.setMusic('menu');
+    g.hud.setSpectate(null);
+    g.hud.setBossBar(null);
+    g._recordMeta(d.win === 'guest');
+    g.meta.addGold(Math.floor(g.player.gold));
+    g._showVersusResult({ youAre: 'guest', win: d.win, hk: d.hk, gk: d.gk, hl: d.hl, gl: d.gl });
+  }
 }
 export function _sendHeroInfo(g) {
   g.net.send({ k: 'hero', key: g._selHero, locked: [...g.meta.lockedWeaponSet()], name: g._playerName() });
@@ -229,13 +242,14 @@ export function _hostStart(g) {
   g.enemies.diff *= 1.18;
   g._onKillP1 = g._makeOnKill(g.player);
   g._onKillP2 = g._makeOnKill(g.remotePlayer);
+  g._applyMode(g._selLobbyMode || 'campaign'); // Modus einrichten (Koop/Versus)
   g._lastHp = g.player.hp;
   g.remoteInput._x = 0;
   g.remoteInput._z = 0;
-  g.net.send({ k: 'start', map: g._selMap, diff: g._selDiff, hero: g.heroKey });
+  g.net.send({ k: 'start', map: g._selMap, diff: g._selDiff, hero: g.heroKey, mode: g._selLobbyMode || 'campaign' });
   g.camCtrl.snap(g.player.position);
   g.hud.show();
-  g.hud.toast('Koop gestartet! Jeder levelt selbst.', 'gold');
+  g.hud.toast(g._versus ? `${g._modeCfg.icon} ${g._modeCfg.name} — Duell gestartet!` : 'Koop gestartet! Jeder levelt selbst.', 'gold');
   g.input.enabled = true;
   g.mode = 'play';
   g.audio.setMusic(g._musicTheme());
@@ -250,6 +264,7 @@ export function _beginClientRun(g, d) {
   g._syncGrade();
   g.mapKey = d ? d.map : 'valley';
   g.difficulty = d ? d.diff : 'normal';
+  g._applyMode((d && d.mode) || 'campaign'); // Modus-Flags (Sim läuft beim Host)
   g.heroKey = g._selHero; // eigener Held (Stats kommen autoritativ vom Host)
   g._remoteHeroKey = (d && d.hero) || 'soldier';
   g._syncHeroSprites();
@@ -281,7 +296,7 @@ export function _beginClientRun(g, d) {
   g.hud.setSpectate(null);
   g.camCtrl.snap(g.player.position);
   g.hud.show();
-  g.hud.toast('Mit der Lobby verbunden!', 'gold');
+  g.hud.toast(g._versus ? `${g._modeCfg.icon} ${g._modeCfg.name} — Duell gestartet!` : 'Mit der Lobby verbunden!', 'gold');
   g.input.enabled = true;
   g.mode = 'play';
   g.audio.setMusic(g._musicTheme());
@@ -302,6 +317,7 @@ export function _leaveOnline(g) {
 // -------------------------------------------------- Wiederbelebung (Nähe + Halten)
 // Host-autoritativ: genau ein Gefallener kann vom lebenden Mate wiederbelebt werden.
 export function _tickRevive(g, dt) {
+  if (g._noRevive) { g._reviveProg = 0; return; } // Versus: kein Wiederbeleben
   let downed = null, reviver = null, held = false;
   if (g.player.dead && !g.remotePlayer.dead) { downed = g.player; reviver = g.remotePlayer; held = !!g.remoteInput.reviving; }
   else if (g.remotePlayer.dead && !g.player.dead) { downed = g.remotePlayer; reviver = g.player; held = g.input.isDown('KeyE') || g.input.isTouch; } // Touch: Nähe genügt
@@ -405,8 +421,13 @@ export function _updateMateArrow(g) {
 export function _coopDeathWatch(g) {
   const rd = g.remotePlayer.dead;
   if (rd && !g._prevRemoteDead) {
-    g.hud.bossBanner('MITSPIELER GEFALLEN');
-    g.hud.toast('☠ Mitspieler gefallen — eile hin und belebe ihn (E)!', 'blood');
+    if (g._versus) {
+      g.hud.bossBanner('GEGNER GEFALLEN');
+      g.hud.toast('☠ Dein Gegner ist gefallen!', 'gold');
+    } else {
+      g.hud.bossBanner('MITSPIELER GEFALLEN');
+      g.hud.toast('☠ Mitspieler gefallen — eile hin und belebe ihn (E)!', 'blood');
+    }
     g.audio.hurt();
   }
   g._prevRemoteDead = rd;
@@ -493,6 +514,8 @@ export function _sendSnapshot(g) {
     dg: g.enemies._aoes.some((a) => a.type === 'safe') ? 1 : 0,
     wr: Math.round(g.enemies.wrathFrac() * 100) / 100,
     t: Math.round(g.runElapsed),
+    vt: g._timeLimit ? Math.max(0, Math.round(g._versusTimer)) : undefined, // Versus-Restzeit
+    sr: (g._shrink && g._stormR != null) ? Math.round(g._stormR) : undefined, // Sturm-Radius (sichere Zone)
     // Map-Specials (Panzer/Lore) für die Gast-Anzeige
     ms: {
       tk: g.world.tanks ? g.world.tanks.map((t) => [t.group.visible ? 1 : 0, Math.round(t.group.position.x * 10) / 10, Math.round(t.group.position.z * 10) / 10, Math.round(t.group.rotation.y * 100) / 100]) : 0,
@@ -523,6 +546,8 @@ export function _applySnapshot(g, d) {
   if (d.st) g.phaseStage = d.st;
   g._clientDanger = !!d.dg;
   g._clientWrath = d.wr || 0;
+  if (d.vt != null) g._versusTimer = d.vt; // Versus-Restzeit (fürs HUD via _phaseText)
+  if (d.sr != null) g._stormR = d.sr; // Sturm-Radius (fürs HUD)
   // eigene Waffen = ld2, Host-Waffen = ld1
   if (d.ld2) g.weapons.setLoadout(d.ld2.map((w) => ({ id: w.id, level: w.l, evolved: !!w.e, evoName: w.n })));
   if (d.ld1) g.weapons2.setLoadout(d.ld1.map((w) => ({ id: w.id, level: w.l, evolved: !!w.e, evoName: w.n })));

@@ -111,6 +111,7 @@ export class EnemyManager {
     this.maxAlive = HARD_CAP; // im Endlos-Modus angehoben
     this.coopScale = 1; // Koop: mehr Gegner gleichzeitig
     this.bossInterval = 100; // Sekunden zwischen wiederkehrenden Bossen (Endlos kürzer)
+    this.mut = { pop: 1, hp: 1, speed: 1, elite: 1 }; // Mutatoren-Stellschrauben (Wahnsinn/Tages-Challenge)
     this.fx = null; // vom Game gesetzt (Boss-Telegraphen)
     this.onShake = null; // vom Game gesetzt (Screen-Shake bei Einschlägen)
     this.onBossEnrage = null; // vom Game gesetzt (Banner/Sound bei Boss-Enrage)
@@ -166,6 +167,7 @@ export class EnemyManager {
     this.maxAlive = HARD_CAP;
     this.coopScale = 1;
     this.bossInterval = 100;
+    this.mut = { pop: 1, hp: 1, speed: 1, elite: 1 };
     this._aoes = [];
     this.hideBolts();
     this._sinceKill = 0;
@@ -199,9 +201,9 @@ export class EnemyManager {
     // Endlos: zusätzlich wachsender Druck (+12% HP / +8% Schaden pro Minute)
     const em = (this.endlessT || 0) / 60;
     return {
-      hp: (1 + m * 0.28 + m * m * 0.008) * this.diff * ph * (1 + em * 0.2),
+      hp: (1 + m * 0.28 + m * m * 0.008) * this.diff * ph * (1 + em * 0.2) * this.mut.hp,
       dmg: (1 + m * 0.1) * this.diff * (1 + this.phase * 0.06) * (1 + em * 0.12),
-      speed: 1 + Math.min(this.endlessMode ? 0.55 : 0.3, m * 0.022 + em * 0.018),
+      speed: (1 + Math.min(this.endlessMode ? 0.55 : 0.3, m * 0.022 + em * 0.018)) * this.mut.speed,
     };
   }
 
@@ -276,7 +278,7 @@ export class EnemyManager {
   _maybeElite(e) {
     if (!e || e.def.boss || e.type === 'zombling') return e;
     if (this.elapsed < 90 && this.phase < 1) return e;
-    if (this._rnd() > 0.05) return e;
+    if (this._rnd() > 0.05 * this.mut.elite) return e;
     const a = ELITE_KEYS[Math.floor(this._rnd() * ELITE_KEYS.length)];
     e.elite = a;
     e.maxHp = Math.round(e.maxHp * 3);
@@ -370,7 +372,7 @@ export class EnemyManager {
       const cap = this.maxAlive || HARD_CAP;
       // Endlos: Population wächst kontinuierlich (Deckel ~2.3×), ohne die Boss-Drosselung (spawnScale) zu überschreiben
       const endlessPop = this.endlessMode ? Math.min(3.0, 1 + (this.endlessT / 60) * 0.22) : 1;
-      const target = Math.min(cap, Math.round((24 + this.phase * 9) * this.diff * this.spawnScale * this.coopScale * (0.7 + 0.3 * players.length) * endlessPop));
+      const target = Math.min(cap, Math.round((24 + this.phase * 9) * this.diff * this.spawnScale * this.coopScale * (0.7 + 0.3 * players.length) * endlessPop * this.mut.pop));
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
         this.spawnTimer = 0.55;

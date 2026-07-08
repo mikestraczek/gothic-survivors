@@ -1774,6 +1774,44 @@ button.secondary {
   cursor: not-allowed;
   filter: grayscale(0.8);
 }
+/* Modus-Auswahl & Versus-Ergebnis */
+.mode-desc {
+  min-height: 32px;
+  max-width: 480px;
+  margin: 4px auto 8px;
+  color: var(--gold, #ffd24a);
+  font-size: 13px;
+  line-height: 1.4;
+  opacity: 0.92;
+}
+.sel-btn.mut.active {
+  box-shadow: 0 0 0 2px var(--gold, #ffd24a) inset;
+}
+.versus-title {
+  letter-spacing: 2px;
+}
+.versus-title.win {
+  color: #ffd24a;
+  text-shadow: 0 0 18px rgba(255, 210, 74, 0.6);
+}
+.versus-title.lose {
+  color: #ff6a5a;
+  text-shadow: 0 0 18px rgba(255, 90, 60, 0.5);
+}
+.versus-title.draw {
+  color: #cfd2dd;
+}
+#versus-stats {
+  margin: 10px auto 4px;
+}
+#versus-stats .vs-you {
+  font-size: 16px;
+  color: #ffe9a0;
+}
+#versus-stats .vs-foe {
+  font-size: 15px;
+  opacity: 0.85;
+}
 .ach-inner {
   max-width: 560px;
 }

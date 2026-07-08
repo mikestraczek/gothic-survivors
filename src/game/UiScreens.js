@@ -4,6 +4,7 @@ import { saveSettings } from './Settings.js';
 import { HEROES, HERO_KEYS } from './Heroes.js';
 import { Net } from '../net/Net.js';
 import { DIFFS } from './constants.js';
+import { MODES, modesFor, MUTATOR_LIST } from './Modes.js';
 
 // Menü-/Screen-Logik: Hauptmenü, Name, Optionen, Pause, Bestenliste, Kombinationen,
 // Karten-/Helden-Auswahl, Shop-Navigation. Funktionen nehmen die Game-Instanz `g`.
@@ -80,6 +81,8 @@ export function _wireUI(g) {
   document.getElementById('win-replay').addEventListener('click', () => { document.getElementById('win-screen').classList.add('hidden'); g.startRun(g.mapKey, g.difficulty); });
   document.getElementById('win-endless').addEventListener('click', () => g._startEndless());
   document.getElementById('death-menu').addEventListener('click', () => { document.getElementById('death-screen').classList.add('hidden'); g._quitToMenu(); });
+  const vsMenu = document.getElementById('versus-menu');
+  if (vsMenu) vsMenu.addEventListener('click', () => { document.getElementById('versus-screen').classList.add('hidden'); g._quitToMenu(); });
   document.getElementById('pause-resume').addEventListener('click', () => g._resumeFromPause());
   document.getElementById('pause-save').addEventListener('click', () => g._saveAndQuit());
   document.getElementById('pause-menu').addEventListener('click', () => g._quitToMenu());
@@ -398,7 +401,7 @@ export function _openPause(g) {
   if (g.role === 'host' || g._broadcasting) g.net.send({ k: 'pause', on: true });
   if (g.role === 'client') g.net.send({ k: 'gpause', on: true }); // Host mit-pausieren
   const isClient = g.role === 'client';
-  document.getElementById('pause-save').classList.toggle('hidden', isClient);
+  document.getElementById('pause-save').classList.toggle('hidden', isClient || g._noSave); // Boss-Rausch/Eisern/Versus: kein Speichern
   document.getElementById('pause-menu').classList.toggle('hidden', isClient);
   document.getElementById('pause-leave').classList.toggle('hidden', !isClient);
   document.getElementById('pause-screen').classList.remove('hidden');
@@ -491,9 +494,57 @@ export function _renderHeroSelector(g, elId, descId, rerender) {
     rerender();
   }));
 }
+// Modus-Auswahl (ctx 'solo' -> Karten-Screen · 'lobby' -> Online-Warteraum)
+export function _renderModeSelector(g, elId, descId, ctx, onChange) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const sel = ctx === 'lobby' ? '_selLobbyMode' : '_selMode';
+  const list = modesFor(ctx);
+  if (!list.find((m) => m.key === g[sel])) g[sel] = list[0].key;
+  el.innerHTML = list.map((m) =>
+    `<button class="sel-btn ${m.key === g[sel] ? 'active' : ''}" data-mode="${m.key}" title="${g._esc(m.tag)}">${m.icon} ${g._esc(m.name)}</button>`
+  ).join('');
+  const desc = document.getElementById(descId);
+  const cur = MODES[g[sel]];
+  if (desc && cur) desc.innerHTML = `<b>${g._esc(cur.tag)}</b> — ${g._esc(cur.desc)}`;
+  el.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => {
+    g[sel] = b.getAttribute('data-mode');
+    g.audio.ui();
+    if (onChange) onChange();
+  }));
+}
+// Mutatoren-Mehrfachauswahl (nur im „Wahnsinn"-Modus sichtbar)
+export function _renderMutatorSelector(g, elId) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if (!g._selMuts) g._selMuts = new Set();
+  el.innerHTML = MUTATOR_LIST.map((m) =>
+    `<button class="sel-btn mut ${g._selMuts.has(m.key) ? 'active' : ''}" data-mut="${m.key}" title="${g._esc(m.desc)}">${m.icon} ${g._esc(m.name)}</button>`
+  ).join('');
+  el.querySelectorAll('[data-mut]').forEach((b) => b.addEventListener('click', () => {
+    const k = b.getAttribute('data-mut');
+    if (g._selMuts.has(k)) g._selMuts.delete(k); else g._selMuts.add(k);
+    b.classList.toggle('active');
+    g.audio.ui();
+  }));
+}
+// Karten-/Held-Auswahl je nach Modus ein-/ausblenden (Tages-Challenge = fest, Wahnsinn = Mutatoren)
+function _applyModeVisibility(g) {
+  const cfg = MODES[g._selMode] || MODES.campaign;
+  const mut = document.getElementById('map-mut-sec');
+  const map = document.getElementById('map-map-sec');
+  const hero = document.getElementById('map-hero-sec');
+  if (mut) mut.classList.toggle('hidden', !cfg.mutators);
+  if (map) map.classList.toggle('hidden', !!cfg.daily);
+  if (hero) hero.classList.toggle('hidden', !!cfg.daily);
+}
 export function _openMapSelect(g) {
   document.getElementById('start-screen').classList.add('hidden');
+  const rerender = () => { g._renderModeSelector('map-modes', 'map-mode-desc', 'solo', rerender); _applyModeVisibility(g); };
+  g._renderModeSelector('map-modes', 'map-mode-desc', 'solo', rerender);
+  g._renderMutatorSelector('map-muts');
   g._renderSelectors('map-maps', 'map-diffs', 'map-heroes', 'map-hero-desc');
+  _applyModeVisibility(g);
   document.getElementById('map-screen').classList.remove('hidden');
 }
 export function openShop(g, from) {

@@ -48,8 +48,8 @@
           <h1 class="game-title">GOTHIC</h1>
           <p class="game-subtitle">Survivors — Im Bann der Barriere</p>
           <p class="name-prompt">Wer bist du, Verbannter?</p>
-          <input id="player-name" maxlength="16" placeholder="Dein Name" autocomplete="username" spellcheck="false" />
-          <input id="player-pass" type="password" maxlength="64" placeholder="Passwort" autocomplete="current-password" />
+          <input id="player-name" maxlength="16" placeholder="Dein Name" autocomplete="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" />
+          <input id="player-pass" type="password" maxlength="64" placeholder="Passwort" autocomplete="new-password" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" />
           <div id="auth-error" class="auth-error hidden"></div>
           <div class="menu-buttons">
             <button id="name-confirm" disabled>Anmelden</button>
@@ -99,18 +99,28 @@
         </div>
       </div>
 
-      <!-- Map- & Schwierigkeitswahl (Solo) -->
+      <!-- Modus-, Map- & Schwierigkeitswahl (Solo) -->
       <div id="map-screen" class="overlay hidden">
         <div class="start-inner">
-          <h1 class="game-title" style="font-size: 48px">LEVEL WÄHLEN</h1>
-          <div class="sel-label">Held</div>
-          <div id="map-heroes" class="sel-row"></div>
-          <p id="map-hero-desc" class="hero-desc"></p>
-          <div class="sel-label">Karte</div>
-          <div id="map-maps" class="sel-row"></div>
+          <h1 class="game-title" style="font-size: 48px">SPIEL WÄHLEN</h1>
+          <div class="sel-label">Modus</div>
+          <div id="map-modes" class="sel-row"></div>
+          <p id="map-mode-desc" class="mode-desc"></p>
+          <div id="map-mut-sec" class="hidden">
+            <div class="sel-label">Modifikatoren</div>
+            <div id="map-muts" class="sel-row"></div>
+          </div>
+          <div id="map-hero-sec">
+            <div class="sel-label">Held</div>
+            <div id="map-heroes" class="sel-row"></div>
+            <p id="map-hero-desc" class="hero-desc"></p>
+          </div>
+          <div id="map-map-sec">
+            <div class="sel-label">Karte</div>
+            <div id="map-maps" class="sel-row"></div>
+          </div>
           <div class="sel-label">Schwierigkeit</div>
           <div id="map-diffs" class="sel-row"></div>
-          <p class="game-edition" style="margin-top:18px">Überlebe 3 Phasen, dann besiege den finalen Boss.</p>
           <div class="menu-buttons">
             <button id="map-start">Starten</button>
             <button id="map-back" class="secondary">Zurück</button>
@@ -159,6 +169,9 @@
             </div>
 
             <div id="lobby-host-opts">
+              <div class="sel-label">Modus</div>
+              <div id="lobby-modes" class="sel-row"></div>
+              <p id="lobby-mode-desc" class="mode-desc"></p>
               <div class="sel-label">Karte</div>
               <div id="lobby-maps" class="sel-row"></div>
               <div class="sel-label">Schwierigkeit</div>
@@ -349,6 +362,17 @@
             <button id="retry-button">Neuer Run</button>
             <button id="death-shop-button" class="secondary">Halle der Erzbarone</button>
             <button id="death-menu" class="secondary">Hauptmenü</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Versus-Duell-Ergebnis -->
+      <div id="versus-screen" class="overlay hidden">
+        <div class="death-inner">
+          <h1 id="versus-title" class="versus-title">DUELL BEENDET</h1>
+          <div id="versus-stats"></div>
+          <div class="menu-buttons">
+            <button id="versus-menu">Hauptmenü</button>
           </div>
         </div>
       </div>

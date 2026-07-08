@@ -1,6 +1,9 @@
 import { WEAPON_DEFS } from './Weapons.js';
 import { HEROES, applyHero } from './Heroes.js';
 import { DIFFS, PHASES, KILLS_PER_PHASE, MINI_BOSSES, INTRO_DUR } from './constants.js';
+import { MODES, MUTATORS, dailyConfig } from './Modes.js';
+
+const BOSS_RUSH_WAVES = 8; // Boss-Rausch: so viele Bosse in Folge
 
 // Run-Lebenszyklus: Start/Reset/Speichern/Fortsetzen, Phasen-/Boss-Flow, Endlos-Modus,
 // Level-Up-Flow (lokal + Gast), Verschmelzungen, Run-Ende (Sieg/Tod) + Score/Meta.
@@ -12,6 +15,7 @@ export function _makeOnKill(g, p) {
     p.kills++;
     g._phaseKills++;
     g.audio.kill();
+    if (g._sabotage && !e.def.boss) _sabotageOnKill(g, p);
     p.gold += (e.def.gold || 0) * Math.min(e.xpMult || 1, 2) * (p.goldMult || 1) * 0.25; // Erz ist RAR (Elite-Mult gedeckelt)
     g.fx.sparksBurst(e.x, e.y + 0.6, e.z, e.def.boss ? 0xff5a3a : 0xc89060, e.def.boss ? 26 : 7, e.def.boss ? 9 : 5);
     if (e.def.boss) {
@@ -43,6 +47,22 @@ export function _makeOnKill(g, p) {
 }
 export function _onKillFor(g, p) {
   return p === g.remotePlayer ? g._onKillP2 : g._onKillP1;
+}
+// Horden-Duell: jeder Kill lädt den eigenen Meter; voll -> Elite-Jäger beim Gegner spawnen
+function _sabotageOnKill(g, p) {
+  const isHost = p === g.player;
+  const meter = isHost ? '_hordeSelf' : '_hordeFoe';
+  g[meter] = (g[meter] || 0) + 1;
+  const NEED = 28;
+  if (g[meter] < NEED) return;
+  g[meter] = 0;
+  const foe = isHost ? g.remotePlayer : g.player;
+  if (!foe || foe.dead) return;
+  const a = Math.random() * Math.PI * 2;
+  const type = MINI_BOSSES[Math.floor(Math.random() * MINI_BOSSES.length)];
+  g.enemies.spawnBoss(type, foe.position.x + Math.cos(a) * 16, foe.position.z + Math.sin(a) * 16, 0.6 * g.enemies.diff, 0.85, null);
+  g._toastFor(p, '😈 Elite-Jäger zum Gegner geschickt!', 'blood', 'boss');
+  g._toastFor(foe, '⚠ Ein Elite-Jäger ist hinter dir her!', 'blood', 'boss');
 }
 // Musik-Theme des aktuellen Levels
 export function _musicTheme(g) {
@@ -76,6 +96,7 @@ export function _recordMeta(g, win) {
 export function _installUnloadScore(g) {
   window.addEventListener('pagehide', () => {
     if (g._specOnly) return;
+    if (g._versus) return; // Versus-Duelle werten nicht in die Bestenliste
     if (!(g.mode === 'play' || g.mode === 'paused' || g.mode === 'levelup')) return;
     if (g.runElapsed < 20) return;
     const entry = {
@@ -86,6 +107,7 @@ export function _installUnloadScore(g) {
       gold: Math.floor(g.player.gold),
       map: g.mapKey,
       coop: !!g.role,
+      mode: (g._modeKey && g._modeKey !== 'campaign') ? g._modeKey : undefined,
       win: false,
       rt: g._runToken || undefined,
       sid: (() => { try { return localStorage.getItem('gothicSession') || undefined; } catch (e) { return undefined; } })(),
@@ -100,6 +122,7 @@ export function _installUnloadScore(g) {
 // Ergebnis eines Runs speichern: lokal (Cache) + an den Server (Postgres, best effort)
 export function _recordScore(g, win) {
   if (g._specOnly) return; // Zuschauer werten nichts
+  if (g._versus) return; // Versus-Duelle landen nicht in der (kooperativen) Bestenliste
   const coop = !!g.role;
   const entry = {
     name: g._playerName(),
@@ -110,6 +133,7 @@ export function _recordScore(g, win) {
     map: g.mapKey,
     coop,
     win: !!win,
+    mode: (g._modeKey && g._modeKey !== 'campaign') ? g._modeKey : undefined,
     rt: g._runToken || undefined,
     sid: (() => { try { return localStorage.getItem('gothicSession') || undefined; } catch (e) { return undefined; } })(),
     mate: (coop && g.role === 'host' && g._remoteName) ? g._remoteName : undefined,
@@ -135,6 +159,7 @@ export function _hasSave(g) {
   try { return !!localStorage.getItem('gothicSurvivorsRun'); } catch { return false; }
 }
 export function _saveRun(g) {
+  if (g._noSave) return; // Boss-Rausch/Eisern/Tages-Challenge/Versus: kein Fortsetzen
   try {
     const data = {
       v: 2, player: g.player.serialize(), weapons: g.weapons.serialize(),
@@ -234,6 +259,8 @@ export function _applyLevel(g, mapKey, diff) {
 }
 export function _startEndless(g) {
   document.getElementById('win-screen').classList.add('hidden');
+  g._modeKey = 'endless';
+  g._modeCfg = MODES.endless;
   g.endless = true;
   g.levelWon = false;
   g.bossPhase = false;
@@ -263,7 +290,168 @@ export function _startEndless(g) {
   // KEIN _playIntro(): der Kamera-Zoom aufs Gesicht gehört nur an den Run-ANFANG
   if (g.role === 'host') g.net.send({ k: 'endless' });
 }
+// ==================================================================== Spielmodi
+// Richtet den laufenden Run gemäß gewähltem Modus ein. Wird NACH _resetCommon (Solo)
+// bzw. im _hostStart (Koop) aufgerufen — der Gast setzt nur Flags (Sim läuft beim Host).
+export function _applyMode(g, key) {
+  const cfg = MODES[key] || MODES.campaign;
+  g._modeKey = cfg.key;
+  g._modeCfg = cfg;
+  g._versus = (cfg.versus && g.role) ? cfg.versus : null; // Versus nur im Koop
+  g._noRevive = !!cfg.noRevive;
+  g._noSave = !!cfg.noSave || !!cfg.versus;
+  g._shrink = !!cfg.shrink;
+  g._sabotage = !!(cfg.sabotage && g.role);
+  g._timeLimit = cfg.versus ? (cfg.timeLimit || 0) : 0;
+  g._versusTimer = g._timeLimit;
+  g._versusEnded = false;
+  g._bossRush = !!cfg.bossRush;
+  g._bossRushWave = 0;
+  g._bossRushBoss = null;
+  g._stormR = null;
+  g._stormPulse = 0;
+  g._hordeSelf = 0;
+  g._hordeFoe = 0;
+  g._activeMuts = [];
+
+  if (g.role === 'client') return; // Gast rendert nur; alle Werte kommen per Snapshot
+
+  if (cfg.enemyMult) g.enemies.diff *= cfg.enemyMult;
+
+  // Mutatoren: Wahnsinn = selbst gewählt · Tages-Challenge = die des Tages
+  let muts = [];
+  if (cfg.mutators) muts = [...(g._selMuts || [])];
+  else if (cfg.daily && g._dailyCfg) muts = g._dailyCfg.muts || [];
+  _applyMutators(g, muts);
+  g._activeMuts = muts;
+  g._lastHp = g.player.hp; // maxHp kann durch Glaskanone gesunken sein
+
+  if (cfg.endless) {
+    g.endless = true;
+    g.enemies.spawnEnabled = true;
+    g.enemies.spawnScale = 1;
+    g.enemies.endlessMode = true;
+    g.enemies.endlessT = 0;
+    g.enemies.autoBoss = true;
+    g.enemies.bossTimer = 55;
+    g.enemies.bossInterval = 70;
+    g._endlessTime = 0;
+    g._endlessRamp = 0;
+  }
+  if (cfg.bossRush) {
+    g.endless = false;
+    g.enemies.endlessMode = false;
+    g.enemies.autoBoss = false;
+    g.enemies.spawnEnabled = true;
+    g.enemies.spawnScale = 0.5; // wenige Adds, Fokus auf die Bosse
+    _bossRushSpawn(g);
+  }
+}
+export function _applyMutators(g, list) {
+  for (const k of list || []) { const m = MUTATORS[k]; if (m) m.apply(g); }
+}
+// --- Boss-Rausch: eine Kette immer stärkerer Bosse ---
+function _bossRushSpawn(g) {
+  const c = g.player.position;
+  const w = g._bossRushWave;
+  const type = MINI_BOSSES[w % MINI_BOSSES.length];
+  const hpMult = (1.4 + w * 0.75) * g.enemies.diff;
+  g._bossRushBoss = g.enemies.spawnBoss(type, c.x, c.z, hpMult, 1.0 + w * 0.04, `BOSS ${w + 1}/${BOSS_RUSH_WAVES}`);
+}
+function _bossRushTick(g, dt) {
+  if (g._bossRushBoss && !g._bossRushBoss.alive) {
+    g._bossRushWave++;
+    g._bossRushBoss = null;
+    if (g._bossRushWave >= BOSS_RUSH_WAVES) { g._winLevel(); return; }
+    const c = g.player.position;
+    g.pickups.spawnAt('heal', c.x + 2, c.z); // kurze Verschnaufpause
+    g.hud.toast(`Boss ${g._bossRushWave} gefallen — der nächste naht!`, 'gold');
+    _bossRushSpawn(g);
+  }
+}
+// --- Sturm: die Barriere zieht sich zu (Letzter Überlebender) ---
+function _updateStorm(g, dt) {
+  if (g.world.theme && g.world.theme.bounds === 'corridor') return; // nur in radialen Arenen
+  const START = 118, MIN = 24, RATE = 2.0;
+  if (g._stormR == null) g._stormR = START;
+  g._stormR = Math.max(MIN, g._stormR - dt * RATE);
+  const dps = 12 + g.runElapsed * 0.15; // Schaden außerhalb wächst mit der Zeit
+  for (const p of g._players()) {
+    if (p.dead) continue;
+    const r = Math.hypot(p.position.x, p.position.z);
+    p._inStorm = r > g._stormR;
+    if (p._inStorm) p.takeDamage(dps * dt, 'storm');
+  }
+  if (g.player._inStorm) {
+    g._stormWarnT = (g._stormWarnT || 0) - dt;
+    if (g._stormWarnT <= 0) { g._stormWarnT = 2.2; g.hud.toast('⚠ Raus aus der violetten Zone!', 'blood'); }
+  }
+  // sichtbarer, schrumpfender Ring — wird über die fx-Aufnahme auch beim Gast abgespielt
+  g._stormPulse = (g._stormPulse || 0) - dt;
+  if (g._stormPulse <= 0) { g._stormPulse = 0.6; g.fx.ring(0, 0, g._stormR, 0x9a4aff); }
+}
+// --- Versus: Zeitlimit + Sieg-/Niederlage-Auflösung ---
+function _versusTick(g, dt) {
+  if (!g._versus || g._versusEnded) return;
+  if (g._timeLimit) {
+    g._versusTimer -= dt;
+    if (g._versusTimer <= 0) { g._versusTimer = 0; _resolveVersus(g, 'time'); return; }
+  }
+  const meDead = g.player.dead, foeDead = g.remotePlayer.dead;
+  if (g._modeCfg.versus === 'lastStand') {
+    if (meDead || foeDead) _resolveVersus(g, 'death');
+  } else if (meDead && foeDead) {
+    _resolveVersus(g, 'death');
+  }
+}
+function _versusScore(p) { return p.kills || 0; }
+function _resolveVersus(g, reason) {
+  g._versusEnded = true;
+  const host = g.player, guest = g.remotePlayer;
+  const hs = _versusScore(host), gs = _versusScore(guest);
+  let win;
+  if (g._modeCfg.versus === 'lastStand' && reason === 'death') {
+    if (host.dead && !guest.dead) win = 'guest';
+    else if (!host.dead && guest.dead) win = 'host';
+    else win = hs === gs ? 'draw' : (hs > gs ? 'host' : 'guest');
+  } else {
+    win = hs === gs ? 'draw' : (hs > gs ? 'host' : 'guest');
+  }
+  g.mode = 'won';
+  g.input.enabled = false;
+  g.audio.setMusic('menu');
+  g.hud.setSpectate(null);
+  g.hud.setBossBar(null);
+  g._recordMeta(win === 'host'); // Kills/Erz werten, aber KEIN Bestenlisten-Team-Eintrag
+  g.meta.addGold(Math.floor(host.gold));
+  g.net.send({ k: 'vend', win, hs, gs, hk: host.kills, gk: guest.kills, hl: host.level, gl: guest.level });
+  g._showVersusResult({ youAre: 'host', win, hk: host.kills, gk: guest.kills, hl: host.level, gl: guest.level });
+}
+// Duell-Ergebnis anzeigen (Host wie Gast — youAre entscheidet die Perspektive)
+export function _showVersusResult(g, d) {
+  const youWon = d.win === (d.youAre === 'host' ? 'host' : 'guest');
+  const draw = d.win === 'draw';
+  const youKills = d.youAre === 'host' ? d.hk : d.gk;
+  const foeKills = d.youAre === 'host' ? d.gk : d.hk;
+  const youLevel = d.youAre === 'host' ? d.hl : d.gl;
+  const foeLevel = d.youAre === 'host' ? d.gl : d.hl;
+  const titleEl = document.getElementById('versus-title');
+  if (titleEl) {
+    titleEl.textContent = draw ? 'UNENTSCHIEDEN' : (youWon ? '🏆 SIEG!' : '☠ NIEDERLAGE');
+    titleEl.className = 'versus-title ' + (draw ? 'draw' : youWon ? 'win' : 'lose');
+  }
+  const stats = document.getElementById('versus-stats');
+  if (stats) stats.innerHTML = `
+    <div class="vs-you">Du — <b>${youKills}</b> Kills · Stufe ${youLevel}</div>
+    <div class="vs-foe">Gegner — <b>${foeKills}</b> Kills · Stufe ${foeLevel}</div>
+    <div class="death-gold">⛏ Gesamt-Erz: ${g.meta.gold}</div>`;
+  document.getElementById('versus-screen').classList.remove('hidden');
+}
 export function _phaseTick(g, dt) {
+  if (g._versus) _versusTick(g, dt);
+  if (g._shrink) _updateStorm(g, dt);
+  if (g.mode !== 'play') return; // Versus-Ende hat den Lauf eingefroren
+  if (g._bossRush) { _bossRushTick(g, dt); return; }
   if (g.endless) {
     g._endlessRamp = (g._endlessRamp || 0) + dt;
     g._endlessTime = (g._endlessTime || 0) + dt;
@@ -346,6 +534,13 @@ export function _warnSafeZones(g) {
   g.audio.boss();
 }
 export function _phaseText(g) {
+  if (g._bossRush) return `👑 Boss ${Math.min(g._bossRushWave + 1, BOSS_RUSH_WAVES)}/${BOSS_RUSH_WAVES}`;
+  if (g._versus) {
+    let s = '';
+    if (g._timeLimit) { const t = Math.max(0, Math.ceil(g._versusTimer)); s = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')} · `; }
+    return `${g._modeCfg.icon} ${s}Du ${g.player.kills} – ${g.remotePlayer.kills} Gegner`;
+  }
+  if (g._shrink) return `🩸 Sichere Zone ${Math.round(g._stormR || 0)}m`;
   if (g.endless) return 'ENDLOS';
   if (g.phaseStage === 'final') return 'ENDBOSS';
   const ph = `Phase ${Math.min(g.phaseIndex + 1, PHASES)}/${PHASES}`;
@@ -375,7 +570,8 @@ export function _winLevel(g) {
     <div class="death-gold">⛏ ${earned} Erz verdient &nbsp;·&nbsp; Gesamt: ${g.meta.gold}</div>
     <div class="dmg-breakdown">${g._dmgRowsHtml(g.weapons._dealt)}</div>`;
   document.getElementById('win-replay').classList.toggle('hidden', !!g.role); // Nochmal nur Solo
-  document.getElementById('win-endless').classList.remove('hidden'); // Endlos: Solo + Host
+  // Endlos-Weiterspielen nur nach einem gewonnenen Solo-KAMPAGNEN-Lauf anbieten
+  document.getElementById('win-endless').classList.toggle('hidden', !!g.role || g._modeKey !== 'campaign');
   document.getElementById('win-screen').classList.remove('hidden');
   if (g.role === 'host') g.net.send({ k: 'won', t: g.runElapsed, host: { lv: g.player.level, ki: g.player.kills }, guest: { lv: g.remotePlayer.level, ki: g.remotePlayer.kills }, dmg: g.weapons2._dealt });
 }
@@ -450,9 +646,15 @@ export function _resetCommon(g) {
   g.hud.setDps([]);
   g.hud.setSpectate(null);
 }
-export function startRun(g, mapKey = g._selMap, diff = g._selDiff) {
+export function startRun(g, mapKey = g._selMap, diff = g._selDiff, modeKey = g._selMode || 'campaign') {
   g.role = null;
   if (g.remotePlayer) g.remotePlayer.group.visible = false;
+  // Tages-Challenge: Karte/Held/Mutatoren des Tages erzwingen (für alle Spieler gleich)
+  g._dailyCfg = null;
+  if (MODES[modeKey] && MODES[modeKey].daily) {
+    g._dailyCfg = dailyConfig();
+    mapKey = g._dailyCfg.map;
+  }
   document.getElementById('start-screen').classList.add('hidden');
   document.getElementById('death-screen').classList.add('hidden');
   document.getElementById('win-screen').classList.add('hidden');
@@ -460,16 +662,18 @@ export function startRun(g, mapKey = g._selMap, diff = g._selDiff) {
   g._applyLevel(mapKey, diff);
   g.player.beginRun();
   g.meta.applyToPlayer(g.player);
-  g.heroKey = g._selHero;
+  g.heroKey = g._dailyCfg ? g._dailyCfg.hero : g._selHero;
   applyHero(g.player, g.heroKey);
   g._syncHeroSprites();
   g.player.lockedWeapons = g.meta.lockedWeaponSet();
   g._resetCommon();
+  g._applyMode(modeKey); // Modus einrichten (nach enemies.reset in _resetCommon)
   g._onKillP1 = g._makeOnKill(g.player);
   g._lastHp = g.player.hp;
   g.camCtrl.snap(g.player.position);
   g.hud.show();
-  g.hud.toast(`${g.world.theme.name} · ${DIFFS[diff].name} — Phase 1/${PHASES}`, 'gold');
+  const mc = g._modeCfg;
+  g.hud.toast(`${mc.icon} ${mc.name} · ${g.world.theme.name} · ${DIFFS[diff].name}`, 'gold');
   g.input.enabled = true;
   g.mode = 'play';
   g._specOnly = false;

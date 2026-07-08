@@ -19,8 +19,10 @@ export class Input {
       const k = e.code;
       if (!this.keys.has(k)) this.justPressed.add(k);
       this.keys.add(k);
-      // Standard-Browser-Aktionen für Spieltasten unterdrücken
-      if (['Space', 'Tab'].includes(k)) e.preventDefault();
+      // Standard-Browser-Aktionen für Spieltasten unterdrücken — aber NICHT in
+      // Textfeldern (sonst kann man weder tabben noch Leerzeichen tippen)
+      const inField = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
+      if (!inField && ['Space', 'Tab'].includes(k)) e.preventDefault();
     };
     this._onKeyUp = (e) => this.keys.delete(e.code);
 

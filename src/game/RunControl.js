@@ -86,6 +86,7 @@ export function _installUnloadScore(g) {
       map: g.mapKey,
       coop: !!g.role,
       win: false,
+      rt: g._runToken || undefined,
       ts: Date.now(),
     };
     try {
@@ -107,6 +108,7 @@ export function _recordScore(g, win) {
     map: g.mapKey,
     coop,
     win: !!win,
+    rt: g._runToken || undefined,
     ts: Date.now(),
   };
   // Koop: der Host meldet EINEN Team-Eintrag (beide Spieler zusammengezählt)
@@ -471,6 +473,16 @@ export function startRun(g, mapKey = g._selMap, diff = g._selDiff) {
   g.audio.setMusic(g._musicTheme());
   g._playIntro();
   g._startSoloBroadcast(); // Run im Lobby-Browser beobachtbar machen (best effort)
+  g._fetchRunToken(); // Server-Zeitstempel für die Bestenliste (best effort, mit Retry)
+}
+// Run-Token: der Server merkt sich den Run-Start — Submits ohne Token werden verworfen
+export function _fetchRunToken(g) {
+  g._runToken = null;
+  const attempt = () => fetch('/api/run-start', { method: 'POST' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => { if (d && d.token) g._runToken = d.token; })
+    .catch(() => {});
+  attempt();
 }
 export function _collectXp(g, value, who) {
   g.audio.gem();

@@ -3,6 +3,15 @@
 // in Spieler-Sprache (was merke ich im Spiel?), nicht in Entwickler-Sprache.
 export const CHANGELOG = [
   {
+    date: '2026-07-08',
+    title: 'Frischer Start & faire Bestenliste',
+    items: [
+      '🔄 RESET: Bestenliste und Schmiede-Fortschritt wurden erneut für alle zurückgesetzt — diesmal mit Schummel-Schutz',
+      '🛡 Die Bestenliste ist jetzt gegen Manipulation geschützt: Die Run-Zeit wird vom Server gemessen und kann nicht mehr erfunden werden — echte Runs werden dabei NIE abgelehnt',
+      '🔧 Debug-Zugänge (Konsolen-Zugriff, Freischalt-Parameter) funktionieren nur noch in der lokalen Entwicklung',
+    ],
+  },
+  {
     date: '2026-07-07',
     title: 'Endlos mit Biss & wichtige Fixes',
     items: [

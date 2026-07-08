@@ -44,7 +44,8 @@ export class Meta {
     this.toast = toast;
     this.data = this._load();
     // Dev-Test: ?unlock in der URL schaltet Helden/Waffen/Karten frei (z. B. localhost:5173/?unlock)
-    this.devUnlock = typeof location !== 'undefined' && /[?&]unlock/.test(location.search);
+    // ?unlock nur lokal (Tests/Dev) — in Produktion kein Freischalt-Cheat
+    this.devUnlock = typeof location !== 'undefined' && /[?&]unlock/.test(location.search) && ['localhost', '127.0.0.1'].includes(location.hostname);
   }
 
   _load() {

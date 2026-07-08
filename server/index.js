@@ -38,8 +38,11 @@ if (process.env.DATABASE_URL) {
       )`)
       .then(async () => {
         // Einmaliger Wipe (07.07.2026): kompletter Spiel-Reset — alte Scores raus
-        const WIPE_TAG = '2026-07-07';
+        const WIPE_TAG = '2026-07-08'; // Reset #2 (Anti-Cheat-Neustart)
         await pool.query('CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)');
+        // Run-Tokens: Server-Startzeit je Run — macht die Bestenlisten-ZEIT fälschungssicher
+        await pool.query('CREATE TABLE IF NOT EXISTS run_tokens (token TEXT PRIMARY KEY, started_at TIMESTAMPTZ DEFAULT now())');
+        await pool.query(`DELETE FROM run_tokens WHERE started_at < now() - interval '24 hours'`);
         const { rows } = await pool.query(`SELECT value FROM kv WHERE key = 'wipe'`);
         if (!rows.length || rows[0].value !== WIPE_TAG) {
           await pool.query('DELETE FROM scores');
@@ -92,6 +95,44 @@ app.get('/api/scores', async (req, res) => {
   }
 });
 
+// Run-Tokens: der Client meldet den Run-START; beim Submit rechnet der SERVER die
+// verstrichene Zeit aus. Gemeldete Zeit > Serverzeit ist damit unmöglich — ohne dass
+// je ein legitimer Run abgelehnt wird (Werte werden GEKLEMMT, nicht verworfen).
+import { randomUUID } from 'node:crypto';
+const memTokens = new Map(); // Fallback ohne DB: token -> startedAt (ms)
+setInterval(() => {
+  const cutoff = Date.now() - 24 * 3600 * 1000;
+  for (const [t, at] of memTokens) if (at < cutoff) memTokens.delete(t);
+}, 3600 * 1000).unref();
+
+const runStartLimit = new Map(); // ip -> [timestamps]
+app.post('/api/run-start', async (req, res) => {
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '?';
+  const now = Date.now();
+  const recent = (runStartLimit.get(ip) || []).filter((t) => now - t < 60000);
+  if (recent.length >= 12) return res.status(429).json({ ok: false });
+  recent.push(now);
+  runStartLimit.set(ip, recent);
+  const token = randomUUID();
+  memTokens.set(token, now);
+  if (pool) {
+    try { await pool.query('INSERT INTO run_tokens (token) VALUES ($1)', [token]); } catch (e) { /* memTokens reicht */ }
+  }
+  res.json({ token });
+});
+
+async function tokenAgeSeconds(token) {
+  if (!token || typeof token !== 'string' || token.length > 64) return null;
+  if (memTokens.has(token)) return (Date.now() - memTokens.get(token)) / 1000;
+  if (pool) {
+    try {
+      const { rows } = await pool.query('SELECT EXTRACT(EPOCH FROM (now() - started_at)) AS age FROM run_tokens WHERE token = $1', [token]);
+      if (rows.length) return Number(rows[0].age);
+    } catch (e) { /* fällt unten auf null */ }
+  }
+  return null;
+}
+
 // In-Memory-Rate-Limit: max. 4 Score-Submits pro 10s je IP.
 // WICHTIG: nicht 1/10s — beim Koop-Ende posten Host UND Gast in derselben Sekunde,
 // und hinter gemeinsamem NAT (gleiche Wohnung) teilen sie sich die IP.
@@ -114,11 +155,17 @@ app.post('/api/scores', async (req, res) => {
   const b = req.body || {};
   const num = (v, d = 0) => (Number.isFinite(+v) ? Math.max(0, Math.min(1e9, Math.floor(+v))) : d);
   const name = String(b.name || 'Anonym').slice(0, 24) || 'Anonym';
-  const time = num(b.time);
-  const kills = num(b.kills);
-  const level = num(b.level, 1);
-  // KEINE Plausibilitätsprüfung mehr — jeder Run zählt (Wunsch vom 07.07.2026:
-  // die Schranken haben wiederholt legitime Endlos-Runs verworfen).
+  let time = num(b.time);
+  let kills = num(b.kills);
+  let level = num(b.level, 1);
+  // Anti-Cheat OHNE Ablehnung: der Server kennt die echte Run-Dauer über das Token
+  // und KLEMMT absurde Werte, statt Runs zu verwerfen. Ohne gültiges Token (nur per
+  // Hand-POST möglich — der Client holt es automatisch) wird nicht gespeichert.
+  const age = await tokenAgeSeconds(b.rt);
+  if (age == null) return res.status(400).json({ ok: false, reason: 'token' });
+  time = Math.min(time, Math.round(age) + 90); // Zeit kann nicht schneller vergehen als beim Server
+  kills = Math.min(kills, (time + 60) * 100); // >100 Kills/s klemmen (nur Konsolen-Unsinn)
+  level = Math.min(level, 999);
   recent.push(now);
   lastSubmit.set(ip, recent);
   try {

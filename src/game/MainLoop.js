@@ -238,6 +238,7 @@ export function _updatePlayHost(g, dt) {
   g._autosaveAcc = (g._autosaveAcc || 0) + dt;
   if (g._autosaveAcc > 15) {
     g._autosaveAcc = 0;
+    if (!g._runToken) g._fetchRunToken(); // Token nachholen (z. B. Server war kurz weg)
     if (!g.player.dead) {
       // localStorage schreibt synchron -> in die Idle-Zeit verlegen (verhindert Mikro-Ruckler)
       if (window.requestIdleCallback) requestIdleCallback(() => g._saveRun(), { timeout: 2000 });

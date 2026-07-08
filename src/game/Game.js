@@ -330,6 +330,8 @@ export class Game {
 
   _installUnloadScore() { return RunControl._installUnloadScore(this); }
 
+  _fetchRunToken() { return RunControl._fetchRunToken(this); }
+
   _autoQuality() { return Visuals._autoQuality(this); }
 
   _applyDynScale() { return Visuals._applyDynScale(this); }

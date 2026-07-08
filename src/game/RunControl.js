@@ -71,6 +71,8 @@ export function _musicTheme(g) {
 // Run-Statistiken in die Meta-Progression einrechnen + neue Achievements feiern
 export function _recordMeta(g, win) {
   if (g._specOnly) return; // Zuschauer werten nichts
+  const board = g._pendingBoard || null;
+  g._pendingBoard = null;
   const fresh = g.meta.recordRun({
     time: g.runElapsed,
     kills: g.player.kills,
@@ -81,6 +83,7 @@ export function _recordMeta(g, win) {
     goldEarned: Math.floor(g.player.gold),
     map: g.mapKey,
     rt: g._runToken || null,
+    board,
   });
   let delay = 400;
   for (const a of fresh) {
@@ -99,60 +102,48 @@ export function _installUnloadScore(g) {
     if (g._versus) return; // Versus-Duelle werten nicht in die Bestenliste
     if (!(g.mode === 'play' || g.mode === 'paused' || g.mode === 'levelup')) return;
     if (g.runElapsed < 20) return;
-    const entry = {
-      name: g._playerName(),
-      time: Math.round(g.runElapsed),
-      kills: g.player.kills,
-      level: g.player.level,
-      gold: Math.floor(g.player.gold),
-      map: g.mapKey,
-      coop: !!g.role,
-      mode: (g._modeKey && g._modeKey !== 'campaign') ? g._modeKey : undefined,
-      win: false,
-      rt: g._runToken || undefined,
-      sid: (() => { try { return localStorage.getItem('gothicSession') || undefined; } catch (e) { return undefined; } })(),
-      ts: Date.now(),
+    const coop = !!g.role;
+    if (coop && g.role === 'client') return; // Gast: kein Board-Eintrag beim Schließen
+    let sid;
+    try { sid = localStorage.getItem('gothicSession') || undefined; } catch (e) {}
+    if (!sid || !g._runToken) return; // ohne Konto/Token nichts zu werten
+    let bKills = g.player.kills, bLevel = g.player.level, mate;
+    if (coop && g.role === 'host' && g.remotePlayer) {
+      bKills = g.player.kills + (g.remotePlayer.kills || 0);
+      bLevel = Math.max(g.player.level, g.remotePlayer.level || 1);
+      mate = g._remoteName || 'Mitspieler';
+    }
+    // Tab-Schließen mitten im Run: server-autoritativ werten (sendBeacon, sid im Body)
+    const body = {
+      sid, rt: g._runToken, time: Math.round(g.runElapsed), win: false, map: g.mapKey,
+      kills: g.player.kills, level: g.player.level,
+      bossKills: g._bossKills || 0, evolves: g._evolvesThisRun || 0, goldEarned: Math.floor(g.player.gold),
+      board: 1, boardKills: bKills, boardLevel: bLevel, coop, mate,
     };
     try {
-      navigator.sendBeacon('/api/scores', new Blob([JSON.stringify(entry)], { type: 'application/json' }));
+      navigator.sendBeacon('/api/run-finish', new Blob([JSON.stringify(body)], { type: 'application/json' }));
     } catch (e) { /* ignore */ }
   });
 }
 
 // Ergebnis eines Runs speichern: lokal (Cache) + an den Server (Postgres, best effort)
 export function _recordScore(g, win) {
+  // Vermerkt NUR die Absicht, einen Bestenlisten-Eintrag zu schreiben. Der Eintrag selbst
+  // entsteht server-autoritativ in run-finish (_recordMeta) — kein direkter Score-Upload.
+  g._pendingBoard = null;
   if (g._specOnly) return; // Zuschauer werten nichts
   if (g._versus) return; // Versus-Duelle landen nicht in der (kooperativen) Bestenliste
   const coop = !!g.role;
-  const entry = {
-    name: g._playerName(),
-    time: Math.round(g.runElapsed),
-    kills: g.player.kills,
-    level: g.player.level,
-    gold: Math.floor(g.player.gold),
-    map: g.mapKey,
-    coop,
-    win: !!win,
-    mode: (g._modeKey && g._modeKey !== 'campaign') ? g._modeKey : undefined,
-    rt: g._runToken || undefined,
-    sid: (() => { try { return localStorage.getItem('gothicSession') || undefined; } catch (e) { return undefined; } })(),
-    mate: (coop && g.role === 'host' && g._remoteName) ? g._remoteName : undefined,
-    ts: Date.now(),
-  };
-  // Koop: der Host meldet EINEN Team-Eintrag (beide Spieler zusammengezählt)
+  if (coop && g.role === 'client') return; // Gast schreibt keinen Eintrag (Host meldet das Team)
+  let kills = g.player.kills;
+  let level = g.player.level;
+  let mate;
   if (coop && g.role === 'host' && g.remotePlayer) {
-    // name setzt der SERVER aus dem Konto (+ mate) — hier nur die Summen
-    entry.name = `${g._playerName()} & ${g._remoteName || 'Mitspieler'}`;
-    entry.kills = g.player.kills + (g.remotePlayer.kills || 0);
-    entry.level = Math.max(g.player.level, g.remotePlayer.level || 1);
-    entry.gold = Math.floor(g.player.gold + (g.remotePlayer.gold || 0));
+    kills = g.player.kills + (g.remotePlayer.kills || 0); // Team-Summe
+    level = Math.max(g.player.level, g.remotePlayer.level || 1);
+    mate = g._remoteName || 'Mitspieler';
   }
-  // Bestenliste lebt NUR auf dem Server (keine verwirrende Lokal-Kopie mehr)
-  // Gast postet nicht — der Team-Eintrag des Hosts zählt (verhindert Doppel-Einträge)
-  if (coop && g.role === 'client') return;
-  try {
-    fetch('/api/scores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }).catch(() => {});
-  } catch (e) { /* offline: nur lokal */ }
+  g._pendingBoard = { kills, level, coop, mate };
 }
 // -------------------------------------------------- Speichern / Fortsetzen
 export function _hasSave(g) {
@@ -370,12 +361,14 @@ function _bossRushTick(g, dt) {
   }
 }
 // --- Sturm: die Barriere zieht sich zu (Letzter Überlebender) ---
+const STORM_GRACE = 22; // Sekunden bei voller Zone, bevor sie zu schrumpfen beginnt
+const STORM_START = 120, STORM_MIN = 34, STORM_RATE = 0.62; // Meter/Sek. (bewusst gemächlich)
 function _updateStorm(g, dt) {
-  if (g.world.theme && g.world.theme.bounds === 'corridor') return; // nur in radialen Arenen
-  const START = 118, MIN = 24, RATE = 2.0;
-  if (g._stormR == null) g._stormR = START;
-  g._stormR = Math.max(MIN, g._stormR - dt * RATE);
-  const dps = 12 + g.runElapsed * 0.15; // Schaden außerhalb wächst mit der Zeit
+  if (g.world.theme && g.world.theme.bounds === 'corridor') { g._stormR = null; return; } // nur radiale Arenen
+  if (g._stormR == null) g._stormR = STORM_START;
+  // Schonfrist am Anfang: Zone bleibt weit offen, damit man die Grenze in Ruhe kennenlernt
+  if (g.runElapsed > STORM_GRACE) g._stormR = Math.max(STORM_MIN, g._stormR - dt * STORM_RATE);
+  const dps = 8 + g.runElapsed * 0.06; // Schaden außerhalb wächst nur sanft
   for (const p of g._players()) {
     if (p.dead) continue;
     const r = Math.hypot(p.position.x, p.position.z);
@@ -384,11 +377,9 @@ function _updateStorm(g, dt) {
   }
   if (g.player._inStorm) {
     g._stormWarnT = (g._stormWarnT || 0) - dt;
-    if (g._stormWarnT <= 0) { g._stormWarnT = 2.2; g.hud.toast('⚠ Raus aus der violetten Zone!', 'blood'); }
+    if (g._stormWarnT <= 0) { g._stormWarnT = 2.0; g.hud.toast('⚠ Zurück in die sichere Zone!', 'blood'); }
   }
-  // sichtbarer, schrumpfender Ring — wird über die fx-Aufnahme auch beim Gast abgespielt
-  g._stormPulse = (g._stormPulse || 0) - dt;
-  if (g._stormPulse <= 0) { g._stormPulse = 0.6; g.fx.ring(0, 0, g._stormR, 0x9a4aff); }
+  // Sichtbare Wand rendert MainLoop aus g._stormR (Host wie Gast).
 }
 // --- Versus: Zeitlimit + Sieg-/Niederlage-Auflösung ---
 function _versusTick(g, dt) {

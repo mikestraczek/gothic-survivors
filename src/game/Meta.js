@@ -181,7 +181,7 @@ export class Meta {
     if (changed) this._save();
   }
 
-  recordRun({ time = 0, kills = 0, level = 0, win = false, bossKills = 0, evolves = 0, goldEarned = 0, map = null, rt = null }) {
+  recordRun({ time = 0, kills = 0, level = 0, win = false, bossKills = 0, evolves = 0, goldEarned = 0, map = null, rt = null, board = null }) {
     const s = this.data.stats;
     if (!s.mapWins) s.mapWins = {};
     if (win) {
@@ -207,7 +207,15 @@ export class Meta {
     if (this.online) {
       fetch('/api/run-finish', {
         method: 'POST', headers: this._authHeaders(),
-        body: JSON.stringify({ rt, time, kills, level, win, bossKills, evolves, goldEarned: Math.max(0, Math.round(goldEarned)), map, achievements: fresh.map((a) => a.id) }),
+        body: JSON.stringify({
+          rt, time, kills, level, win, bossKills, evolves, goldEarned: Math.max(0, Math.round(goldEarned)), map,
+          // Bestenlisten-Eintrag entsteht server-seitig; board=1 nur für Solo/Koop-Host
+          board: board ? 1 : 0,
+          boardKills: board ? board.kills : undefined,
+          boardLevel: board ? board.level : undefined,
+          coop: board ? board.coop : undefined,
+          mate: board ? board.mate : undefined,
+        }),
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {

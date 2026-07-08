@@ -13,6 +13,6 @@ import { Game } from './game/Game.js';
 // Game lädt zuerst die Assets und startet danach selbst die Render-Schleife.
 const game = new Game();
 
-// Debug-Zugriff NUR lokal bzw. mit ?debug — in Produktion wäre die Konsole sonst ein Cheat-Menü
-const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
-if (isLocal || /[?&]debug/.test(location.search)) window.__game = game;
+// Debug-Zugriff NUR auf localhost — KEIN ?debug-Schalter (das wäre in Produktion ein
+// Cheat-Menü per URL). window.__game existiert im Live-Spiel gar nicht.
+if (['localhost', '127.0.0.1'].includes(location.hostname)) window.__game = game;

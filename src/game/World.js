@@ -679,6 +679,53 @@ export class World {
     this.barrierRadius = BARRIER_RADIUS;
   }
 
+  // --------------------------------------------------------------- Sturmwand (Modus „Letzter Überlebender")
+  // Eine dauerhaft sichtbare, violette Energiewand am Rand der sicheren Zone. Radius wird
+  // per Skalierung angepasst, damit man IMMER klar erkennt, wo die Grenze verläuft.
+  _buildStormWall() {
+    const H = 90;
+    const geo = new THREE.CylinderGeometry(1, 1, H, 72, 1, true); // Radius 1 -> über scale gesetzt, offen
+    this._stormMat = new THREE.ShaderMaterial({
+      side: THREE.DoubleSide,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: `
+        varying vec2 vUv;
+        void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }
+      `,
+      fragmentShader: `
+        uniform float uTime; varying vec2 vUv;
+        void main(){
+          // unten am dichtesten, nach oben ausdünnend (klare Bodengrenze)
+          float vert = smoothstep(1.0, 0.0, vUv.y);
+          vert = vert * vert; // unten kräftiger
+          // langsam wandernde vertikale Energiebänder (ruhig, nicht stroboskopisch)
+          float bands = 0.5 + 0.5 * sin(vUv.x * 110.0 + uTime * 1.2);
+          bands = smoothstep(0.5, 1.0, bands) * 0.6;
+          float a = (0.6 + bands) * vert;
+          vec3 col = mix(vec3(0.7, 0.2, 1.0), vec3(1.0, 0.55, 1.0), vUv.y * 0.6 + bands);
+          gl_FragColor = vec4(col, a);
+        }
+      `,
+    });
+    this._stormWall = new THREE.Mesh(geo, this._stormMat);
+    this._stormWall.renderOrder = 3;
+    this._stormWall.frustumCulled = false;
+    this.group.add(this._stormWall);
+  }
+  updateStorm(radius) {
+    // group wird beim Themenwechsel neu aufgebaut -> Wand ggf. neu erstellen
+    if (!this._stormWall || this._stormWall.parent !== this.group) this._buildStormWall();
+    const w = this._stormWall;
+    w.visible = true;
+    w.scale.set(Math.max(1, radius), 1, Math.max(1, radius));
+    // Basis leicht unter das Zentrums-Gelände senken, Wand ragt weit nach oben (auch über Hügel)
+    w.position.set(0, this.getHeight(0, 0) + 22, 0);
+  }
+  hideStorm() { if (this._stormWall) this._stormWall.visible = false; }
+
   // --------------------------------------------------------------- Arena (themen-spezifisch)
   _place(mesh, x, z, yOffset = 0) {
     mesh.position.set(x, terrainHeight(x, z) + yOffset, z);
@@ -1524,6 +1571,7 @@ export class World {
   update(dt, elapsed, center = null) {
     this.time = elapsed;
     if (this.barrierMat) this.barrierMat.uniforms.uTime.value = elapsed;
+    if (this._stormMat && this._stormWall && this._stormWall.visible) this._stormMat.uniforms.uTime.value = elapsed;
     this._updateWeather(dt, elapsed, center);
     this._updateTreeFade(dt, center);
     // Boost-Pads pulsieren (Client kennt keine Cooldowns -> reiner Look)

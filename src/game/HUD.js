@@ -326,7 +326,7 @@ export class HUD {
   }
 
   // self {x,z}, allies, enemies, pickups, pings
-  drawMinimap(self, allies, enemies, pickups, pings, bounds) {
+  drawMinimap(self, allies, enemies, pickups, pings, bounds, storm) {
     const c = this.mm, S = 170, R = 75;
     c.clearRect(0, 0, S, S);
     c.fillStyle = 'rgba(8,10,14,0.6)';
@@ -357,6 +357,17 @@ export class HUD {
       }
       c.stroke();
       c.setLineDash([]);
+      c.restore();
+    }
+    // Sichere Zone (Modus „Letzter Überlebender"): durchgezogener violetter Kreis
+    if (storm && bounds && bounds.kind === 'radial') {
+      c.save();
+      c.beginPath(); c.arc(S / 2, S / 2, S / 2 - 3, 0, Math.PI * 2); c.clip();
+      const ks = (S / 2 - 6) / R;
+      const [sx, sy] = to(0, 0);
+      c.strokeStyle = 'rgba(190,100,255,0.95)';
+      c.lineWidth = 2.5;
+      c.beginPath(); c.arc(sx, sy, storm * ks, 0, Math.PI * 2); c.stroke();
       c.restore();
     }
     const dot = (x, z, col, r) => { const [px, py] = to(x, z); if (px < 2 || px > S - 2 || py < 2 || py > S - 2) return; c.fillStyle = col; c.beginPath(); c.arc(px, py, r, 0, Math.PI * 2); c.fill(); };

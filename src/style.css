@@ -1812,6 +1812,49 @@ button.secondary {
   font-size: 15px;
   opacity: 0.85;
 }
+/* „Spiel wählen": viele Optionen -> dichter packen, damit alles auf einen Blick passt */
+#map-screen .start-inner {
+  max-width: 700px;
+}
+#map-screen .game-title {
+  font-size: 34px !important;
+  letter-spacing: 6px;
+  line-height: 1.05;
+  margin-bottom: 2px;
+}
+#map-screen .sel-label {
+  margin-top: 8px;
+  font-size: 11px;
+}
+#map-screen .sel-row {
+  gap: 7px;
+  margin: 5px 0;
+}
+#map-screen .sel-btn {
+  padding: 7px 13px;
+  font-size: 13px;
+  letter-spacing: 0.4px;
+}
+#map-screen .mode-desc {
+  min-height: 0;
+  margin: 4px auto 2px;
+  font-size: 12px;
+  max-width: 580px;
+}
+#map-screen .hero-desc {
+  min-height: 0;
+  margin: 4px auto;
+  font-size: 12px;
+}
+#map-screen .menu-buttons {
+  margin-top: 14px;
+}
+/* Mode-Buttons tragen ein Icon vorn — Icon leicht abheben */
+#map-screen #map-modes .sel-btn,
+#lobby-modes .sel-btn {
+  min-width: 132px;
+  justify-content: center;
+}
 .ach-inner {
   max-width: 560px;
 }

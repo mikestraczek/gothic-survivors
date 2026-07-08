@@ -17,6 +17,9 @@ export const CHANGELOG = [
       '🏁 Score-Wettlauf (Koop): gleiche Arena, jeder für sich — wer nach 8 Minuten mehr Kills hat, gewinnt',
       '😈 Horden-Duell (Koop): Kill-Serien laden deinen Meter — voll geladen hetzt du dem Gegner einen Elite-Jäger auf den Hals',
       '🏆 Duell-Ergebnis mit Sieg-/Niederlage-Bildschirm; Versus-Runs wandern nicht in die Bestenliste',
+      '🩸 Letzter Überlebender entschärft: die Zone bleibt anfangs weit offen (Schonfrist ~22s) und schrumpft danach deutlich gemächlicher',
+      '🩸 Die sichere Zone hat jetzt eine klar sichtbare, am Boden verankerte violette Energiewand (statt eines pulsierenden Rings im Nichts) — zusätzlich als Kreis auf der Minimap',
+      '🎛 „Spiel wählen"-Menü aufgeräumt & kompakter — alle Modi, Modifikatoren und Optionen passen wieder auf einen Blick',
     ],
   },
   {
@@ -28,6 +31,7 @@ export const CHANGELOG = [
       '🔧 Debug-Zugänge (Konsolen-Zugriff, Freischalt-Parameter) funktionieren nur noch in der lokalen Entwicklung',
       '👤 KONTEN: Melde dich mit Name + Passwort an (keine E-Mail nötig!) — dein Erz, deine Schmiede und deine Erfolge liegen jetzt sicher auf dem Server und begleiten dich auf jedes Gerät',
       '🔒 Erz ist nicht mehr manipulierbar: Kontostand und Schmiede-Käufe werden komplett vom Server verwaltet und geprüft',
+      '🛡 Bestenliste jetzt wirklich fälschungssicher: Erfolge und Einträge werden ausschließlich server-seitig aus dem echten Spielverlauf abgeleitet — Erfolge/Freischaltungen lassen sich nicht mehr per Netzwerk-Trick erschummeln',
       '⌨️ Login-Komfort: Tab wechselt zwischen den Feldern, Leerzeichen in Namen funktionieren, und Passwort-Manager-Popups (LastPass & Co.) bleiben draußen',
     ],
   },

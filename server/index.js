@@ -54,6 +54,8 @@ if (process.env.DATABASE_URL) {
           created_at TIMESTAMPTZ DEFAULT now()
         )`);
         await pool.query('CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, account_id INTEGER NOT NULL, created_at TIMESTAMPTZ DEFAULT now())');
+        await pool.query('ALTER TABLE scores ADD COLUMN IF NOT EXISTS token TEXT'); // 1 Bestenlisten-Zeile je Run-Token
+        await pool.query(`ALTER TABLE run_tokens ADD COLUMN IF NOT EXISTS applied JSONB DEFAULT '{}'`); // Idempotenz je Run
         await pool.query(`DELETE FROM run_tokens WHERE started_at < now() - interval '24 hours'`);
         const { rows } = await pool.query(`SELECT value FROM kv WHERE key = 'wipe'`);
         if (!rows.length || rows[0].value !== WIPE_TAG) {
@@ -132,6 +134,25 @@ app.post('/api/run-start', async (req, res) => {
   }
   res.json({ token });
 });
+
+// Was für DIESEN Token bereits aufs Konto angerechnet wurde (Idempotenz gegen Erz-/Stat-Farming)
+const memApplied = new Map(); // token -> {credit,kills,boss,evolves,win,map}
+async function getApplied(token) {
+  if (memApplied.has(token)) return memApplied.get(token);
+  if (pool) {
+    try {
+      const { rows } = await pool.query('SELECT applied FROM run_tokens WHERE token = $1', [token]);
+      if (rows.length && rows[0].applied) return rows[0].applied;
+    } catch (e) { /* leer */ }
+  }
+  return { credit: 0, kills: 0, boss: 0, evolves: 0, win: 0, map: '' };
+}
+async function setApplied(token, obj) {
+  memApplied.set(token, obj);
+  if (pool) {
+    try { await pool.query('UPDATE run_tokens SET applied = $2 WHERE token = $1', [token, JSON.stringify(obj)]); } catch (e) { /* memApplied reicht */ }
+  }
+}
 
 async function tokenAgeSeconds(token) {
   if (!token || typeof token !== 'string' || token.length > 64) return null;
@@ -270,7 +291,21 @@ app.post('/api/shop/buy', async (req, res) => {
 });
 
 // Run-Ende: Erz-Gutschrift GEDECKELT über die echte (Token-)Laufzeit; Erfolge einmalig
-const ACH_REWARDS = { win_corridor: 150, win_cyber: 150, win_ww2: 150 };
+// Erfolge werden SERVER-SEITIG aus den (server-getrackten) Stats abgeleitet — der
+// vom Client gemeldete achievements-Array wird komplett IGNORIERT. Checks 1:1 aus Meta.js.
+const SERVER_ACH = [
+  { id: 'first_win', check: (s) => (s.wins || 0) >= 1 },
+  { id: 'kills_500', check: (s) => (s.totalKills || 0) >= 500 },
+  { id: 'survive_10', check: (s) => (s.bestTime || 0) >= 600 },
+  { id: 'level_20', check: (s) => (s.bestLevel || 0) >= 20 },
+  { id: 'evolve', check: (s) => (s.evolves || 0) >= 1 },
+  { id: 'boss_10', check: (s) => (s.bossKills || 0) >= 10 },
+  { id: 'gold_1000', check: (s) => (s.totalGold || 0) >= 1000 },
+  { id: 'wins_3', check: (s) => (s.wins || 0) >= 3 },
+  { id: 'win_corridor', check: (s) => ((s.mapWins && s.mapWins.corridor) || 0) >= 1, reward: 150 },
+  { id: 'win_cyber', check: (s) => ((s.mapWins && s.mapWins.cyber) || 0) >= 1, reward: 150 },
+  { id: 'win_ww2', check: (s) => ((s.mapWins && s.mapWins.ww2) || 0) >= 1, reward: 150 },
+];
 app.post('/api/run-finish', async (req, res) => {
   const acc = await getAccountBySession(req);
   if (!acc) return res.status(401).json({ error: 'Nicht angemeldet' });
@@ -278,34 +313,63 @@ app.post('/api/run-finish', async (req, res) => {
   const age = await tokenAgeSeconds(b.rt);
   if (age == null) return res.status(400).json({ error: 'Kein gültiger Run' });
   const num = (v) => (Number.isFinite(+v) ? Math.max(0, Math.floor(+v)) : 0);
-  const credit = Math.min(num(b.goldEarned), Math.ceil(age / 60) * 25 + 25);
-  acc.gold = (acc.gold || 0) + credit;
-  // Stats server-seitig mitzählen (Anzeige/Erfolge)
-  const st = acc.stats || {};
+  // ALLE Werte gegen die echte (Token-)Laufzeit klemmen — Grundlage der Fälschungssicherheit
   const time = Math.min(num(b.time), Math.round(age) + 90);
-  st.wins = (st.wins || 0) + (b.win ? 1 : 0);
-  st.totalKills = (st.totalKills || 0) + Math.min(num(b.kills), (time + 60) * 100);
-  st.bestTime = Math.max(st.bestTime || 0, time);
-  st.bestLevel = Math.max(st.bestLevel || 0, Math.min(num(b.level), 999));
-  st.bossKills = (st.bossKills || 0) + Math.min(num(b.bossKills), 200);
-  st.evolves = (st.evolves || 0) + Math.min(num(b.evolves), 8);
-  st.totalGold = (st.totalGold || 0) + credit;
-  if (b.win && typeof b.map === 'string') {
-    st.mapWins = st.mapWins || {};
-    st.mapWins[b.map.slice(0, 24)] = (st.mapWins[b.map.slice(0, 24)] || 0) + 1;
+  const kills = Math.min(num(b.kills), (time + 60) * 100);
+  const level = Math.min(num(b.level), 999);
+  const credit = Math.min(num(b.goldEarned), Math.ceil(age / 60) * 25 + 25);
+  const boss = Math.min(num(b.bossKills), 200);
+  const evolves = Math.min(num(b.evolves), 8);
+  const map = typeof b.map === 'string' ? b.map.slice(0, 24) : '';
+  const winNow = b.win ? 1 : 0;
+  // IDEMPOTENZ: ein Token (mehrfach nutzbar für Endlos: Sieg + späterer Tod) darf Erz/Stats
+  // nur EINMAL anrechnen. Wir buchen jeweils nur das Delta zum bereits Angerechneten.
+  const tok = String(b.rt).slice(0, 64);
+  const prev = await getApplied(tok);
+  const dCredit = Math.max(0, credit - (prev.credit || 0));
+  const dKills = Math.max(0, kills - (prev.kills || 0));
+  const dBoss = Math.max(0, boss - (prev.boss || 0));
+  const dEvo = Math.max(0, evolves - (prev.evolves || 0));
+  const firstWin = winNow && !prev.win;
+  acc.gold = (acc.gold || 0) + dCredit;
+  const st = acc.stats || {};
+  if (firstWin) {
+    st.wins = (st.wins || 0) + 1;
+    if (map) { st.mapWins = st.mapWins || {}; st.mapWins[map] = (st.mapWins[map] || 0) + 1; }
   }
+  st.totalKills = (st.totalKills || 0) + dKills;
+  st.bestTime = Math.max(st.bestTime || 0, time);
+  st.bestLevel = Math.max(st.bestLevel || 0, level);
+  st.bossKills = (st.bossKills || 0) + dBoss;
+  st.evolves = (st.evolves || 0) + dEvo;
+  st.totalGold = (st.totalGold || 0) + dCredit;
   acc.stats = st;
-  // Erfolge: Client meldet IDs; Belohnung gibt es je Konto genau einmal
+  const everWon = !!(prev.win || winNow);
+  await setApplied(tok, { credit: Math.max(credit, prev.credit || 0), kills: Math.max(kills, prev.kills || 0), boss: Math.max(boss, prev.boss || 0), evolves: Math.max(evolves, prev.evolves || 0), win: everWon ? 1 : 0, map: map || prev.map || '' });
+  // Erfolge NUR aus server-getrackten Stats — Client-Array wird ignoriert (kein Frei-Freischalten)
   const ach = acc.achievements || {};
-  for (const id of Array.isArray(b.achievements) ? b.achievements.slice(0, 64) : []) {
-    const k = String(id).slice(0, 40);
-    if (!ach[k]) {
-      ach[k] = true;
-      if (ACH_REWARDS[k]) acc.gold += ACH_REWARDS[k];
+  for (const a2 of SERVER_ACH) {
+    if (!ach[a2.id] && a2.check(st)) {
+      ach[a2.id] = true;
+      if (a2.reward) acc.gold += a2.reward;
     }
   }
   acc.achievements = ach;
   try { await saveAccount(acc); } catch (e) { return res.status(500).json({ error: 'Serverfehler' }); }
+  // Bestenliste SERVER-SEITIG schreiben (geklemmt, Name vom Konto), höchstens 1 Zeile je Token
+  if (pool && b.board) {
+    const mate = typeof b.mate === 'string' && b.mate.trim() ? ' & ' + b.mate.trim().slice(0, 16) : '';
+    const name = (acc.name + mate).slice(0, 40);
+    const bKills = Math.min(num(b.boardKills != null ? b.boardKills : kills), (time + 60) * 100);
+    const bLevel = Math.min(num(b.boardLevel != null ? b.boardLevel : level), 999);
+    try {
+      await pool.query('DELETE FROM scores WHERE token = $1', [tok]);
+      await pool.query(
+        `INSERT INTO scores (name, time, kills, level, gold, map, coop, win, token) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [name, time, bKills, bLevel, credit, map, !!b.coop, everWon, tok]
+      );
+    } catch (e) { /* Leaderboard best effort */ }
+  }
   res.json({ gold: acc.gold, achievements: acc.achievements, stats: acc.stats });
 });
 
@@ -322,42 +386,9 @@ setInterval(() => {
   }
 }, 60000).unref();
 
-app.post('/api/scores', async (req, res) => {
-  const acc = await getAccountBySession(req);
-  if (!acc) return res.status(401).json({ ok: false, reason: 'auth' }); // Bestenliste nur mit Konto
-  if (!pool) return res.json({ ok: false, stored: false }); // ohne DB: still annehmen, nicht speichern
-  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '?';
-  const now = Date.now();
-  const recent = (lastSubmit.get(ip) || []).filter((t) => now - t < 10000);
-  if (recent.length >= 4) return res.status(429).json({ ok: false });
-  const b = req.body || {};
-  const num = (v, d = 0) => (Number.isFinite(+v) ? Math.max(0, Math.min(1e9, Math.floor(+v))) : d);
-  // Name kommt vom KONTO — nicht aus dem Request. Koop: Mitspieler-Name nur als Anhang.
-  const mate = typeof b.mate === 'string' && b.mate.trim() ? ' & ' + b.mate.trim().slice(0, 16) : '';
-  const name = (acc.name + mate).slice(0, 40);
-  let time = num(b.time);
-  let kills = num(b.kills);
-  let level = num(b.level, 1);
-  // Anti-Cheat OHNE Ablehnung: der Server kennt die echte Run-Dauer über das Token
-  // und KLEMMT absurde Werte, statt Runs zu verwerfen. Ohne gültiges Token (nur per
-  // Hand-POST möglich — der Client holt es automatisch) wird nicht gespeichert.
-  const age = await tokenAgeSeconds(b.rt);
-  if (age == null) return res.status(400).json({ ok: false, reason: 'token' });
-  time = Math.min(time, Math.round(age) + 90); // Zeit kann nicht schneller vergehen als beim Server
-  kills = Math.min(kills, (time + 60) * 100); // >100 Kills/s klemmen (nur Konsolen-Unsinn)
-  level = Math.min(level, 999);
-  recent.push(now);
-  lastSubmit.set(ip, recent);
-  try {
-    await pool.query(
-      `INSERT INTO scores (name, time, kills, level, gold, map, coop, win) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [name, time, kills, level, num(b.gold), String(b.map || '').slice(0, 24), !!b.coop, !!b.win]
-    );
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false });
-  }
-});
+// POST /api/scores wurde entfernt: Bestenlisten-Einträge entstehen ausschließlich
+// server-seitig in /api/run-finish (geklemmte Werte, Konto-Name). Ein direkter
+// Score-Upload ist damit nicht mehr möglich.
 
 // ---------------------------------------------------- Statisches Spiel (dist/)
 app.use(express.static(DIST));

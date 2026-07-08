@@ -285,6 +285,7 @@ export function _beginClientRun(g, d) {
   g._reviveProg = 0;
   g._clientRevive = 0;
   g._prevRemoteDead = false;
+  g._fetchRunToken(); // auch der Gast braucht ein Token, damit sein Erz/Erfolge zählen
   g._lastStandActive = false;
   g._pings = [];
   g._ghostProj = [];

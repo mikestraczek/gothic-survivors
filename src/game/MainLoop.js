@@ -23,7 +23,8 @@ export function _drawMinimap(g) {
   const bounds = g.world.theme.bounds === 'corridor'
     ? { kind: 'corridor', halfZ: 13, halfX: 380 }
     : { kind: 'radial', r: g.world.barrierRadius };
-  g.hud.drawMinimap(self, allies, enemies, pickups, g._pings, bounds);
+  const storm = (g._shrink && g._stormR != null && bounds.kind === 'radial') ? g._stormR : null;
+  g.hud.drawMinimap(self, allies, enemies, pickups, g._pings, bounds, storm);
 }
 // Lebensbalken über beschädigten Gegnern + Boss-Balken oben
 export function _drawCombatUI(g) {
@@ -113,6 +114,10 @@ export function update(g) {
     g.hud.setDanger(false);
     g.hud.setWrath(0);
   }
+
+  // Sturmwand (Modus „Letzter Überlebender"): dauerhafte Grenze der sicheren Zone — Host wie Gast
+  if (g._shrink && g.mode === 'play' && g._stormR != null) g.world.updateStorm(g._stormR);
+  else g.world.hideStorm();
 
   // Koop-Features: Buffs, Panel, Revive-Hinweis, Mate-Pfeil, Tod-Meldung, Ping/Emote-Eingabe
   // Ping funktioniert in Solo UND Koop

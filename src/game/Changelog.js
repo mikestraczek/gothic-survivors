@@ -3,6 +3,16 @@
 // in Spieler-Sprache (was merke ich im Spiel?), nicht in Entwickler-Sprache.
 export const CHANGELOG = [
   {
+    date: '2026-07-10',
+    title: 'Grafik-Politur',
+    items: [
+      '🎨 Deutlich hellere, lesbarere Darstellung: mehr Kontrast, sattere Farben, sanftere Vignette — die Welt versinkt nicht mehr im Dunkeln',
+      '🌿 Echtes stilisiertes Gras statt flacher „Rauten", plus kräftigere Bodenschatten, damit Held und Gegner klar in der Welt stehen',
+      '🪨 Bäume, Felsen und Ruinen im einheitlichen Low-Poly-Look (Flat-Shading), Ruinen mit Moos-Verwitterung — wirkt endlich „echt" statt gebastelt',
+      '💡 Wärmere Steine, glühende Pilze und Kerzenlicht bringen mehr Tal-der-Kolonie-Stimmung',
+    ],
+  },
+  {
     date: '2026-07-08',
     title: 'Neue Spielmodi — allein & gegeneinander',
     items: [

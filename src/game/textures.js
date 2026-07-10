@@ -62,6 +62,35 @@ function bumpCanvas() {
 }
 
 let _grunge = null;
+let _grassTuft = null;
+// Stilisiertes Gras-Büschel (Alpha) — macht aus flachen Quads echtes Gras statt Rauten
+export function grassTuftTexture() {
+  if (_grassTuft) return _grassTuft;
+  const S = 64;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  const blades = 6;
+  for (let i = 0; i < blades; i++) {
+    const bx = 8 + (i / (blades - 1)) * 48 + Math.sin(i * 12.9) * 4;
+    const h = 30 + ((Math.sin(i * 7.7) + 1) * 0.5) * 26;
+    const lean = Math.sin(i * 3.1) * 9;
+    const w = 4.5;
+    const grad = g.createLinearGradient(bx, S, bx + lean, S - h);
+    grad.addColorStop(0, '#2c3d1c');
+    grad.addColorStop(1, '#7ca24a');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.moveTo(bx - w / 2, S);
+    g.quadraticCurveTo(bx - w / 3, S - h * 0.6, bx + lean, S - h);
+    g.quadraticCurveTo(bx + w / 3, S - h * 0.6, bx + w / 2, S);
+    g.closePath();
+    g.fill();
+  }
+  _grassTuft = new THREE.CanvasTexture(c);
+  return _grassTuft;
+}
+
 export function grungeTexture() {
   if (!_grunge) _grunge = toTex(grungeCanvas(), 2);
   return _grunge;

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { bumpTexture, groundBumpTexture } from './textures.js';
+import { bumpTexture, groundBumpTexture, grassTuftTexture } from './textures.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // ---- Terrain-Höhe (deterministisch; variantenabhängig pro Karte) ----
 let _variant = 'valley';
@@ -123,7 +124,7 @@ export const THEMES = {
     ambient: 0x3a4660, ambientI: 0.55, moonCol: 0xc0ccea, moonI: 1.25,
     grass: 0x3c4a2a, grass2: 0x2d3a22, dirt: 0x5a4a30, rock: 0x47433c,
     barrierA: 0x6a2fa0, barrierB: 0x2f7aa0,
-    trunk: 0x3a2a1a, foliage: 0x24341c, rockMat: 0x575250, grassMat: 0x4a5a30, stone: 0x6b6358,
+    trunk: 0x4a3620, foliage: 0x3f5e2a, rockMat: 0x6a6459, grassMat: 0x5a6e38, stone: 0x7a7264,
     terrain: 'valley', vegStyle: 'pine', layout: 'ruins', treeCount: 70, rockCount: 26, grassCount: 600, water: false,
     gradeShadow: [0.0, 0.02, 0.075], gradeHigh: [0.07, 0.045, 0.0], // Split-Toning (Visuals-Grade-Pass)
     weather: 'motes', music: 'valley',
@@ -137,7 +138,7 @@ export const THEMES = {
     ambient: 0x3a4a30, ambientI: 0.75, moonCol: 0xa8c090, moonI: 1.0,
     grass: 0x2f3a22, grass2: 0x24301a, dirt: 0x3a3422, rock: 0x3a3e30,
     barrierA: 0x2f8a5a, barrierB: 0x6a8a2f,
-    trunk: 0x241c12, foliage: 0x2a3a22, rockMat: 0x444a38, grassMat: 0x3a4a28, stone: 0x4a4e40,
+    trunk: 0x322618, foliage: 0x3a5030, rockMat: 0x565c48, grassMat: 0x4a5c34, stone: 0x5c6050,
     terrain: 'swamp', vegStyle: 'dead', layout: 'bog', treeCount: 70, rockCount: 18, grassCount: 360, water: true, waterColor: 0x16321f,
     gradeShadow: [0.0, 0.05, 0.02], gradeHigh: [0.05, 0.06, 0.0],
     weather: 'rain', music: 'swamp',
@@ -151,7 +152,7 @@ export const THEMES = {
     ambient: 0x3a4050, ambientI: 0.6, moonCol: 0xb8c4e0, moonI: 1.1,
     grass: 0x3a3f2c, grass2: 0x2c3122, dirt: 0x4c4232, rock: 0x3f3b34,
     barrierA: 0x8a2fa0, barrierB: 0x2f5aa0,
-    trunk: 0x352718, foliage: 0x223018, rockMat: 0x514c46, grassMat: 0x44502c, stone: 0x5c564c,
+    trunk: 0x483220, foliage: 0x385024, rockMat: 0x625c54, grassMat: 0x54623a, stone: 0x6c665a,
     terrain: 'corridor', vegStyle: 'pine', layout: 'canyon', treeCount: 48, rockCount: 0, grassCount: 320, water: false,
     bounds: 'corridor', relics: false,
     gradeShadow: [0.01, 0.02, 0.07], gradeHigh: [0.06, 0.05, 0.01],
@@ -166,7 +167,7 @@ export const THEMES = {
     ambient: 0x3a2a5a, ambientI: 0.7, moonCol: 0x9a7ae0, moonI: 0.9,
     grass: 0x23242c, grass2: 0x1b1c24, dirt: 0x2c2d38, rock: 0x30313c,
     barrierA: 0xff2fd0, barrierB: 0x2fd0ff,
-    trunk: 0x23242c, foliage: 0x23303c, rockMat: 0x3c3e4c, grassMat: 0x2c3644, stone: 0x3a3c4a,
+    trunk: 0x2e3038, foliage: 0x304862, rockMat: 0x4c4e5e, grassMat: 0x384658, stone: 0x4a4c5c,
     terrain: 'flat', vegStyle: 'pine', layout: 'city', treeCount: 0, rockCount: 0, grassCount: 0, water: false,
     relics: false, shrooms: false,
     gradeShadow: [0.02, 0.0, 0.09], gradeHigh: [0.06, 0.0, 0.08],
@@ -181,7 +182,7 @@ export const THEMES = {
     ambient: 0x4a4c40, ambientI: 0.6, moonCol: 0xc0c4b0, moonI: 0.9,
     grass: 0x3c3a26, grass2: 0x2e2c1e, dirt: 0x4a4028, rock: 0x403d32,
     barrierA: 0x8a6a2f, barrierB: 0xa03a2f,
-    trunk: 0x2c2416, foliage: 0x2a2c1c, rockMat: 0x4c483c, grassMat: 0x424426, stone: 0x565044,
+    trunk: 0x3c321e, foliage: 0x3c4026, rockMat: 0x5e5a4a, grassMat: 0x545634, stone: 0x686050,
     terrain: 'field', vegStyle: 'dead', layout: 'battlefield', treeCount: 26, rockCount: 10, grassCount: 260, water: false,
     relics: false, shrooms: false,
     gradeShadow: [0.01, 0.03, 0.02], gradeHigh: [0.06, 0.05, 0.02],
@@ -761,8 +762,11 @@ export class World {
     let seed = 4242;
     const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
     const stoneCol = new THREE.Color(this.theme.stone);
-    const stoneMat = (tint) => new THREE.MeshStandardMaterial({
-      color: stoneCol.clone().multiplyScalar(tint), roughness: 1.0, bumpMap: bumpTexture(), bumpScale: 0.5,
+    const mossCol = new THREE.Color(this.theme.grassMat);
+    // Flat-Shading passt zu den flach-schattierten Bäumen/Felsen; leichte Moos-Verwitterung erdet die Ruinen
+    const stoneMat = (tint, moss = 0) => new THREE.MeshStandardMaterial({
+      color: stoneCol.clone().multiplyScalar(tint).lerp(mossCol, moss * 0.35),
+      roughness: 1.0, flatShading: true, bumpMap: bumpTexture(), bumpScale: 0.5,
     });
     const rubbleGeo = new THREE.DodecahedronGeometry(0.4, 0);
 
@@ -771,7 +775,7 @@ export class World {
       const y = terrainHeight(rx, rz);
       const wallG = new THREE.Group();
       // massiver Sockel
-      const base = new THREE.Mesh(new THREE.BoxGeometry(len, 1.3, 1.25), stoneMat(0.85 + rnd() * 0.25));
+      const base = new THREE.Mesh(new THREE.BoxGeometry(len, 1.3, 1.25), stoneMat(0.85 + rnd() * 0.25, 0.5 + rnd() * 0.5));
       base.position.y = 0.65;
       wallG.add(base);
       // gebrochene Oberkante: unregelmäßige Segmente unterschiedlicher Höhe
@@ -787,7 +791,7 @@ export class World {
       }
       // Schutt am Fuß der Mauer
       for (let i = 0; i < 4; i++) {
-        const rb = new THREE.Mesh(rubbleGeo, stoneMat(0.7 + rnd() * 0.3));
+        const rb = new THREE.Mesh(rubbleGeo, stoneMat(0.7 + rnd() * 0.3, 0.6 + rnd() * 0.4));
         const rsc = 0.5 + rnd() * 0.9;
         rb.scale.set(rsc, rsc * 0.6, rsc);
         rb.position.set((rnd() - 0.5) * len, 0.15, (rnd() > 0.5 ? 1 : -1) * (0.9 + rnd() * 0.6));
@@ -1339,8 +1343,8 @@ export class World {
     // Pro Baum leichte Neigung + Farbvariation (setColorAt) — bricht die Klon-Optik.
     const treeCount = this.theme.treeCount;
     const trunkGeo = dead ? new THREE.CylinderGeometry(0.18, 0.4, 9, 6) : new THREE.CylinderGeometry(0.4, 0.6, 6, 6);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: this.theme.trunk, roughness: 1, bumpMap: bumpTexture(), bumpScale: 0.45 });
-    const folMat = new THREE.MeshStandardMaterial({ color: this.theme.foliage, roughness: 1 });
+    const trunkMat = new THREE.MeshStandardMaterial({ color: this.theme.trunk, roughness: 1, flatShading: true, bumpMap: bumpTexture(), bumpScale: 0.45 });
+    const folMat = new THREE.MeshStandardMaterial({ color: this.theme.foliage, roughness: 0.9, flatShading: true });
     const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCount);
     trunks.castShadow = true;
     const layers = dead
@@ -1445,13 +1449,18 @@ export class World {
 
     // Grasbüschel / Schilf (Billboards, instanziert, kein Schatten)
     const grassCount = this.theme.grassCount;
-    const bladeGeo = new THREE.PlaneGeometry(1.1, 1.0);
+    // gekreuzte Quads (2 Ebenen) -> Volumen von jedem Blickwinkel, kein flaches Raut-Rauschen
+    const g1 = new THREE.PlaneGeometry(1.5, 1.2);
+    const g2 = g1.clone(); g2.rotateY(Math.PI / 2);
+    const bladeGeo = mergeGeometries ? mergeGeometries([g1, g2]) : g1;
     const grassMat = new THREE.MeshStandardMaterial({
       color: this.theme.grassMat,
       roughness: 1,
       side: THREE.DoubleSide,
+      map: grassTuftTexture(),
       transparent: true,
-      alphaTest: 0.3,
+      alphaTest: 0.28,
+      depthWrite: true,
     });
     const grass = new THREE.InstancedMesh(bladeGeo, grassMat, grassCount);
     const grassTint = new THREE.Color();
@@ -1476,7 +1485,7 @@ export class World {
       s.set(gs, gs * gy, gs);
       m.compose(p, q, s);
       grass.setMatrixAt(gp, m);
-      grassTint.setRGB(0.75 + rnd() * 0.5, 0.85 + rnd() * 0.35, 0.7 + rnd() * 0.3);
+      grassTint.setRGB(0.82 + rnd() * 0.28, 0.9 + rnd() * 0.2, 0.72 + rnd() * 0.22);
       grass.setColorAt(gp, grassTint);
       gp++;
     }

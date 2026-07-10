@@ -53,18 +53,23 @@ export function _initScene(g) {
   const GradeShader = {
     uniforms: {
       tDiffuse: { value: null },
-      saturation: { value: 1.14 },
-      contrast: { value: 1.07 },
+      saturation: { value: 1.2 },
+      contrast: { value: 1.1 },
+      brightness: { value: 1.24 },
+      lift: { value: 0.03 },
       shadowTint: { value: new THREE.Vector3(0.0, 0.02, 0.07) },
       highTint: { value: new THREE.Vector3(0.06, 0.04, 0.0) },
-      vignette: { value: 0.42 },
+      vignette: { value: 0.32 },
     },
     vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: `
       uniform sampler2D tDiffuse; uniform float saturation; uniform float contrast; uniform float vignette;
+      uniform float brightness; uniform float lift;
       uniform vec3 shadowTint; uniform vec3 highTint; varying vec2 vUv;
       void main(){
         vec3 c = texture2D(tDiffuse, vUv).rgb;
+        c *= brightness;                                   // Belichtung anheben (heller, lesbarer)
+        c = c + lift * (1.0 - c);                          // Schwarz-Lift: hebt tiefe Schatten aus dem Matsch
         c = (c - 0.5) * contrast + 0.5;                    // Kontrast
         float l = dot(c, vec3(0.299, 0.587, 0.114));
         c = mix(vec3(l), c, saturation);                   // Sättigung

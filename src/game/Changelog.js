@@ -4,6 +4,15 @@
 export const CHANGELOG = [
   {
     date: '2026-07-10',
+    title: 'Cinematic-Trailer',
+    items: [
+      '🎬 NEU: „Trailer abspielen" im Hauptmenü — eine ~40-Sekunden-Filmsequenz mit echten Kämpfen, kinoreifer Kamerafahrt, Letterbox, Zeitlupe und Boss-Auftritt',
+      '🎥 Perfekt für YouTube: einfach den Bildschirm mitschneiden (z. B. mit OBS) — der Trailer läuft von allein durch (mit Esc abbrechen)',
+      '🕶️ Der Trailer verändert nichts an deinem Fortschritt und wandert nicht in die Bestenliste',
+    ],
+  },
+  {
+    date: '2026-07-10',
     title: 'Grafik-Politur',
     items: [
       '🎨 Deutlich hellere, lesbarere Darstellung: mehr Kontrast, sattere Farben, sanftere Vignette — die Welt versinkt nicht mehr im Dunkeln',

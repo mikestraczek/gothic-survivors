@@ -18,6 +18,7 @@ import * as UiScreens from './UiScreens.js';
 import * as Coop from './Coop.js';
 import * as RunControl from './RunControl.js';
 import * as MainLoop from './MainLoop.js';
+import * as Cinematic from './Cinematic.js';
 
 // Game = schlanker Orchestrator: Konstruktion, Asset-Preload und der Facade-Katalog.
 // Die eigentliche Logik lebt in den Modulen (Visuals/UiScreens/Coop/RunControl/MainLoop),
@@ -30,6 +31,7 @@ export class Game {
     this.mode = 'loading';
     this.role = null; // null=offline, 'host', 'client'
     this.clock = new THREE.Clock();
+    this.timeScale = 1; // globaler Zeitfaktor (1 = normal); vom Cinematic-Director für Slow-Mo genutzt
     this.runElapsed = 0;
     this.pendingLevelUps = 0; // P1 (lokal)
     this.pendingRemoteLevelUps = 0; // P2 (Gast)
@@ -459,6 +461,10 @@ export class Game {
   }
 
   update() { return MainLoop.update(this); }
+
+  // Cinematic-Trailer: choreografierte Kamerafahrt über echtem Gameplay (für YouTube-Aufnahme)
+  startCinematic() { return Cinematic.startCinematic(this); }
+  stopCinematic() { return Cinematic.stopCinematic(this); }
 
   _syncTouchUi() { return MainLoop._syncTouchUi(this); }
 

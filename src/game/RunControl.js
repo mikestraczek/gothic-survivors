@@ -443,6 +443,7 @@ export function _showVersusResult(g, d) {
   document.getElementById('versus-screen').classList.remove('hidden');
 }
 export function _phaseTick(g, dt) {
+  if (g._cineActive) return; // im Cinematic übernimmt der Director die Spawns — keine Phasen/Boss/Sieg
   if (g._versus) _versusTick(g, dt);
   if (g._shrink) _updateStorm(g, dt);
   if (g.mode !== 'play') return; // Versus-Ende hat den Lauf eingefroren
@@ -720,6 +721,7 @@ export function _collectXp(g, value, who) {
 }
 // -------------------------------------------------- Level-Up (unabhängig je Spieler)
 export function _maybeLevelUp(g) {
+  if (g._cineActive) return; // im Cinematic kein Level-Up-Menü (Kills sammeln nur Effekte)
   if (g._leveling) return;
   if (g.pendingLevelUps > 0 || g.pendingRemoteLevelUps > 0) {
     // abgelehnte Kombinationen je Level-Up-Sequenz zurücksetzen (später erneut anbieten)

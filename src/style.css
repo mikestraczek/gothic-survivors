@@ -2296,3 +2296,100 @@ body.photosafe .intro-flash {
   font-size: 13px;
   margin-top: 10px;
 }
+
+/* -------------------------------------------------- Cinematic-Trailer */
+#cine {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  overflow: hidden;
+}
+#cine.hidden { display: none; }
+/* Letterbox-Balken oben/unten — fahren beim Start herein */
+.cine-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  background: #000;
+  z-index: 1;
+  transition: height 0.8s cubic-bezier(0.7, 0, 0.3, 1);
+}
+.cine-top { top: 0; }
+.cine-bottom { bottom: 0; }
+#cine.show .cine-bar { height: 11vh; }
+/* Titelkarte (unteres Drittel) */
+.cine-text {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 20%;
+  text-align: center;
+  z-index: 2;
+  opacity: 0;
+  transform: translateY(16px) scale(0.98);
+  filter: blur(6px);
+  transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.7s ease;
+}
+.cine-text.show {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0);
+}
+.cine-kicker {
+  color: var(--gold);
+  letter-spacing: 8px;
+  font-size: 16px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  text-shadow: 0 2px 12px #000;
+}
+.cine-kicker:empty { display: none; }
+.cine-title {
+  color: var(--gold-bright);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 900;
+  font-size: clamp(38px, 7vw, 84px);
+  letter-spacing: 3px;
+  line-height: 1.05;
+  text-shadow: 0 0 46px rgba(212, 175, 92, 0.65), 0 6px 20px #000;
+}
+.cine-title:empty { display: none; }
+.cine-sub {
+  color: var(--parchment);
+  font-size: clamp(15px, 2vw, 21px);
+  letter-spacing: 3px;
+  margin-top: 12px;
+  text-shadow: 0 2px 12px #000;
+}
+.cine-sub:empty { display: none; }
+/* Vollbild-Fade gegen Schwarz (Anfang/Ende) — Director steuert die Opazität */
+.cine-fade {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+/* Aufnahme-Hinweis: kurz sichtbar, blendet dann aus (nicht im finalen Video) */
+.cine-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 3.2vh;
+  transform: translateX(-50%);
+  z-index: 2;
+  color: rgba(255, 240, 210, 0.85);
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-shadow: 0 2px 8px #000;
+  opacity: 0;
+}
+#cine.show .cine-hint { animation: cineHint 5s ease forwards; }
+@keyframes cineHint {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}

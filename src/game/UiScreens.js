@@ -36,6 +36,8 @@ export function _wireUI(g) {
     document.getElementById(back).classList.remove('hidden');
   });
   document.getElementById('online-button').addEventListener('click', () => g._openLobby());
+  const cineBtn = document.getElementById('cinematic-button');
+  if (cineBtn) cineBtn.addEventListener('click', () => g.startCinematic());
   const nameEl = document.getElementById('player-name');
   if (nameEl) {
     g._loadName();

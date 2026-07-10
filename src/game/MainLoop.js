@@ -69,6 +69,7 @@ export function _drawCombatUI(g) {
 }
 export function update(g) {
   const rawDt = Math.min(0.05, g.clock.getDelta());
+  g._rawDt = rawDt; // Rohzeit (ungestreckt) — der Cinematic-Director führt seine Timeline damit
   // Sprite-Animations-Uhr: läuft IMMER lokal weiter — der Client bekommt runElapsed
   // nur sekundengenau aus Snapshots, damit ruckelte die Helden-Animation beim Gast
   g._animT = (g._animT || 0) + rawDt;
@@ -86,6 +87,8 @@ export function update(g) {
   if (g._hitStopT > 0) {
     g._hitStopT -= rawDt;
     dt = rawDt * 0.06; // fast eingefroren, aber nicht hart 0 (Kamera/Effekte atmen weiter)
+  } else if (g.timeScale != null && g.timeScale !== 1) {
+    dt = rawDt * g.timeScale; // globale Zeitlupe (Cinematic-Director)
   }
   if (g._introT > 0) { g._introT = Math.max(0, g._introT - dt); g.camCtrl.zoom = 1 + 1.2 * (g._introT / INTRO_DUR); }
   const camp = g._camTarget ? g._camTarget() : (g.player && g.player.position);
@@ -176,6 +179,9 @@ export function update(g) {
 
   g._syncTouchUi();
   g.input.endFrame();
+  // Cinematic-Director: übernimmt NACH der Simulation die Kamera (Position/Blick/FOV),
+  // steuert Slow-Mo, Spawns und Titelkarten — direkt vor dem Render, damit er alles überschreibt.
+  if (g._cine) g._cine.update(g._rawDt);
   g.composer.render();
 }
 // Touch-Steuerung nur während des Spielens einblenden

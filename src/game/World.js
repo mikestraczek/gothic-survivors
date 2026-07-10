@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { bumpTexture, groundBumpTexture, grassTuftTexture } from './textures.js';
+import { bumpTexture, groundBumpTexture, grassTuftTexture, barkTexture, stoneTexture, foliageTexture, grungeTexture, cloudTexture } from './textures.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // ---- Terrain-Höhe (deterministisch; variantenabhängig pro Karte) ----
@@ -189,6 +189,22 @@ export const THEMES = {
     weather: 'rain', music: 'war', mistCol: 0x9aa08a,
     finalBoss: 'boss',
   },
+  heaven: {
+    name: 'Über den Wolken',
+    fog: 0xd0e4f4, fogD: 0.0030,
+    sky: [0x3f86d4, 0xa8d4ee, 0xe8f2ea],
+    daySky: true,
+    hemiSky: 0xcfe4fa, hemiGround: 0x9cb474, hemiI: 1.5,
+    ambient: 0xbcd2ec, ambientI: 1.15, moonCol: 0xfff2d4, moonI: 2.3,
+    grass: 0x6f9a4a, grass2: 0x5f8a3e, dirt: 0xa89060, rock: 0x9a968a,
+    barrierA: 0xffe6a8, barrierB: 0xbfe0ff,
+    trunk: 0x74542f, foliage: 0x64a03e, rockMat: 0xa8a294, grassMat: 0x82ac4c, stone: 0xd2ccb6,
+    terrain: 'valley', vegStyle: 'pine', layout: 'meadow', treeCount: 44, rockCount: 16, grassCount: 760, water: false,
+    relics: false, shrooms: false,
+    gradeShadow: [0.01, 0.02, 0.05], gradeHigh: [0.07, 0.06, 0.02],
+    weather: 'motes', music: 'valley', mistCol: 0xe8f0ff,
+    finalBoss: 'boss',
+  },
 };
 export const MAP_LIST = [
   { key: 'valley', name: 'Tal der Kolonie' },
@@ -196,6 +212,7 @@ export const MAP_LIST = [
   { key: 'corridor', name: 'Der Hohlweg' },
   { key: 'cyber', name: 'Neon-Distrikt 7' },
   { key: 'ww2', name: 'Frontlinie 1944' },
+  { key: 'heaven', name: 'Über den Wolken' },
 ];
 
 export class World {
@@ -513,6 +530,8 @@ export class World {
     });
     this.group.add(new THREE.Mesh(geo, mat));
 
+    if (this.theme.daySky) { this._buildDaySky(); return; }
+
     // Mond
     const moon = new THREE.Mesh(
       new THREE.CircleGeometry(18, 32),
@@ -550,6 +569,47 @@ export class World {
       new THREE.PointsMaterial({ color: 0xc8d2e8, size: 1.4, sizeAttenuation: false, fog: false })
     );
     this.group.add(stars);
+  }
+
+  // Heller Tag-Himmel: Sonne + Wolkenschichten (hoch + tiefer Schwebering)
+  _buildDaySky() {
+    const sun = new THREE.Mesh(new THREE.CircleGeometry(22, 32), new THREE.MeshBasicMaterial({ color: 0xfff6e0, fog: false }));
+    sun.position.set(-150, 190, -250); sun.lookAt(0, 0, 0); this.group.add(sun);
+    const sunGlow = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.MeshBasicMaterial({ map: glowTexture(), color: 0xffe6a8, transparent: true, opacity: 0.7, fog: false, depthWrite: false, blending: THREE.AdditiveBlending }));
+    sunGlow.position.copy(sun.position); sunGlow.lookAt(0, 0, 0); this.group.add(sunGlow);
+    let cseed = 555; const crnd = () => { cseed = (cseed * 16807) % 2147483647; return cseed / 2147483647; };
+    const cloudMat = new THREE.MeshBasicMaterial({ map: cloudTexture(), color: 0xffffff, transparent: true, opacity: 0.94, fog: false, depthWrite: false, side: THREE.DoubleSide });
+    const cloudGeo = new THREE.PlaneGeometry(1, 1);
+    const clouds = new THREE.InstancedMesh(cloudGeo, cloudMat, 60);
+    clouds.frustumCulled = false; clouds.renderOrder = -1;
+    const cm = new THREE.Matrix4(), cq = new THREE.Quaternion(), cp = new THREE.Vector3(), cs = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 1, 0), look = new THREE.Matrix4();
+    let ci = 0;
+    const put = (x, y, z, w, h) => { cp.set(x, y, z); look.lookAt(cp, new THREE.Vector3(0, y, 0), up); cq.setFromRotationMatrix(look); cs.set(w, h, 1); cm.compose(cp, cq, cs); clouds.setMatrixAt(ci++, cm); };
+    for (let i = 0; i < 30; i++) { const a = crnd() * Math.PI * 2, rr = 200 + crnd() * 220, yy = 70 + crnd() * 170, sz = 70 + crnd() * 110; put(Math.cos(a) * rr, yy, Math.sin(a) * rr, sz, sz * 0.6); } // hoher Himmel
+    for (let i = 0; i < 28; i++) { const a = (i / 28) * Math.PI * 2 + crnd() * 0.12, rr = 115 + crnd() * 45, yy = -8 + crnd() * 10, sz = 42 + crnd() * 46; put(Math.cos(a) * rr, yy, Math.sin(a) * rr, sz, sz * 0.55); } // tiefer Schwebering
+    clouds.count = ci; this.group.add(clouds);
+  }
+
+  // Wiese (helle Map): bunte Wildblumen statt Ruinen/Fackeln
+  _meadowFeatures() {
+    let seed = 7777; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const cols = [0xff5a7a, 0xffd84a, 0xffffff, 0xc86aff, 0xff9a3a];
+    const petalGeo = new THREE.SphereGeometry(0.17, 6, 5);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), sc = new THREE.Vector3();
+    for (const col of cols) {
+      const mat = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.25, roughness: 0.8 });
+      const im = new THREE.InstancedMesh(petalGeo, mat, 90); im.frustumCulled = false; im.castShadow = true;
+      let pl = 0;
+      for (let i = 0; i < 90; i++) {
+        const a = rnd() * Math.PI * 2, d = 8 + rnd() * 100;
+        const x = Math.cos(a) * d, z = Math.sin(a) * d;
+        if (Math.hypot(x, z) > BARRIER_RADIUS - 6) continue;
+        const y = terrainHeight(x, z); const s2 = 0.7 + rnd() * 1.0;
+        pos.set(x, y + 0.35 * s2, z); sc.set(s2, s2 * 1.4, s2); m.compose(pos, q, sc); im.setMatrixAt(pl++, m);
+      }
+      im.count = pl; this.group.add(im);
+    }
   }
 
   // --------------------------------------------------------------- Licht & Nebel
@@ -610,13 +670,15 @@ export class World {
     geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     geo.computeVertexNormals();
 
+    const groundDetail = grungeTexture(); groundDetail.repeat.set(corridor ? 90 : 55, corridor ? 8 : 55);
     const mat = new THREE.MeshStandardMaterial({
       vertexColors: true,
+      map: groundDetail,
       roughness: 1.0,
       metalness: 0.0,
       flatShading: false,
       bumpMap: groundBumpTexture(),
-      bumpScale: 0.5,
+      bumpScale: 0.85,
     });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
@@ -741,6 +803,7 @@ export class World {
     if (L === 'city') { this._cityFeatures(); return; } // Stadt bringt eigene Beleuchtung mit
     if (L === 'battlefield') { this._warFeatures(); return; }
     if (L === 'canyon') { this._canyonFeatures(); return; }
+    if (L === 'meadow') { this._meadowFeatures(); return; }
     if (L === 'bog') this._bogFeatures();
     else this._ruinFeatures();
 
@@ -766,7 +829,7 @@ export class World {
     // Flat-Shading passt zu den flach-schattierten Bäumen/Felsen; leichte Moos-Verwitterung erdet die Ruinen
     const stoneMat = (tint, moss = 0) => new THREE.MeshStandardMaterial({
       color: stoneCol.clone().multiplyScalar(tint).lerp(mossCol, moss * 0.35),
-      roughness: 1.0, flatShading: true, bumpMap: bumpTexture(), bumpScale: 0.5,
+      roughness: 1.0, flatShading: true, map: stoneTexture(), bumpMap: bumpTexture(), bumpScale: 0.6,
     });
     const rubbleGeo = new THREE.DodecahedronGeometry(0.4, 0);
 
@@ -1343,8 +1406,8 @@ export class World {
     // Pro Baum leichte Neigung + Farbvariation (setColorAt) — bricht die Klon-Optik.
     const treeCount = this.theme.treeCount;
     const trunkGeo = dead ? new THREE.CylinderGeometry(0.18, 0.4, 9, 6) : new THREE.CylinderGeometry(0.4, 0.6, 6, 6);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: this.theme.trunk, roughness: 1, flatShading: true, bumpMap: bumpTexture(), bumpScale: 0.45 });
-    const folMat = new THREE.MeshStandardMaterial({ color: this.theme.foliage, roughness: 0.9, flatShading: true });
+    const trunkMat = new THREE.MeshStandardMaterial({ color: this.theme.trunk, roughness: 1, map: barkTexture(), bumpMap: bumpTexture(), bumpScale: 0.6 });
+    const folMat = new THREE.MeshStandardMaterial({ color: this.theme.foliage, roughness: 0.95, map: foliageTexture() });
     const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCount);
     trunks.castShadow = true;
     const layers = dead

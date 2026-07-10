@@ -109,6 +109,7 @@ hat ihr eigenes **Map-Special**:
 | Der Hohlweg | schmaler, (gefühlt) endloser Pass | 🛤 Minen-Lore rast alle ~15 s durchs Gleis |
 | Neon-Distrikt 7 | Cyberpunk, Regen & Neon | ⚡ Boost-Pads geben Tempo-Schübe |
 | Frontlinie 1944 | Weltkriegs-Schlachtfeld | 🛡 **Zwei fahrbare Panzer** (Respawn ~45 s): überrollen Gegner, Auto-Kanone |
+| Über den Wolken | Heller Tag: sonnige Hügel, Wolken, Wildblumen | ☀️ Freundlicher Kontrast zu den düsteren Karten |
 
 Held, Karte & Schwierigkeit wählst du vor dem Start (im Koop wählt der Host
 Karte & Schwierigkeit, jeder Spieler seinen eigenen Helden). Dev-Tipp:

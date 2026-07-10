@@ -10,6 +10,8 @@ export const CHANGELOG = [
       '🌿 Echtes stilisiertes Gras statt flacher „Rauten", plus kräftigere Bodenschatten, damit Held und Gegner klar in der Welt stehen',
       '🪨 Bäume, Felsen und Ruinen im einheitlichen Low-Poly-Look (Flat-Shading), Ruinen mit Moos-Verwitterung — wirkt endlich „echt" statt gebastelt',
       '💡 Wärmere Steine, glühende Pilze und Kerzenlicht bringen mehr Tal-der-Kolonie-Stimmung',
+      '🧱 Mehr Oberflächen-Textur gegen den Plastik-Look: Rinde an Bäumen, echtes Mauerwerk an Ruinen, Blatt-Struktur am Laub und Boden-Detail',
+      '☁️ NEUE helle Map „Über den Wolken": sonnige grüne Hügel, Wildblumen und ein Wolkenring — ein freundlicher Kontrast zu den düsteren Karten',
     ],
   },
   {

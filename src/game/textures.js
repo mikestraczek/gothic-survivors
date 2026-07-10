@@ -64,6 +64,102 @@ function bumpCanvas() {
 let _grunge = null;
 let _grassTuft = null;
 // Stilisiertes Gras-Büschel (Alpha) — macht aus flachen Quads echtes Gras statt Rauten
+// Rinde: vertikale Rillen (Graustufen -> Material.color tönt) — bricht den Plastik-Look an Stämmen
+let _bark = null;
+export function barkTexture() {
+  if (_bark) return _bark;
+  const S = 128;
+  const c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgb(178,176,172)'; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 22; i++) {
+    const x = Math.random() * S;
+    const w = 2 + Math.random() * 6;
+    const dark = 70 + Math.random() * 50;
+    g.strokeStyle = `rgba(${dark},${dark},${dark},0.5)`;
+    g.lineWidth = w;
+    g.beginPath();
+    let xx = x;
+    for (let y = 0; y <= S; y += 8) { xx += (Math.random() - 0.5) * 4; g.lineTo(xx, y); }
+    g.stroke();
+  }
+  for (let i = 0; i < 40; i++) { // helle Fasern
+    g.strokeStyle = `rgba(210,205,195,0.25)`; g.lineWidth = 1;
+    const x = Math.random() * S; g.beginPath(); g.moveTo(x, Math.random() * S); g.lineTo(x + (Math.random() - 0.5) * 3, Math.random() * S); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 2); t.anisotropy = 4;
+  _bark = t; return t;
+}
+
+// Stein-Mauerwerk: Blöcke mit Mörtelfugen (Graustufen) — für Ruinen/Wände
+let _stone = null;
+export function stoneTexture() {
+  if (_stone) return _stone;
+  const S = 128;
+  const c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgb(120,118,114)'; g.fillRect(0, 0, S, S); // Mörtel dunkel
+  const rows = 4, bh = S / rows;
+  for (let r = 0; r < rows; r++) {
+    const off = (r % 2) * (S / 6);
+    for (let bx = -1; bx < 4; bx++) {
+      const x = bx * (S / 3) + off + 2, y = r * bh + 2, w = S / 3 - 4, h = bh - 4;
+      const v = 150 + Math.random() * 55;
+      g.fillStyle = `rgb(${v},${v - 4},${v - 8})`;
+      g.fillRect(x, y, w, h);
+      for (let k = 0; k < 30; k++) { // Körnung je Block
+        const d = Math.random() * 40 - 20;
+        g.fillStyle = `rgba(${128 + d},${128 + d},${128 + d},0.14)`;
+        g.fillRect(x + Math.random() * w, y + Math.random() * h, 2, 2);
+      }
+    }
+  }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1.5, 1.5); t.anisotropy = 4;
+  _stone = t; return t;
+}
+
+// Laub: weiche Blatt-Cluster (leicht grünlich) — nimmt der Krone die glatte Plastik-Optik
+let _foliage = null;
+export function foliageTexture() {
+  if (_foliage) return _foliage;
+  const S = 128;
+  const c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgb(180,190,168)'; g.fillRect(0, 0, S, S);
+  const spot = (col, n, min, max, a) => {
+    for (let i = 0; i < n; i++) {
+      const x = Math.random() * S, y = Math.random() * S, r = min + Math.random() * max;
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, `rgba(${col},${a})`); grd.addColorStop(1, `rgba(${col},0)`);
+      g.fillStyle = grd; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+    }
+  };
+  spot('120,140,96', 40, 4, 16, 0.4);   // dunklere Blattgruppen
+  spot('225,235,205', 55, 2, 8, 0.35);  // Licht auf Blättern
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 2); t.anisotropy = 4;
+  _foliage = t; return t;
+}
+
+// Weiche Kumulus-Wolke (Alpha) für die Himmel-Map
+let _cloud = null;
+export function cloudTexture() {
+  if (_cloud) return _cloud;
+  const S = 256;
+  const c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d');
+  const puff = (x, y, r, a) => {
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, `rgba(255,255,255,${a})`);
+    gr.addColorStop(0.55, `rgba(248,251,255,${a * 0.65})`);
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  };
+  puff(128, 150, 66, 0.92); puff(84, 146, 48, 0.88); puff(172, 146, 50, 0.88);
+  puff(108, 116, 44, 0.85); puff(150, 112, 42, 0.85); puff(128, 132, 58, 0.9);
+  const t = new THREE.CanvasTexture(c);
+  _cloud = t; return t;
+}
+
 export function grassTuftTexture() {
   if (_grassTuft) return _grassTuft;
   const S = 64;
